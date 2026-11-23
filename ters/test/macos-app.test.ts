@@ -18,13 +18,19 @@ test("a Mac app is the page's C on AppKit's views, a resizable window, built by 
   const screen = readFileSync(join(dir, "app", "Screen.m"), "utf8"), build = readFileSync(join(dir, "app", "build.sh"), "utf8");
   // ters_ui as the page's C declares it, every call answered.
   assert.match(screen, /typedef struct ters_ui \{/);
-  assert.match(screen, /static ters_ui U = \{ 0, u_box, u_text, .* u_outline, u_ask, (0|u_sound) \};/);
+  assert.match(screen, /static ters_ui U = \{ 0, u_box, u_text, .* u_outline, u_ask, (0|u_sound), u_focus \};/);
   // Sound on the engine alone: a Mac has no audio session.
   assert.doesNotMatch(screen, /AVAudioSession/);
   assert.match(screen, /#import <AppKit\/AppKit.h>/);
   assert.match(screen, /NSWindowStyleMaskResizable/);
   assert.match(screen, /ters_ui_resize\(w, h, d\)/);
   assert.match(screen, /- \(BOOL\)isFlipped \{ return YES; \}/);
+  // A desktop's input (C298): the pointer over boxes, keys where the focus
+  // is and round it, double and right clicks.
+  assert.match(screen, /ters_ui_hover\(n \? /);
+  assert.match(screen, /addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown \| NSEventMaskKeyUp/);
+  assert.match(screen, /bubble\(@"dblclick"/);
+  assert.match(screen, /bubble\(@"contextmenu"/);
   // An .app's layout, for the Mac, no iOS SDK.
   assert.match(build, /apple-macos11\.0/);
   assert.match(build, /Contents\/MacOS\/page/);

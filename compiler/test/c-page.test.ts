@@ -526,6 +526,30 @@ test(":hover and pointerenter and pointerleave in C, as the pointer moves over b
   assert.deepEqual(shown.map(said), ['"0 0"', '"1 0"', '"1 1"', '"1 1"']);
 });
 
+// An input with autofocus has the focus once it is on the page, and
+// double and right clicks reach their handlers (C298).
+test("autofocus gives an input the focus in C, and dblclick and contextmenu reach handlers (C298)", { skip }, async () => {
+  const { ARITH, CELL_OPS, S } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang();
+  const el = (tag: string, attrs: Id[], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
+  const prop = (n: string, v: string) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v)));
+  const main = k.def("main");
+  const add = (c: Id, n: number) => k.call(CELL_OPS.write, c, k.call(ARITH.add, k.call(CELL_OPS.read, c), k.lit(n)));
+  k.define(main, k.thunk(() => k.let("n", k.call(CELL_OPS.cell, k.lit(0)), (n) => el("div", [], [
+    el("input", [prop("id", "filter"), prop("autofocus", "true")], []),
+    el("div", [prop("id", "row"), k.call(HTML_V.on, k.lit("dblclick"), k.fn(["e"], () => add(n, 1))), k.call(HTML_V.on, k.lit("contextmenu"), k.fn(["e"], () => add(n, 10)))], [k.call(HTML_V.part, k.thunk(() => k.call(HTML_V.text, k.thunk(() => k.call(S.show, k.call(CELL_OPS.read, n))))))]),
+  ]))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360", "dblclick:row", "contextmenu:row"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const shown = r.stdout.toString().split("\x1e\n").slice(0, -1);
+  assert.match(shown[0], /^\s*input .* focus$/m);
+  assert.deepEqual(shown.map((p) => p.match(/"(\d+)"$/m)![1]), ["0", "1", "11"]);
+});
+
 // A page's sound in C (C217): a button that plays a recording through a
 // block function scaling it by a cell's gain, a button writing the gain,
 // and one playing the microphone as it comes, and one with no input
