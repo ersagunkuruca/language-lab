@@ -24,7 +24,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | E319a, then E319b, E319d, E319c, E319g, E319e, E319f, E319h (editor thread, Ersagun 2026-11-23) |
+| E Editor | "Editor lane" | E319d, E319c, E319g, E319e, E319f, E319h (editor thread, Ersagun 2026-11-23) |
 | C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
@@ -71,8 +71,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E319a | A guard that keeps program code off the editor's thread: a test listing every editor-thread call into the evaluator, checker and compiler with its bound (a new one fails), and a browser probe that opens programs looping or slow in each place and fails on a long task over 200 ms. Done first, so each fix below starts from a probe that shows its hang. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | M | open |
-| E319b | Tests (`runTests` in Run's Test and in Upgrade modules) run in the worker, with Stop; today they have no budget on the editor's thread. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | S | open |
 | E319c | A picture's lowering, its Float32 check, its comparison points and its CPU drawing (an OffscreenCanvas) in the worker. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | M | open |
 | E319d | The compiled page bounded: its handlers and frame callbacks under a time budget as the interpreted page's are (or the page in a worker, its elements sent over; measure both, then choose); Pause's `checkedForRun` in the worker. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | M | open |
 | E319e | Values on wires: the trace on the thread at about 50 ms, longer ones (given values included) in the worker, the wires filled when it answers; the divergent case given a budget too. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | S | open |

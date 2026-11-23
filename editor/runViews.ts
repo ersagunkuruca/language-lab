@@ -8,9 +8,11 @@ import type { Namer } from "../ters/src/render/namer.ts";
 import type { Profile, Stuck } from "./runWorker.ts";
 import { h } from "./dom.ts";
 import type { Names } from "../ters/src/presentation.ts";
-import { fromList, showValue, type Value, type World } from "../ters/src/lang/run.ts";
+import { fromList, showValue, type Value } from "../ters/src/lang/run.ts";
 import { MAP_V, SET_V } from "../ters/src/lang/std.ts";
-import { runTests, savedFrom, type TestResult } from "../ters/src/lang/tests.ts";
+import type { TestResult } from "../ters/src/lang/tests.ts";
+import type { Pins } from "../ters/src/lang/signatures.ts";
+import { testInWorker, type Testing } from "./testAsk.ts";
 import type * as T from "./typed.ts";
 import type { Doc } from "./main.ts";
 import type { Runtime } from "../ters/src/lang/page.ts";
@@ -146,17 +148,29 @@ export function valueView(v: Value, code: Code, names: Names, show: (x: Value, a
   return text(v);
 }
 
-// A test's results, once per version of the code and its saved values.
-const lawRuns = new WeakMap<Code, Map<string, TestResult>>();
-export function lawPanel(info: T.Info, box: HTMLElement, at: { code: Code; names: Names; def: Id; examples: NonNullable<Doc["examples"]>; world: World }): HTMLElement {
+// A test's results, once per version of the code and its saved values,
+// from the worker (testAsk.ts, E319b): the editor draws on while it runs.
+const lawRuns = new WeakMap<Code, Map<string, TestResult | Testing>>();
+export function lawPanel(box: HTMLElement, at: { code: Code; names: Names; pins: Pins; def: Id; examples: NonNullable<Doc["examples"]>; title: string; shipped?: Record<string, unknown>; render(): void }): HTMLElement {
   let m = lawRuns.get(at.code);
   if (!m) lawRuns.set(at.code, (m = new Map()));
-  const key = `${at.def}\u0000${JSON.stringify(at.examples[at.def] ?? null)}`;
+  const key = `${at.def}\u0000${JSON.stringify(at.examples[at.def] ?? null)}`, runs = m;
   let r = m.get(key);
   if (!r) {
-    try { r = runTests(at.code, info, at.names, [at.def], savedFrom(Object.fromEntries(Object.entries(at.examples).map(([d, v]) => [d, (v as unknown[]).filter((x) => !(x && typeof x === "object" && "main" in (x as object)))]))  as typeof at.examples), { world: at.world })[0]; }
-    catch (e) { r = { def: at.def, name: "", cases: 0, failures: [], error: (e as Error).message }; }
-    m.set(key, r);
+    const t = testInWorker({ code: at.code, names: at.names, pins: at.pins, defs: [at.def], examples: at.examples as Record<Id, unknown[]>, title: at.title, shipped: at.shipped });
+    m.set(key, (r = t));
+    void t.done.then((says) => {
+      runs.set(key, "results" in says ? says.results[0] ?? { def: at.def, name: "", cases: 0, failures: [] }
+        : { def: at.def, name: "", cases: 0, failures: [], error: "errors" in says ? `the program has ${says.errors} type error${says.errors === 1 ? "" : "s"} (${says.first})` : says.error === "stopped" ? "you stopped it" : says.error });
+      at.render();
+    });
+  }
+  if ("done" in r) {
+    const t = r;
+    const stop = h("button", { class: "btn mini", type: "button", title: "Stop the test" }, "Stop");
+    stop.addEventListener("click", () => t.stop());
+    box.append(h("p", { class: "hint", title: "It performs Check. It runs on its saved inputs, then on small values of each input's type, smallest first, as ters test runs it." }, "Test"), h("p", { class: "status-line" }, "Testing… ", stop));
+    return box;
   }
   const cases = `${r.cases} case${r.cases === 1 ? "" : "s"}`;
   box.append(h("p", { class: "hint", title: "It performs Check. It runs on its saved inputs, then on small values of each input's type, smallest first, as ters test runs it." }, "Test"));
