@@ -36,7 +36,7 @@ const ON_THE_THREAD: Record<string, [number, string]> = {
   "typedGraph.ts planSolve": [1, "one call's plan, drawn: grows with the call"],
   "typedGraph.ts solveMode": [1, "one call's mode, drawn: grows with the call"],
   "main.ts T.infer": [4, "typed.ts infer, over a recent check (edits), or whole with its groups kept (typesOf, E319g)"],
-  "main.ts trace": [2, "values on wires: 200 ms, 3 s for given values; none for a given divergent definition (E319e)"],
+  "main.ts trace": [2, "values on wires: QUICK_MS (50 ms); longer, and a divergent definition given values, in the worker (traceAsk.ts); all here only where there is no worker (a test's page)"],
   "main.ts algebrasOf": [1, "kept per check: grows with the program (E319h)"],
   "pagePanel.ts showPage": [1, "the interpreted page: PAGE_STEPS an update, drawWithin for its first drawing"],
   "pagePanel.ts checkedForRun": [1, "Pause on a compiled page: grows with the program (E319j)"],
