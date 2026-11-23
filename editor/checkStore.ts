@@ -97,12 +97,6 @@ export const groupStore: GroupStore = {
   save: (key, c) => writeLater(`${BUILD}|group|${hash(key)}`, c),
 };
 
-// The groups a check made (E319g): the worker's whole check of a program
-// sends them, and the editor's check of it then finds every group kept.
-export const keptKeys = () => new Set(kept.keys());
-export const groupsSince = (before: Set<string>): [string, unknown][] => [...kept].filter(([k]) => !before.has(k) && k.includes("|group|"));
-export function addGroups(groups: [string, unknown][]) { for (const [k, v] of groups) if (!kept.has(k)) kept.set(k, v); }
-
 // What this build kept, read into memory; null where nothing is kept (no
 // IndexedDB, or a build without CHECKS_KEY, as a test's). Never fails: a
 // check not kept is checked again.

@@ -37,15 +37,14 @@ const LONG_MS = 200;
 // The places whose row moves or bounds them, not built yet.
 const KNOWN: Record<string, string> = {
   "values on a wire": "E319e",
-  // The check left the thread with E319g (a 617 ms task opening spacetime
-  // before); what's left is the first drawing of a large program: its
-  // page's first run, the graph's layout, the blocks.
-  "opening a file": "E319k",
+  // Bounded since E319d (each update 50 ms of the page's own steps); what's
+  // left is range's three million items, made in one builtin call that takes no
+  // steps, and their collection.
+  "a page's view": "E319i",
 };
 
 // `then`: what the place shows once its work is done, off the thread or not.
-// `opening`: what's measured is the file's opening itself.
-type Place = { name: string; file: string; open: (p: Page) => Promise<void>; then?: (p: Page) => Promise<string | null>; opening?: true };
+type Place = { name: string; file: string; open: (p: Page) => Promise<void>; then?: (p: Page) => Promise<string | null> };
 
 // A definition with no inputs that takes seconds: Show values runs it on
 // the editor's thread (main.ts boundedTrace, GIVEN_MS: a 3 s freeze).
@@ -101,14 +100,6 @@ async function drew(q: Page): Promise<string | null> {
   return /Can't|stopped|Drawing…/.test(said) || await q.locator("canvas.picture").first().isHidden() ? `the picture didn't draw: ${said}` : null;
 }
 
-// Constructions, one of the largest examples that isn't a page, opened
-// from a file: the editor checked the whole program on its thread to draw
-// it (E319g).
-function opening(): Place {
-  return { name: "opening a file", file: exampleFile("constructions", "Opened", () => {}), open: async () => {}, opening: true,
-    then: async (q) => ((await q.locator(".p-nav [data-def]").count()) ? null : "the program didn't show") };
-}
-
 // An example copied and changed, as the file the editor opens.
 function exampleFile(example: string, title: string, change: (s: Session) => void): string {
   const dir = mkdtempSync(join(tmpdir(), "probe-"));
@@ -140,7 +131,7 @@ async function openDef(p: Page, name: string) {
 const longTasks = (p: Page) => p.evaluate(() => (globalThis as unknown as { labLong: number[] }).labLong.splice(0));
 
 const failures: string[] = [];
-for (const place of [wireValues(), slowTest(), slowPage(), picture(), slowPixels(), opening()].filter((x) => !process.env.PLACE || x.name === process.env.PLACE)) {
+for (const place of [wireValues(), slowTest(), slowPage(), picture(), slowPixels()].filter((x) => !process.env.PLACE || x.name === process.env.PLACE)) {
   const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   await p.addInitScript(() => {
     const g = globalThis as unknown as { labLong: number[] };
@@ -150,15 +141,12 @@ for (const place of [wireValues(), slowTest(), slowPage(), picture(), slowPixels
   p.on("pageerror", (e) => failures.push(`${place.name}: ${e.message}`));
   await p.goto(url);
   await p.locator('[data-panel="program"]').click();
-  // The editor's own start isn't any place's.
-  await p.waitForTimeout(2000);
-  if (place.opening) await longTasks(p);
   const chooser = p.waitForEvent("filechooser");
   await p.locator('[data-act="open-file"]').first().click();
   await (await chooser).setFiles({ name: "probe.json", mimeType: "application/json", buffer: Buffer.from(place.file) });
-  // What opening the file costs is its own place's, not this one's.
+  // What opening the file costs is E319g's, not this place's.
   await p.waitForTimeout(2000);
-  if (!place.opening) await longTasks(p);
+  await longTasks(p);
   await place.open(p);
   await p.waitForTimeout(6000);
   const long = (await longTasks(p)).filter((ms) => ms > LONG_MS);
