@@ -104,7 +104,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | added |
 |---|---|---|---|
-| C293 | `neighbours` on a grid in C and WebAssembly at the hand grid's speed: compiler/gaps/flock natively 4.1 s at 5,000 birds (100 ticks) against 1.4 s on its own grid before C292 and 0.45 s for the ideal C, wasi 7.2 s against 6.0 s. Callgrind (10 ticks of 2,000): allocation about 30% (lab_new, lab_fields, lab_dec, lab__dead: the sorted pairs and each bird's list consed then sorted), the 27 cell keys as big-capable Ints 9%, each bird's list sorted 6%, and no threads (the grid's map isn't shared out as the old ticked map was) | Compiler lane 2026-11-23 (C292) | 2026-11-23 |
+| C293 | `neighbours` on a grid in C and WebAssembly at the hand grid's speed. Step 1 (#PR): compiler/gaps/flock at 5,000 birds (100 ticks) natively 2.9 s one thread and 1.4 s on threads, against 1.4 s and 0.55 s on its own grid before C292 and 0.45 s for the ideal C; wasi 5.1 s (6.0 s before). Left: every Int big-capable (positions, cell keys: 300 million `lab_int_dup` in 30 ticks), and merging each bird's 27 runs conses onto arrays that are often copied | Compiler lane 2026-11-23 (C292) | 2026-11-23 |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)
 

@@ -1190,8 +1190,9 @@ export function buildPrelude(): Module {
   // Int keys, the places sorted by them so each cell is a run of one array
   // (a Map of Ints gives where it starts: a Map holding lists would keep
   // the program's lists as written in C); each place compared with those in the 3, 9 or 27
-  // cells around its own by the definition's own sum and ≤, and each list
-  // sorted, so the lists are the definition's (ters/library/near.ts does
+  // cells around its own by the definition's own sum and ≤, each cell's
+  // in their numbers' order (the sort keeps it), the cells' merged, so
+  // the lists are the definition's (ters/library/near.ts does
   // the same in the evaluator and compiled JavaScript). What the grid
   // can't take, every pair as the definition does: places of more than 3
   // parts, a reach that isn't positive, a cell more than 65535 from 0.
@@ -1230,29 +1231,37 @@ export function buildPrelude(): Module {
   const gridClose = def("grid close", ["reach squared", "a", "b"], (r2, a, b) =>
     k.let("apart", k.call(S.zipParts, B.sub, a, b), (d) => k.call(S.not, k.call(S.less, r2, k.call(S.total, k.call(S.zipParts, B.mul, d, d))))));
   // The places within reach of place i at the start of `run` (the places
-  // sorted by cell, from where cell `key`'s start), put before `found`.
+  // sorted by cell, from where cell `key`'s start), in order, before `found`.
   const gridRun = k.def("grid run");
   k.define(gridRun, k.fn(["run", "key", "number", "place", "reach squared", "places", "first place", "found"], (run, key, i, a, r2, placed, p0, acc) =>
     k.match(run, [
       { variant: NIL, names: [], body: () => acc },
       { variant: CONS, names: ["placed", "run rest"], body: ([pr, rest]) => k.match(pr, [
         { variant: PAIR_V, names: ["there", "its key"], body: ([j, kk]) => k.if(k.equal(kk, key),
-          k.call(gridRun, rest, key, i, a, r2, placed, p0,
-            k.if(k.and(k.call(S.not, k.equal(j, i)), k.call(gridClose, r2, a, first(k.call(ARRAY_OPS.at, placed, j), p0))), k.call(CONS, j, acc), acc)),
+          k.let("others", k.call(gridRun, rest, key, i, a, r2, placed, p0, acc), (others) =>
+            k.if(k.and(k.call(S.not, k.equal(j, i)), k.call(gridClose, r2, a, first(k.call(ARRAY_OPS.at, placed, j), p0))), k.call(CONS, j, others), others)),
           acc) },
       ]) },
     ])));
+  // Each place's cell key once; the cells around it are that key plus each
+  // offset's step, since a key is linear in the cells.
   const gridFound = def("grid found", ["places", "first place", "units", "cells", "reach"], (placed, p0, us, cs, r) =>
-    k.let("sorted", k.call(sortBy, k.call(numbered, k.call(map, cs, k.fn(["cells of one"], (c) => k.call(gridKey, c, k.call(map, us, k.fn(["unit"], () => k.int(0))), k.int(0))))),
+    k.let("zeros", k.call(map, us, k.fn(["unit"], () => k.int(0))), (zs) =>
+    k.let("keys", k.call(map, cs, k.fn(["cells of one"], (c) => k.call(gridKey, c, zs, k.int(0)))), (keys) =>
+    k.let("sorted", k.call(sortBy, k.call(numbered, keys),
       k.fn(["placed"], (pr) => k.match(pr, [{ variant: PAIR_V, names: ["number", "key"], body: ([, key]) => key }]))), (sorted) =>
     k.let("starts", k.call(gridFiled, k.x(emptyMap), sorted, k.int(0)), (g) =>
       k.let("count", k.call(length, sorted), (n) =>
-      k.let("around", k.call(gridAround, us), (offs) =>
+      k.let("middle", k.call(gridKey, zs, zs, k.int(0)), (z) =>
+      k.let("steps", k.call(map, k.call(gridAround, us), k.fn(["offsets"], (o) => k.call(INT_OPS.sub, k.call(gridKey, zs, o, k.int(0)), z))), (steps) =>
         k.let("reach squared", k.call(B.mul, r, r), (r2) =>
-          k.call(map, k.call(numbered, cs), k.fn(["here"], (here) => second(here, (i, c) =>
+          k.call(map, k.call(numbered, keys), k.fn(["here"], (here) => second(here, (i, kc) =>
             k.let("at", first(k.call(ARRAY_OPS.at, placed, i), p0), (a) =>
-              k.call(sort, k.call(flatMap, offs, k.fn(["offsets"], (o) => k.let("key", k.call(gridKey, c, o, k.int(0)), (key) =>
-                k.call(gridRun, k.call(drop, sorted, first(k.call(lookup, g, key), n)), key, i, a, r2, placed, p0, k.x(NIL))))))))))))))));
+              k.fold(steps, [
+                { variant: NIL, names: [], body: () => k.x(NIL) },
+                { variant: CONS, names: ["step", "rest"], results: [null, "merged"], body: ([d], [, merged]) => k.let("key", k.call(INT_OPS.add, kc, d), (key) =>
+                  k.call(mergeSorted, k.call(gridRun, k.call(drop, sorted, first(k.call(lookup, g, key), n)), key, i, a, r2, placed, p0, k.x(NIL)), merged!)) },
+              ]))))))))))))));
   const everyPairOf = def("neighbours by every pair", ["places", "reach"], (ps0, r) => k.let("placed", k.call(numbered, ps0), (ps) => everyPair(ps, r)));
   const onGrid = def("neighbours on a grid", ["items", "place", "reach"], (xs, place, r) =>
     k.let("places", k.call(map, xs, place), (ps) => k.match(ps, [

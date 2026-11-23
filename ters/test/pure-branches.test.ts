@@ -10,7 +10,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { parallelCounts, parallelLists, parallelMaps, parallelTogethers, pureTogethers } from "../src/lang/pure-branches.ts";
-import { ABORT_OP, AWAIT_OP, START_TIMER_OP, S, SHOW_ANY } from "../src/lang/std.ts";
+import { ABORT_OP, AWAIT_OP, NIL, START_TIMER_OP, S, SHOW_ANY } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
@@ -85,6 +85,19 @@ test("a map shares out its items when its function only computes, or aborts, or 
   const forever = (k: Lang) => Object.keys(k.names).find((d) => k.names[d] === "forever")!;
   assert.equal(mapMarked((k, x) => k.call(forever(k), x)), true);
   assert.equal(mapMarked((k, x) => k.if(k.call(S.less, x, k.lit(2)), k.call(forever(k), x), k.call(ABORT_OP, k.lit("no")))), false);
+  // A search first answers is first's (C293): a Choice outside one isn't.
+  const orElse = (k: Lang, x: Id) => k.call(S.first, k.thunk(() => k.if(k.call(S.less, x, k.lit(2)), x, k.call(S.fail))), k.thunk(() => k.lit(0)));
+  assert.equal(mapMarked(orElse), true);
+});
+test("a map whose function chooses, outside a first of its own, stays in order (C293)", () => {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  let call = "";
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.first, k.thunk(() => (call = k.call(lib("map"), k.list(k.lit(1), k.lit(2)), k.fn(["x"], (x) => k.if(k.call(S.less, x, k.lit(2)), x, k.call(S.fail)))))), k.thunk(() => k.x(NIL)))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.equal(parallelMaps(code, info).has(call), false);
 });
 
 test("a keep shares out its items like a map, its test written in place and only computing (C43)", () => {

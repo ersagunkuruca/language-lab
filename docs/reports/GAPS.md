@@ -4664,19 +4664,28 @@ program (near-grid.ts). JavaScript uses its runtime's grid (near.ts),
 given the places alone so the birds stay columns. 100 ticks of 5,000
 birds, one run each:
 
-| way | own grid (above) | on `neighbours` |
-|---|---|---|
-| C, one thread | 0.40 s | 0.45 s |
-| `ters native`, one thread | 1.43 s | 4.07 s |
-| `ters native`, 4 threads | 0.55 s | 4.18 s |
-| `ters wasi` | 6.04 s | 7.22 s |
-| `ters compile`, one thread | 8.83 s | 5.52 s |
-| `ters compile`, workers | 8.65 s | 5.51 s |
+| way | own grid (above) | on `neighbours` | C293 step 1 |
+|---|---|---|---|
+| C, one thread | 0.40 s | 0.45 s | 0.45 s |
+| `ters native`, one thread | 1.43 s | 4.07 s | 2.87 s |
+| `ters native`, 4 threads | 0.55 s | 4.18 s | 1.41 s |
+| `ters wasi` | 6.04 s | 7.22 s | 5.12 s |
+| `ters compile`, one thread | 8.83 s | 5.52 s | 5.98 s |
+| `ters compile`, workers | 8.65 s | 5.51 s | 5.92 s |
 
 Compiled JS gains a third. Native loses most: the Ters grid allocates a
 pair per bird to sort by cell and a list per bird it sorts again, and
 keeps big-capable Int keys. Its map isn't shared out on threads either.
 That is C293.
+
+C293 step 1: each cell's run is walked into a list in the birds' order
+and the 27 merged, not consed and sorted (sorting was half the native
+time); each bird's cell key is worked out once and its neighbours' are
+that key plus each offset's step; and a `first` of a lookup no longer
+counts as a Choice of the map's function (pure-branches.ts), so the
+grid's map runs on the threads. What is left natively is the C backend's
+general cost: every Int here big-capable (300 million `lab_int_dup` in 30
+ticks), and the merges consing onto arrays they often copy.
 
 ### Proposed order
 
