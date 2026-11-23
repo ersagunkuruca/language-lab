@@ -2,9 +2,9 @@
 // main.ts, E228e): a picture is drawn live on the GPU (editor/picture.ts),
 // a page runs in a frame (page.ts), and both go on across renders. What
 // they read of the editor comes through `PageHost`.
-import { shippedFor } from "./checkStore.ts";
+import { addGroups, shippedFor } from "./checkStore.ts";
 import type { Code, Id } from "../ters/src/model.ts";
-import type { Presentation } from "../ters/src/presentation.ts";
+import type { Names, Presentation } from "../ters/src/presentation.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
 import type * as T from "./typed.ts";
 import type { Doc, Program, UI } from "./main.ts";
@@ -19,7 +19,8 @@ import { drawDrawable, drawableOf, type Built, type Picture } from "./pictureDra
 import type { Cells } from "../ters/src/lang/cells.ts";
 import { prebuilt, prebuiltHas, prebuiltIndex, prebuiltKey } from "./prebuilt.ts";
 import type { CompiledPage } from "./pageCompile.ts";
-import { checkedForRun } from "./coreMain.ts";
+import { runCodeInWorker } from "./runCodeAsk.ts";
+import { infer } from "./typed.ts";
 import { PAGE_BASE, hasSound, NeedsSolver, pageMain, pageRuntime, savedPageFile, showPage, TooSlow, type Preview, type SavedScripts } from "../ters/src/lang/page.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
 import { scriptSolves } from "../compiler/src/core-js.ts";
@@ -480,12 +481,25 @@ export function pagePanels(host: PageHost) {
   // trees on bounce, coreMain.ts checkedForRun), so the interpreted page
   // runs that code too: one written as it was has cons lists there, takes
   // up none of the snapshots and replays from the run's start (I255).
+  // The page stops at once; the program stored for running is made in a
+  // worker the first time (runCodeAsk.ts, E319j), and the interpreted page
+  // is built when it comes.
   function pauseCompiled() {
-    const from = page.now?.stepFrom?.(), started = page.started;
-    if (!from || !started) return;
+    const from = page.now?.stepFrom?.(), started = page.started, now = page.now;
+    if (!from || !started || !now) return;
+    now.stop();
+    const code = page.for ?? prog();
+    page.status.title = "", page.status.textContent = "Pausing…";
+    stepsBox.replaceChildren();
+    // The page built in a task of its own, after the check's.
+    void runCode(code, started.main).then((run) => new Promise<RunCode>((ok) => setTimeout(() => ok(run)))).then((run) => {
+      if (page.now !== now) return;
+      pausedAt(started, from, run);
+    }, (e) => { if (page.now === now) { sayStopped("Couldn't pause the page", e); page.now = null; page.root = null; page.for = null; render(); } });
+  }
+  function pausedAt(started: NonNullable<typeof page.started>, from: NonNullable<ReturnType<NonNullable<Preview["stepFrom"]>>>, run: RunCode) {
     const old = page.root;
-    page.now!.stop();
-    try { page.now = interpreted(started.info, started.main, from, runCode(page.for ?? prog(), started.main)); }
+    try { page.now = interpreted(started.info, started.main, from, run); }
     catch (e) { sayStopped("Couldn't pause the page", e); page.now = null; page.root = null; page.for = null; render(); return; }
     page.root = page.now.root as unknown as globalThis.Node;
     if (old?.parentNode) (old as ChildNode).replaceWith(page.root);
@@ -572,13 +586,20 @@ export function pagePanels(host: PageHost) {
   // caught, and what it was given mounted here (core-page.ts mountCorePage).
   type Mounted = { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; handed: number; stop(): void; hush?: () => void };
   // The program as the compiled page runs it, its lists and Maps chosen
-  // (coreMain.ts checkedForRun), for each version of the program: a few
-  // seconds the first time (bounce 2 s), at once after.
-  type RunCode = ReturnType<typeof checkedForRun>;
-  const runCodes = new WeakMap<Code, RunCode>();
-  function runCode(code: Code, main: Id): RunCode {
+  // (coreMain.ts checkedForRun), for each version of the program: made in
+  // a worker (runCodeAsk.ts, bounce 2 s), then checked here over the groups
+  // it sent (bounce 0.3 s), once a version.
+  type RunCode = { code: Code; names: Names; info: T.Info; chosen: string[] };
+  const runCodes = new WeakMap<Code, Promise<RunCode>>();
+  function runCode(code: Code, main: Id): Promise<RunCode> {
     let r = runCodes.get(code);
-    if (!r) runCodes.set(code, (r = checkedForRun(code, pres().names, main)));
+    if (!r) {
+      runCodes.set(code, (r = runCodeInWorker({ ...shippedOf(), code, names: pres().names, pins: pins(), main }).then((m) => {
+        addGroups(m.groups);
+        return { code: m.code, names: m.names, chosen: m.chosen, info: infer(m.code, m.names) };
+      })));
+      r.catch(() => runCodes.delete(code));
+    }
     return r;
   }
   function swapCompiled(code: Code, made: CompiledPage) {
