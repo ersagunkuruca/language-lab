@@ -1,0 +1,91 @@
+# A native page as a Windows app (C297, docs/design/targets/DESKTOP-APPS.md):
+# `ters build-native-app --windows`, built with MinGW-w64's gcc (build.sh),
+# started with clicks for it to make (--ters-taps, by a button's text), so
+# the run's log shows the texts shown before and after each, and its
+# artifact the screen and the app. Run by hand: a Windows minute
+# costs two of Linux's, so a pull request runs it only when it changes
+# the Windows screen.
+name: Windows app
+
+on:
+  pull_request:
+    paths:
+      - ters/cli/windows-app.ts
+      - .github/workflows/windows-app.yml
+  workflow_dispatch:
+    inputs:
+      program:
+        description: "Example to build (a folder in ters/examples)"
+        default: dice
+        required: true
+      taps:
+        description: "Buttons to click, by their text, separated by | (also: type N text, resize W [H], hover text, key name, dblclick text, rightclick text)"
+        default: "Roll|Throw 100"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ters/package-lock.json
+      - run: npm ci
+        working-directory: ters
+      - name: ters build-native-app --windows
+        working-directory: ters
+        shell: bash
+        env:
+          PROGRAM: ${{ inputs.program || 'dice' }}
+        run: node cli/ters.ts build-native-app "examples/$PROGRAM" --windows -o "$RUNNER_TEMP/app"
+      - name: The app
+        shell: bash
+        # With its lines, for a crash's frames.
+        env:
+          CFLAGS: -g
+        run: sh "$RUNNER_TEMP/app/build.sh"
+      - name: Started, clicked
+        shell: bash
+        env:
+          TAPS: ${{ inputs.taps || 'Roll|resize 420|Throw 100' }}
+        run: |
+          cd "$RUNNER_TEMP/app"
+          exe=$(ls *.exe)
+          cat > screen.ps1 <<'PS'
+          param([string]$to)
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $i = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($i).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $i.Save($to)
+          PS
+          ./"$exe" --ters-out out.txt --ters-taps "$TAPS" 2> err.txt &
+          pid=$!
+          sleep 4
+          powershell -NoProfile -ExecutionPolicy Bypass -File screen.ps1 "$GITHUB_WORKSPACE\\screen.png" || true
+          n=$(( 10 + 2 * $(echo "$TAPS" | tr '|' '\n' | grep -c .) ))
+          while kill -0 $pid 2>/dev/null && [ $n -gt 0 ]; do sleep 1; n=$((n - 1)); done
+          if kill -0 $pid 2>/dev/null; then echo "STILL RUNNING after the clicks"; kill $pid; fi
+          code=0; wait $pid || code=$?
+          echo "---- the app's output"; cat out.txt || true
+          echo "---- its errors"; cat err.txt || true
+          base=$(objdump -p "$exe" | awk '/^ImageBase/ {print $2}')
+          for rva in $(sed -n 's/.*rva \([0-9a-f]*\).*/\1/p' err.txt); do addr2line -f -i -p -e "$exe" $(printf '0x%x' $((0x$base + 0x$rva))); done
+          powershell -NoProfile -Command "Compress-Archive -Path '$exe' -DestinationPath app.zip" && cp app.zip "$GITHUB_WORKSPACE/" || true
+          grep -q -- "---- started" out.txt 2>/dev/null || { echo "the page never showed"; exit 1; }
+          [ $code = 0 ] || { echo "exit $code"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ inputs.program || 'dice' }}-windows
+          path: |
+            screen.png
+            app.zip
+          retention-days: 7
