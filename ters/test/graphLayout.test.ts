@@ -235,3 +235,20 @@ test("tidy keeps a spanning frame's place in the order of the columns it spans",
     for (const m of placed.filter((m) => m.frame === null)) assert.ok(!overlaps(m, box), `${m.id} overlaps f`);
   }
 });
+
+test("what goes above a spanning frame stays above it when it doesn't fit: the frame goes down", () => {
+  // r is fed by b1..b3 at its top and by frame f below them; each bi is fed
+  // by a tall ci in a column f spans. Lifted, the c's don't fit above f
+  // where it stood: they went below it, far from what they feed (looper's
+  // main, Ersagun 2026-11-23). Now f moves down.
+  const n = (id: string, frame: string | null, w = 60, h = 30): TNode => ({ id, x: 0, y: 0, w, h, frame });
+  const nodes = [n("r", null, 60, 60), n("b1", null, 60, 20), n("b2", null, 60, 20), n("b3", null, 60, 20), n("c1", null, 60, 50), n("c2", null, 60, 50), n("c3", null, 60, 50), n("x1", "f"), n("x2", "f"), n("x3", "f")];
+  const frames = [{ id: "f", parent: null, pad: [12, 26, 12, 12] as [number, number, number, number] }];
+  const w = (from: string, to: string, ty = 10, fy = 10) => ({ from, fx: 60, fy, to, tx: 0, ty, flow: true });
+  const wires = [w("x1", "x2", 15, 15), w("x2", "x3", 15, 15), w("x3", "r", 50, 15), w("b1", "r", 4), w("b2", "r", 8), w("b3", "r", 12), w("c1", "b1"), w("c2", "b2"), w("c3", "b3")];
+  const at = arrange(nodes, frames, wires);
+  const placed = nodes.map((m) => ({ ...m, ...at.get(m.id)! }));
+  const box = frameBoxes(placed, frames).get("f")!;
+  for (const id of ["c1", "c2", "c3", "b1", "b2", "b3"]) { const m = placed.find((m) => m.id === id)!; assert.ok(m.y + m.h <= box.y, `${id} (${m.y}) above f (${box.y})`); }
+  for (const m of placed.filter((m) => m.frame === null)) assert.ok(!overlaps(m, box), `${m.id} overlaps f`);
+});
