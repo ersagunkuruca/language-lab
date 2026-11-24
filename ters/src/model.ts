@@ -457,16 +457,22 @@ export function freshId(): Id {
 // cache finds the groups a pass's check again holds (L266). Ids made
 // outside stay random. A seed is used once per compile; the same seed in
 // two compiles is what makes their ids the same.
-let drawn: (() => number) | null = null;
+let drawn: (() => number) | null = null, drawnAt: { a: number } | null = null;
 export function idsSeeded<T>(seed: string, f: () => T): T {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
-  let a = h >>> 0;
-  const next = () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return (t ^ (t >>> 14)) >>> 0; };
-  const outer = drawn;
+  const at = { a: h >>> 0 };
+  const next = () => { let a = (at.a = (at.a + 0x6d2b79f5) | 0); let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return (t ^ (t >>> 14)) >>> 0; };
+  const outer = drawn, outerAt = drawnAt;
   drawn = next;
-  try { return f(); } finally { drawn = outer; }
+  drawnAt = at;
+  try { return f(); } finally { drawn = outer; drawnAt = outerAt; }
 }
+// Where the seeded ids have got to (null outside idsSeeded), and a move
+// there: a step taken from what it made before (literals-again.ts) leaves
+// the ids where making it would have, so the steps after make theirs.
+export const idsPlace = (): number | null => (drawnAt ? drawnAt.a : null);
+export const moveIdsTo = (a: number): void => { if (drawnAt) drawnAt.a = a; };
 // The ids freshId made while f ran (stable-ids.ts names them by what they
 // hold).
 let making: Set<Id> | null = null;

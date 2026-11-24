@@ -21,6 +21,7 @@
 
 import { keepingWhole } from "../../ters/src/lang/check-cache.ts";
 import { keysOver } from "../../ters/src/lang/def-keys.ts";
+import { overLiterals } from "../../ters/src/lang/literals-again.ts";
 import { shareCalls } from "./share-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
 import { knownClosures } from "./known-closures.ts";
@@ -845,25 +846,9 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   // A solve a relation's direction answers is that direction (directions.ts,
   // POLAR.md), as the checker reads it: the same nodes, its types (C177).
   const given = info;
-  // The passes below rewrite a checked program and check it again; none
-  // changes a unit, so units aren't checked again (I261: trek's 5.9 s).
-  info = { ...info, options: { ...info.options, units: false } };
-  code = reachedImplementing(useDirections(code), roots, info);
-  const h = hoistInvariants(code, info, names);
-  if (h.hoisted) ({ code, info, names } = h);
-  // inverse(f, …) of a named f is a solve on f (inverses.ts), as compile.ts
-  // has it: the equations' solver or a mode's plan, not the relational
-  // interpreter calling a function it is handed (the pedal's atanh, C137d8).
-  // Checked with the program's options: a represented program's insiders
-  // (library-reps.ts) may call the constructors they stand for.
-  ({ code, info, names } = withInverses(code, info, names));
-  // An operation with an effect given as a value, the lambda calling it
-  // (operation-values.ts, C235): `for each(lines, print)`.
-  ({ code, info, names } = withOperationLambdas(code, info, names));
-  // A map over a text's characters, a fold over them (character-maps.ts,
-  // C239): one walk over the text, no list of one-character texts.
-  ({ code, info, names } = withCharacterMaps(code, info, names));
-  const f = fusedProgram(code, info, names);
+  // An edit of a number takes the last answer with the new value put in
+  // (literals-again.ts): these steps read numbers only through the check.
+  const f = overLiterals(`lowering's front ${roots.join(" ")}`, { code, info, names }, () => front(code, info, names, roots));
   let ir = lowerScalar(f.code, endsAsBefore(given, f.info), f.names, roots, { data: true, host: true, printed: (c, id) => planOf(c, `solve:${id}`) !== null });
   // A linear function of a linear function, one matrix (linear-calls.ts, L44).
   if (!envSet("NO_LINEAR")) linearCalls(ir);
@@ -929,6 +914,30 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;
+}
+
+// The steps every lowering of these roots takes before the scalar
+// profile's.
+function front(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): { code: Code; info: Info; names: Record<Id, string> } {
+  // The passes below rewrite a checked program and check it again; none
+  // changes a unit, so units aren't checked again (I261: trek's 5.9 s).
+  info = { ...info, options: { ...info.options, units: false } };
+  code = reachedImplementing(useDirections(code), roots, info);
+  const h = hoistInvariants(code, info, names);
+  if (h.hoisted) ({ code, info, names } = h);
+  // inverse(f, …) of a named f is a solve on f (inverses.ts), as compile.ts
+  // has it: the equations' solver or a mode's plan, not the relational
+  // interpreter calling a function it is handed (the pedal's atanh, C137d8).
+  // Checked with the program's options: a represented program's insiders
+  // (library-reps.ts) may call the constructors they stand for.
+  ({ code, info, names } = withInverses(code, info, names));
+  // An operation with an effect given as a value, the lambda calling it
+  // (operation-values.ts, C235): `for each(lines, print)`.
+  ({ code, info, names } = withOperationLambdas(code, info, names));
+  // A map over a text's characters, a fold over them (character-maps.ts,
+  // C239): one walk over the text, no list of one-character texts.
+  ({ code, info, names } = withCharacterMaps(code, info, names));
+  return fusedProgram(code, info, names);
 }
 
 // `array of` a written list: `array.ofItems`, its items handed as they

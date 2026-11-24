@@ -56,6 +56,7 @@ import { laterOps as laterOpsOf } from "../../ters/src/lang/later-ops.ts";
 import { answerKeys, givenInOrder } from "../../ters/src/lang/ports.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
+import { overLiterals } from "../../ters/src/lang/literals-again.ts";
 import { nodesOfKindIn, steadied, dependencies, nodesOfKind, portsOf, subtree, isCall, type Call, isUse, useTarget, type Use, nodeValues, dropNode } from "../../ters/src/model.ts";
 import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
@@ -721,6 +722,13 @@ function prepared(code: Code, info: Info, names: Names, roots: Id[], host: boole
   const hit = kept.find((k) => k.names === names && k.key === key);
   if (hit) return hit.out;
   const given = { code, info, names };
+  // An edit of a number takes the last answer with the new value put in
+  // (literals-again.ts): these steps read numbers only through the check.
+  const out = overLiterals(`prepared ${key}`, given, () => preparedIn(code, info, names, roots, host, reach));
+  byInfo.set(given.info, [...kept.slice(-3), { names: given.names, key, out }]);
+  return out;
+}
+function preparedIn(code: Code, info: Info, names: Names, roots: Id[], host: boolean, reach: boolean): { code: Code; info: Info; names: Names } {
   // The passes below rewrite a checked program and check it again; none
   // changes a unit, so units aren't checked again (I261, as core-js.ts).
   info = { ...info, options: { ...info.options, units: false } };
@@ -760,9 +768,7 @@ function prepared(code: Code, info: Info, names: Names, roots: Id[], host: boole
   // does (C67): the editor's picture of the ray marcher, with its PGA
   // motor, was checked over the whole library each time (C90).
   code = reachedWithShows(code, roots, info);
-  const out = { code, info, names };
-  byInfo.set(given.info, [...kept.slice(-3), { names: given.names, key, out }]);
-  return out;
+  return { code, info, names };
 }
 
 const fronts = new WeakMap<Set<string>, { code: Code; info: Info; names: Names; rounded: Id[] }>();
