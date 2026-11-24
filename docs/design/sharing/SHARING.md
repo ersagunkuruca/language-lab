@@ -108,6 +108,15 @@ folder's `modules` folder holds the modules it uses beyond the library;
 keeps the result only if the program checks and its tests pass. The
 editor's half is E254.
 
+A module also carries the decisions its author held about its own
+definitions and types (L280i, CHOICES-2026-11-20.md): `ters publish`
+copies the `held` lines of the program's `.decisions` file into the
+module, by the published ids, so they are known by content hash. A
+program that fetches it holds them too, unless its own `.decisions`
+holds the same node otherwise. The compiler's copies of a module's
+definitions (library-reps.ts) are known by the node as written, so a
+held way of neighbours inside one is held where the copy runs.
+
 Two versions of one library in one program are two hashes side by side,
 so there's no diamond problem; only a value of a data type passed between
 them needs converting, as in Unison.

@@ -90,7 +90,7 @@ import { bakeCalls } from "./bake.ts";
 import { elaborate, verify } from "../../ters/src/lang/verify.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
 import { countsInto } from "./fold-chunks.ts";
-import { originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM } from "../../ters/src/lang/prelude-ids.ts";
+import { HeldMap, HeldSet, originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM, writtenAt } from "../../ters/src/lang/prelude-ids.ts";
 
 const ZIPPED = PRELUDE_DEFS["zipped"];
 import { ownEffects, parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, pureTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
@@ -638,7 +638,7 @@ export { reachedFrom, reachedWithShows };
 // workers and for C's threads apart. Set by the command line before it
 // lowers (cli/main.ts), from `<program>.decisions`.
 let onMain: { js: ReadonlySet<Id>; c: ReadonlySet<Id> } = { js: new Set(), c: new Set() };
-export function keepOnMainThread(js: Iterable<Id>, c: Iterable<Id>) { onMain = { js: new Set(js), c: new Set(c) }; }
+export function keepOnMainThread(js: Iterable<Id>, c: Iterable<Id>) { onMain = { js: new HeldSet(js), c: new HeldSet(c) }; }
 // And the ones held on worker threads (L280h): a command-line program's
 // map, keep, fold or search shared out from its first items, its
 // runtime call given true (branches-rt.ts `always`), by the node its
@@ -649,7 +649,7 @@ export function keepOnMainThread(js: Iterable<Id>, c: Iterable<Id>) { onMain = {
 // given after where (false, or "", where only the runs are held).
 // C's (`cRuns`) runs a thread.
 let onWorkers: { js: ReadonlySet<Id>; c: ReadonlySet<Id>; page: ReadonlyMap<Id, "workers" | "GPU">; runs: ReadonlyMap<Id, number>; cRuns: ReadonlyMap<Id, number> } = { js: new Set(), c: new Set(), page: new Map(), runs: new Map(), cRuns: new Map() };
-export function shareAlways(js: Iterable<Id>, c: Iterable<Id> = [], page: Iterable<[Id, "workers" | "GPU"]> = [], runs: Iterable<[Id, number]> = [], cRuns: Iterable<[Id, number]> = [], held: Iterable<[string, number]> = []) { onWorkers = { js: new Set(js), c: new Set(c), page: new Map(page), runs: new Map(runs), cRuns: new Map(cRuns) }; pool = new Map(held); }
+export function shareAlways(js: Iterable<Id>, c: Iterable<Id> = [], page: Iterable<[Id, "workers" | "GPU"]> = [], runs: Iterable<[Id, number]> = [], cRuns: Iterable<[Id, number]> = [], held: Iterable<[string, number]> = []) { onWorkers = { js: new HeldSet(js), c: new HeldSet(c), page: new HeldMap(page), runs: new HeldMap(runs), cRuns: new HeldMap(cRuns) }; pool = new Map(held); }
 // And how many workers or threads a program starts, held (L280e): by
 // target ("JavaScript", "JavaScript page", "C"), read by the printers
 // (core-js.ts's branchesFrom and pageBranches, c.ts's lab_pool_ready).
@@ -659,7 +659,7 @@ export const poolHeld = (target: "JavaScript" | "JavaScript page" | "C"): number
 // entries), by its node: every pair compared, a grid of cells this
 // many metres (the reach's units) on a side, or a k-d tree.
 let nearHeld: ReadonlyMap<Id, "every pair" | "k-d tree" | number> = new Map();
-export const holdNeighbours = (ways: Iterable<[Id, "every pair" | "k-d tree" | number]>) => { nearHeld = new Map(ways); };
+export const holdNeighbours = (ways: Iterable<[Id, "every pair" | "k-d tree" | number]>) => { nearHeld = new HeldMap(ways); };
 const runsOf = (at: Id): SExpr[] => { const n = onWorkers.runs.get(at); return n ? [{ k: "num", v: n }] : []; };
 const awayOn = (at: Id): SExpr[] => { const on = onWorkers.page.get(at), n = runsOf(at); return on || n.length ? [{ k: "text", v: on ?? "" }, ...n] : []; };
 // map.worth's say, true where its site is held anywhere off the main thread.
@@ -1759,7 +1759,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           // number; the grid looks through 3^parts cells around each.
           const parts = tp && typeof tp === "object" && "result" in tp && typeof tp.result === "object" && "fields" in tp.result ? tp.result.fields.length : 1;
           const by = parts > 3 ? "k-d tree" as const : "grid" as const, way = nearHeld.get(n.id) ?? (by === "k-d tree" ? by : undefined);
-          if (t && tx && tr) nearSites.push({ at: n.id, by });
+          if (t && tx && tr) nearSites.push({ at: writtenAt(n.id), by });
           if (t && tx && tr && way !== "every pair") {
             const xs = f.locals.push(tx) - 1, r = f.locals.push(tr) - 1, res = f.locals.push(t) - 1, place = expr(n.args[1], env, f, false);
             given.set(n.id, [local(xs), expr(n.args[1], env, f, false), local(r)]);

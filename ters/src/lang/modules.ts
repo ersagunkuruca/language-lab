@@ -63,6 +63,11 @@ export interface Module {
   // module stands on, so this is what verify compares to say a module was
   // published against another std, rather than that its code changed.
   std?: Record<Id, string>;
+  // The decisions its author held about its own definitions and types
+  // (L280i, CHOICES-2026-11-20.md): `held …` lines of the program's
+  // .decisions file, by the published ids, so they are known by content
+  // hash. A program using it holds them too, unless it holds its own.
+  decisions?: string[];
 }
 
 export type Result<T> = ({ ok: true } & T) | { ok: false; reason: string };
@@ -182,7 +187,7 @@ export function addVersions(kept: Versions, code: Code, defs: Id[]): Versions {
 // keeps every old version (published code is never deleted) and offers
 // only each lineage's newest. Publishing what didn't change changes nothing.
 // `basePins`: the pins of library definitions it uses, which travel with it.
-export function publishVersion(prev: Module | null, title: string, code: Code, names: Names, defs: Id[], base: Code, basePins: Pins = {}, comments: Comments = {}): Result<{ module: Module; added: Id[] }> {
+export function publishVersion(prev: Module | null, title: string, code: Code, names: Names, defs: Id[], base: Code, basePins: Pins = {}, comments: Comments = {}, held: readonly string[] = []): Result<{ module: Module; added: Id[] }> {
   const all = prev ? merge(code, prev.code) : code;
   const p = publish(all, names, defs, merge(base, ...(prev ? [prev.code] : [])), true);
   if (!p.ok) return p;
@@ -200,7 +205,26 @@ export function publishVersion(prev: Module | null, title: string, code: Code, n
   const kept = [...new Set([...(prev?.code.defs ?? []), ...p.published])];
   const pins = { ...basePins, ...(prev?.pins ?? {}), ...p.pins };
   const m = makeModule(title, p.code, layer<Names>(prev?.names ?? {}, p.names), offered, pins, { ...(prev?.comments ?? {}), ...renameKeys(comments, p.rename) }, kept);
-  return { ok: true, module: { ...m, std: { ...(prev?.std ?? {}), ...m.std }, lineages }, added };
+  const decisions = heldDecisions(prev?.decisions ?? [], held, p.rename, m.code);
+  return { ok: true, module: { ...m, std: { ...(prev?.std ?? {}), ...m.std }, lineages, ...(decisions.length ? { decisions } : {}) }, added };
+}
+
+// A held line's subject: the id it is about (a type's, a call's).
+export const heldSubject = (l: string): Id | null => /^held (\S+) /.exec(l)?.[1] ?? null;
+
+// The held lines about the module's own nodes, their drafts' ids put as
+// published; a subject held again replaces what the module held of it.
+function heldDecisions(before: readonly string[], held: readonly string[], rename: ReadonlyMap<Id, Id>, code: Code): string[] {
+  const renamed = held.map((l) => l.replace(/[^\s,;:()]+/g, (w) => rename.get(w) ?? w)).filter((l) => { const s = heldSubject(l); return !!s && !!code.nodes[s]; });
+  const now = new Set(renamed.map(heldSubject));
+  return [...before.filter((l) => !now.has(heldSubject(l))), ...renamed].sort();
+}
+
+// The decisions a program holds: its own, then its modules' about what
+// it doesn't hold itself.
+export function withModulesHeld(own: readonly string[], modules: readonly Module[]): string[] {
+  const mine = new Set(own.map(heldSubject).filter(Boolean));
+  return [...own, ...modules.flatMap((m) => m.decisions ?? []).filter((l) => !mine.has(heldSubject(l)))];
 }
 
 // The lineage a version belongs to, or null.

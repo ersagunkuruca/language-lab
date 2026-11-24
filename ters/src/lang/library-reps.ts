@@ -13,7 +13,7 @@
 // type (C52). A map's keys or a set's items that hold one would be ordered
 // by the tree's shape, so such a program keeps the definition.
 
-import { COPIED_FROM, originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM } from "./prelude-ids.ts";
+import { COPIED_FROM, NODE_COPIED_FROM, originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM } from "./prelude-ids.ts";
 import { stableIds } from "../stable-ids.ts";
 import { bindsOf, children, ownerOfTypeParts, dependencies, dependenciesOfAll, layerOf, onLayer, freshId, idsMadeBy, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call, copyNodes, nodeEntries, withNodes } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -395,6 +395,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // Known by their originals' ids too (pure-branches.ts): each takes and
     // gives its lists as the original does.
     for (const d of library) COPIED_FROM.set(f(d), originalOf(d));
+    for (const [from, to] of fresh) NODE_COPIED_FROM.set(to, from);
     const nodes = copyNodes(withBoundary.nodes);
     for (const d of library) for (const id of subtree(withBoundary, d)) { const n = mapIds(withBoundary.nodes[id], f); nodes[n.id] = n; }
     for (const d of defs) for (const id of subtree(withBoundary, d)) nodes[id] = mapIds(withBoundary.nodes[id], f);

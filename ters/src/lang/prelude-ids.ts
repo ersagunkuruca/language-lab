@@ -58,6 +58,17 @@ export const originalOf = (id: string): string => COPIED_FROM.get(id) ?? id;
 // way and give it another: known only where what they give is no list
 // (all pass, any pass).
 export const SPLIT_COPIED_FROM = new Map<string, string>();
+// And each node of library-reps.ts's copies, by its copy's id: what the
+// compiler's decisions are about (L280a), a placement's node or a call
+// of neighbours, is the node as written, so an entry a module's author
+// held about a definition the program's lists reach is the copy's too
+// (L280i).
+export const NODE_COPIED_FROM = new Map<string, string>();
+export const writtenAt = (id: string): string => { for (let i = 0, at = NODE_COPIED_FROM.get(id); at !== undefined && i < 64; i++, at = NODE_COPIED_FROM.get(id)) id = at; return id; };
+// A set or map of what was held, by the node as written, that knows its
+// copies too.
+export class HeldSet<K extends string> extends Set<K> { override has(k: K): boolean { return super.has(k) || super.has(writtenAt(k) as K); } }
+export class HeldMap<K extends string, V> extends Map<K, V> { override has(k: K): boolean { return super.has(k) || super.has(writtenAt(k) as K); } override get(k: K): V | undefined { return super.get(k) ?? super.get(writtenAt(k) as K); } }
 
 // Rational's case and type, read off negate fraction's own match (L207f2,
 // L207f4), so the passes that know a fraction's rule (relate.ts's fraction
