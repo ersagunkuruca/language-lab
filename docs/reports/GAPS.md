@@ -5432,3 +5432,93 @@ to 1.6 s (1.5 s without). C324a (#3259): two arrays joined in one step,
 so the core IR went from 1.75 s to 1.40 s. The rest of C324 is closed as
 measured (DONE): hash tables for the data keys were no faster, and no
 other single pass buys 10%. The round stops here.
+
+## Round 24: typeset, paragraphs broken into lines (2026-11-24)
+
+Another area the rounds hadn't covered: text set in lines.
+`compiler/gaps/typeset` breaks paragraphs of made-up words into lines of
+a measure by Knuth and Plass's total fit ("Breaking paragraphs into
+lines", 1981, prior art): a paragraph is boxes, glue and penalties; each
+line has an adjustment ratio, a badness and a fitness class; demerits
+add a line penalty, a hyphen's cost, 3000 for two hyphens running and
+2000 for classes far apart; the least total over every way to break the
+paragraph is kept, a row of four classes for each break. Words are
+hyphenated by two syllable rules (a vowel, a consonant, a vowel; a vowel,
+two consonants, a vowel), not Liang's patterns. First fit, word by word,
+is counted beside it. It prints the first paragraph's lines with their
+ratios, a line for each paragraph and the totals.
+
+Written through the MCP (driver in project files gaps-round24/): 58
+definitions, 7 of them types, no refusals. The ideal is
+`typeset.ideal.js`: the same typesetter by hand, items and sums in
+arrays, the table of best ways one array changed in place. Every way
+prints the same (test/typeset.test.ts holds the evaluator, the core IR,
+`ters compile`, `ters wasi` and `ters native` to the ideal).
+
+Times on this container (4 cores), `node compiler/gaps/bench-typeset.ts
+100 1000` at a measure of 300: the ideal and the core IR in one process,
+the rest as processes with their start-up.
+
+| typeset | 100 paragraphs | 1000 paragraphs |
+|---|---|---|
+| ideal JS | 29 ms | 262 ms |
+| core IR | 324 ms (11.1x) | 3.04 s (11.6x) |
+| evaluator | 13.1 s (446x) | |
+| `ters compile`, its module as a process | 478 ms (16.3x) | 2.95 s (11.3x) |
+| `ters native` | 181 ms (6.2x) | 1.65 s (6.3x) |
+| `ters wasi` | 312 ms (10.7x) | 2.78 s (10.6x) |
+
+### The gaps, ranked
+
+**TG1. A list with one item replaced, written as a map over it
+numbered, builds two lists and asks where to run.** Three quarters of
+the core IR's run is `grow`, the table of best ways, and the biggest part
+of that is `offer`, which keeps a way into class c when it has fewer
+demerits:
+
+    map(numbered(cands), (p) => if p.first = c then best(total, j, cj) else p.second)
+
+`cands` has four items. `numbered` builds its list of pairs (an array
+grown by `pushBack`), `map` builds the result (`pushFront` onto a list
+reversed), each item calls a closure, and each call checks whether the
+map is worth sending to the workers (`mapWorth`). The library has the
+word for it, `replace at`, and the driver didn't use it; a person writing
+by position will often write the map. *Measured* by writing `offer` with
+`replace at(cands, c, best(total, j, cj))`: the core IR at 1000
+paragraphs 3.19 → 2.24 s, `ters native` 1.70 → 1.36 s. *Fix:* read a map
+over `numbered(xs)` whose function gives `p.second` unless the position
+is one value as `replace at`, and in general fuse `map(numbered(xs), f)`
+into one loop by position with no pairs; a map over a list the compiler
+knows is a handful of items long never asks for workers. C330.
+
+**TG2. The rest is spread thin.** With TG1 written by hand the core IR
+is still 8.5x the ideal, with no step over 7%: the garbage collector
+(each best way a record, each row of the table four), Int arithmetic
+through the runtime's checked `int.add` and `int.mul` where every
+number here is small, each read of an array going through its version
+(`get buf`), and each division in `ratio of` inside a `try` for the
+division that can't be done. No single pass buys 10%, so no row.
+
+**TG3. Text the MCP doesn't read: a match inside an expression.** Two
+definitions were first written with a match where an expression goes,
+and both were refused as text that "isn't read as a whole":
+
+    b ≥ 0 and (match item of(its, b)
+      penalty(w, cost, flagged) → flagged
+      …)
+    map(range(s, b), (i) => match item of(pa.items, i)
+      box(t, w) → t
+      …)
+
+A match reads as a whole body or a let's value, not inside parentheses
+in an expression and not as a lambda's body among a call's arguments.
+Both were worked around with a helper (`is hyphen`, `item text`). I361.
+
+What went well: the program, a dynamic program over a table indexed by
+break and class with records of three fields, went through the MCP with
+no refusals once the two matches were helpers, and native code is 6.3x
+the hand-written JavaScript.
+
+### Next
+
+TG1 goes to the Compiler lane as C330, TG3 to the Language lane as I361.
