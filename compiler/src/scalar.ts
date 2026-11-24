@@ -56,7 +56,7 @@ import { laterOps as laterOpsOf } from "../../ters/src/lang/later-ops.ts";
 import { answerKeys, givenInOrder } from "../../ters/src/lang/ports.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { nodesOfKindIn, dependencies, nodesOfKind, portsOf, subtree, isCall, type Call, isUse, useTarget, type Use, nodeValues, dropNode } from "../../ters/src/model.ts";
+import { nodesOfKindIn, steadied, dependencies, nodesOfKind, portsOf, subtree, isCall, type Call, isUse, useTarget, type Use, nodeValues, dropNode } from "../../ters/src/model.ts";
 import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info, Options } from "../../ters/src/lang/infer.ts";
@@ -675,6 +675,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // function (I245) unless a closure it may be asked of turns out to have
   // none: then lowered again with the evaluator's derive.
   const carry = { derive: true };
+  // The passes before made again as they were are the same nodes as last
+  // compile's (model.ts steadied), so what is kept by node is found.
+  code = steadied(code);
   for (;;) {
     try { return lowerOnce(code, info, names, roots, opts, several, carry); } catch (e) {
       if (e instanceof Uncarried && carry.derive) { carry.derive = false; continue; }
@@ -774,6 +777,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // The steps every lowering of these roots takes alike, done once for
   // both of Build targets' answers (I315).
   ({ code, info, names } = prepared(code, info, names, roots, !!opts.host, !opts.reached));
+  code = steadied(code);
   // The checks after a pass below: with the definitions known to end
   // (L250 `ends`), which a check without them gave Diverge again (C256:
   // buffer's JavaScript kept its searches' branches, 214 KB to 159), and
@@ -6093,6 +6097,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (raw && was) match(raw, was);
     return out;
   };
+  code = steadied(code);
   for (const r of roots) {
     const from = funcs.length, shaped = shapes.length;
     const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!), given = defaults(r);

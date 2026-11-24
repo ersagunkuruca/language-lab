@@ -6,7 +6,7 @@
 // on it (run.ts runProgram, L265), so neither types library bodies the
 // program never reaches.
 
-import { dependenciesOfAll, nodesOfKind, subtree, type Code, type Id } from "../model.ts";
+import { dependenciesOfAll, nodesOfKind, subtreeKept, targetsUnder, type Code, type Id } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { implementationsOf, shownImplementations } from "./std-values.ts";
 import { interfaceOps, waysIn } from "./ways.ts";
@@ -52,10 +52,13 @@ export function reachedImplementing(code: Code, roots: Id[], info: Info): Code {
 export function reachedWithShows(code: Code, roots: Id[], info: Info, own = false): Code {
   const reached = reachedFrom(code, roots);
   const showns = [...shownImplementations(info)].flatMap(([t, d]) => (own && t.startsWith("std.") ? [] : [d]));
-  const shows = showns.length && nodesOfKind(reached, "ref").some((n) => n.target === SHOW_ANY);
+  // (Read from each definition's targets, kept as long as it is: the
+  // reached program's own index of kinds would walk all of it again.)
+  const refers = (b: Id) => reached.defs.some((d) => targetsUnder(code, d).includes(b));
+  const shows = showns.length && refers(SHOW_ANY);
   // And the Ordered implementations a compare orders through (L204h).
   const ordereds = [...implementationsOf(info, ORDERED)].flatMap(([t, d]) => (own && t.startsWith("std.") ? [] : [d]));
-  const compares = ordereds.length && nodesOfKind(reached, "ref").some((n) => n.target === COMPARE);
+  const compares = ordereds.length && refers(COMPARE);
   return shows || compares ? reachedFrom(code, [...roots, ...(shows ? showns : []), ...(compares ? ordereds : [])]) : reached;
 }
 // Asked again of the same program and roots by the passes before lowering
@@ -86,6 +89,6 @@ function reachOf(code: Code, roots: Id[]): Code {
     builtinsKept.set(code.nodes, builtins);
   }
   const nodes: Code["nodes"] = { ...builtins };
-  for (const d of defs) for (const id of subtree(code, d)) nodes[id] = code.nodes[id];
+  for (const d of defs) for (const id of subtreeKept(code, d)) nodes[id] = code.nodes[id];
   return { nodes, defs };
 }

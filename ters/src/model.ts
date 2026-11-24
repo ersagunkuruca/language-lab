@@ -2,6 +2,7 @@
 // Nothing in here knows about names, glyphs, comments, layout or text.
 
 import type { Unit } from "./units.ts";
+import { keptMap } from "./kept.ts";
 
 export type Id = string;
 
@@ -626,18 +627,23 @@ export function children(n: Node): Id[] {
 // again in any version of the nodes while each is still the one there: a
 // copy of the program changing a few nodes walks only the definitions
 // holding them (a version changed in place walks again too).
+// A few walks a root: a compile's passes hold one definition's root under
+// other nodes in their versions, and one walk a root was walked again in
+// each, so a walk wasn't the same array from one compile to the next
+// (stage 4: 59 of machine's 339 definitions, their nodes all the same).
 type Walk = { ids: Id[]; met: Node[] };
-const subtreesKept = new WeakMap<Node, Walk>();
+const subtreesKept = new WeakMap<Node, Walk[]>();
+const WALKS = 4;
 function subtreeWalk(nodes: Record<Id, Node>, root: Id): Walk {
-  const rn = nodes[root], k = rn && subtreesKept.get(rn);
-  if (k) {
-    const { ids, met } = k;
+  const rn = nodes[root], ks = rn && subtreesKept.get(rn);
+  if (ks) for (let j = 0; j < ks.length; j++) {
+    const k = ks[j], { ids, met } = k;
     let same = true;
     for (let i = 1; i < ids.length; i++) if (nodes[ids[i]] !== met[i]) { same = false; break; }
-    if (same) return k;
+    if (same) { if (j) { ks.splice(j, 1); ks.unshift(k); } return k; }
   }
   const ids = walked(nodes, root), w = { ids, met: ids.map((id) => nodes[id]) };
-  if (rn) subtreesKept.set(rn, w);
+  if (rn) { if (ks) { ks.unshift(w); if (ks.length > WALKS) ks.pop(); } else subtreesKept.set(rn, [w]); }
   return w;
 }
 export function subtree(code: Code, root: Id): Id[] {
@@ -679,23 +685,84 @@ export function dependencies(code: Code, root: Id): Id[] {
 export function dependenciesOfAll(code: Code, roots: Id[], into?: Set<Id>): Set<Id> {
   const seen = into ?? new Set<Id>();
   const owner = ownerOfTypeParts(code);
+  // Depth first, each found added before what it reaches, as callers
+  // read the order.
   const visit = (id: Id) => {
-    for (const n of subtree(code, id)) {
-      const node = code.nodes[n];
-      const target = node.kind === "ref" ? node.target : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
-      for (let t of [target, ...(node.kind === "tfun" ? node.effects ?? [] : []), ...(node.kind === "typedef" ? node.row ?? [] : [])]) {
-        if (t && owner.has(t)) t = owner.get(t)!;
-        if (!t || seen.has(t)) continue;
-        const d = code.nodes[t];
-        if (d.kind === "def" || d.kind === "builtin") {
-          seen.add(t);
-          visit(t);
-        }
-      }
+    for (let t of targetsUnder(code, id)) {
+      t = owner.get(t) ?? t;
+      if (seen.has(t)) continue;
+      const d = code.nodes[t];
+      if (d.kind === "def" || d.kind === "builtin") { seen.add(t); visit(t); }
     }
   };
   for (const r of roots) visit(r);
   return seen;
+}
+// What the nodes under `root` refer to (a ref's or tref's target, an arm's
+// variant, a function type's effects, a type's row), each once, before
+// owners: kept by the subtree's walk, so a definition no edit touched is
+// read again by none (stage 4, per-definition summaries).
+const targetsKept = new WeakMap<readonly Id[], readonly Id[]>();
+export function targetsUnder(code: Code, root: Id): readonly Id[] {
+  const ids = subtreeKept(code, root);
+  let out = targetsKept.get(ids);
+  if (out) return out;
+  const found = new Set<Id>();
+  for (const n of ids) {
+    const node = code.nodes[n];
+    const target = node.kind === "ref" ? node.target : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
+    if (target) found.add(target);
+    if (node.kind === "tfun") for (const e of node.effects ?? []) found.add(e);
+    else if (node.kind === "typedef") for (const r of node.row ?? []) found.add(r);
+  }
+  targetsKept.set(ids, (out = [...found]));
+  return out;
+}
+
+// Nodes of the same id and content as ones met before given as those
+// (stage 4): a pass that makes a definition again as it was hands on the
+// objects the caches kept by node (subtree walks, what a definition
+// refers to) already know, so an edit's recompile reads again only what
+// it changed. Content: each field the same value, a list or record of ids
+// the same ids.
+const steadyKept = keptMap<Id, Node[]>(), STEADY_VERSIONS = 4;
+const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && Object.getPrototypeOf(x) === Object.prototype;
+const sameField = (a: unknown, b: unknown, depth = 0): boolean => {
+  if (a === b) return true;
+  if (depth > 8) return false;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((x, i) => sameField(x, b[i], depth + 1));
+  if (plain(a) && plain(b)) {
+    const ka = Object.keys(a), kb = Object.keys(b);
+    return ka.length === kb.length && ka.every((k) => k in b && sameField(a[k], b[k], depth + 1));
+  }
+  return false;
+};
+const sameSteady = (a: Node, b: Node): boolean => {
+  const ka = Object.keys(a), kb = Object.keys(b);
+  return ka.length === kb.length && ka.every((k) => k in b && sameField((a as unknown as Record<string, unknown>)[k], (b as unknown as Record<string, unknown>)[k]));
+};
+export function steadied(code: Code, defs: readonly Id[] = code.defs): Code {
+  if (steadyKept.size > 200_000) steadyKept.clear();
+  let swap: Record<Id, Node> | null = null;
+  for (const d of defs) for (const id of subtreeKept(code, d)) {
+    const n = code.nodes[id];
+    if (!n) continue;
+    const ks = steadyKept.get(id);
+    if (!ks) { steadyKept.set(id, [n]); continue; }
+    if (ks[0] === n) continue;
+    // A few versions an id: the passes give one node other contents in
+    // turn (a literal given its type), each met again next compile.
+    const j = ks.findIndex((k) => k === n || sameSteady(k, n));
+    if (j < 0) { ks.unshift(n); if (ks.length > STEADY_VERSIONS) ks.pop(); continue; }
+    const k = ks[j];
+    if (j) { ks.splice(j, 1); ks.unshift(k); }
+    if (k !== n) (swap ??= {})[id] = k;
+  }
+  if (!swap) return code;
+  const out = { ...code, nodes: withNodes(code.nodes, swap) };
+  const layer = layers.get(code);
+  if (layer) layers.set(out, layer);
+  return out;
 }
 
 // Variants and fields are referred to directly (constructors, projections);
