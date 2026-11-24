@@ -765,3 +765,58 @@ test("a key's event says which of Ctrl, Shift, Alt and Meta are held, in C as ht
   assert.deepEqual(p.evaluator.map((h) => /<span id="seen">([^<]*)</.exec(h)![1]), ["", "f", "Ctrl+f", "Shift+Meta+F", "Alt+x", "f"]);
   assert.deepEqual(p.c, p.evaluator);
 });
+
+// What folders' panes and list need laid out in C as Chromium lays them out
+// (C319): a grid's columns of minmax(0, 1fr) and align-items: start, a
+// table's columns side by side, flex-basis over an input's width, a field
+// a line high, color-mix, white-space: nowrap and a media query's width.
+test("tables, fractions at least 0, flex-basis on inputs, color-mix, nowrap and width queries in C (C319)", { skip }, () => {
+  const k = new Lang();
+  const el = (tag: string, attrs: [string, string][], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs.map(([n, v]) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v))))), k.list(...kids));
+  const text = (t: string) => k.call(HTML_V.text, k.thunk(() => k.lit(t)));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => el("main", [], [
+    el("style", [], [text("@media (max-width: 700px) { .narrow { height: 7px } }")]),
+    el("div", [["style", "display: grid; grid-template-columns: 100px minmax(0, 1fr) 100px; gap: 10px; align-items: start"]], [
+      el("div", [], [text("a")]), el("div", [["style", "height: 50px"]], []), el("div", [], [text("c")])]),
+    el("table", [["style", "border-collapse: collapse"]], [el("tbody", [], [
+      el("tr", [], [el("td", [], [text("ab")]), el("td", [], [text("cdef")])]),
+      el("tr", [], [el("td", [], [text("x")]), el("td", [], [text("y")])])])]),
+    el("div", [["style", "display: flex; gap: 8px"]], [
+      el("input", [["style", "flex: 1 1 100px; padding: 0; border: 0"]], []),
+      el("input", [["style", "flex: 0 1 50px; padding: 0; border: 0"]], [])]),
+    el("div", [["style", "height: 10px; background: color-mix(in srgb, #ff0000 25%, #0000ff)"]], []),
+    el("div", [["style", "white-space: nowrap; width: 20px"]], [text("a b c d")]),
+    el("div", [["class", "narrow"]], []),
+  ])));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const exe = compile(emitC(l, { main, page: "ui-headless" }).c);
+  const at = (width: number) => {
+    const r = spawnSync(exe, [`width:${width}`]);
+    assert.equal(r.status, 0, r.stderr.toString());
+    return r.stdout.toString().split("\x1e\n")[0].split("\n").map((s) => s.trim()).filter(Boolean);
+  };
+  const page = at(620), all = page.join("\n");
+  const box = (s: string) => s.split(" ").slice(1, 5).map(Number);
+  // main is 588 wide (inside the base sheet's body): the middle column is
+  // what the others leave.
+  const grid = page.slice(page.findIndex((s) => s.startsWith("div ")) + 1, page.findIndex((s) => s.startsWith("table ")));
+  const cols = grid.filter((s) => s.startsWith("div ")).map(box);
+  assert.deepEqual(cols.map(([x, , w]) => [x - cols[0][0], w]), [[0, 100], [110, 368], [488, 100]], all);
+  // align-items: start: the texts' boxes keep their own height, at the top.
+  assert.deepEqual(cols.map(([, y, , h]) => [y - cols[0][1], h]), [[0, 22.5], [0, 50], [0, 22.5]], all);
+  // Each row's cells side by side, as wide as their widest (1px padding).
+  const tds = page.filter((s) => s.startsWith("td ")).map(box);
+  assert.deepEqual(tds.map(([x, y, w]) => [x - tds[0][0], y - tds[0][1], w]), [[0, 0, 17], [17, 0, 32], [0, 24.5, 17], [17, 24.5, 32]], all);
+  assert.deepEqual(box(page.find((s) => s.startsWith("table "))!).slice(2), [49, 49]);
+  // flex-basis, then grown and shrunk, not the input's own 150; a line
+  // high (the base sheet's 15px at 1.5).
+  assert.deepEqual(page.filter((s) => s.startsWith("input ")).map((s) => box(s).slice(2)), [[530, 22.5], [50, 22.5]], all);
+  assert.ok(page.some((s) => /^div \S+ \S+ 588 10 bg FF4000BF$/.test(s)), all);
+  assert.ok(page.some((s) => /^text \S+ \S+ 53\.5 22\.5 15 FF1D2229 "a b c d"$/.test(s)), all);
+  // .narrow only while the window is at most 700 wide.
+  assert.equal(box(page.at(-1)!)[3], 7, all);
+  assert.equal(box(at(800).at(-1)!)[3], 0);
+});
