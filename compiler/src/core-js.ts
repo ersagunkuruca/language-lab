@@ -28,7 +28,7 @@ import { itemPaths } from "./item-paths.ts";
 import { chosenParts } from "./chosen-parts.ts";
 import { keptItems, pushedInOrder } from "./kept-items.ts";
 import { intRanges } from "./int-ranges.ts";
-import { countedInts, keptArraysOf } from "./kept-arrays.ts";
+import { boundedReads, countedInts, keptArraysOf } from "./kept-arrays.ts";
 import { ownedArrays } from "./owned-arrays.ts";
 import { columns } from "./columns.ts";
 import { linearCalls } from "./linear-calls.ts";
@@ -251,7 +251,16 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
     // A loop keeping two arrays or more, or counting in numbers, printed a
     // second time as it was (kept-arrays.ts): the first goes on in that
     // one where two are versions of one buffer, or a count isn't small.
-    const plainCopy = () => (selfLoops(f.body, i) && (new Set(keptOf(i).values()).size > 1 || countedInts(ir, i)) ? [func(f, i, null, true).replace(`function ${names[i]}(`, `function ${names[i]}$s(`)] : []);
+    // One whose reads stay in their arrays, a third time with its checks
+    // (`$c`), for where they may not.
+    const plainCopy = () => {
+      if (!selfLoops(f.body, i)) return [];
+      const counted = countedInts(ir, i), kept = keptOf(i);
+      return [
+        ...(new Set(kept.values()).size > 1 || counted ? [func(f, i, null, "written").replace(`function ${names[i]}(`, `function ${names[i]}$s(`)] : []),
+        ...(counted && kept.size && boundedReads(ir, i, kept, counted) ? [func(f, i, null, "checked").replace(`function ${names[i]}(`, `function ${names[i]}$c(`)] : []),
+      ];
+    };
     if (!deep.has(i)) return [func(f, i, null), ...plainCopy()];
     const ps = f.params.map((_, j) => `l${j}`).join(", ");
     const plain = func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$b(`);
@@ -308,7 +317,10 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
   return { js, names, worlds, parts, head };
 
   // `cycle`: writing the heap copy, whose calls of these yield.
-  function func(f: SFunc, i: number, cycle: Set<number> | null, asWritten = false): string {
+  // `mode`: "checked", a loop's reads of its kept arrays checked though
+  // they stay in them (kept-arrays.ts boundedReads); "written", the loop
+  // as written, none of kept-arrays.ts.
+  function func(f: SFunc, i: number, cycle: Set<number> | null, mode: "fast" | "checked" | "written" = "fast"): string {
     let temps = 0;
     const call = (fn: number, xs: string[]) => (cycle?.has(fn) ? `(yield [${gens[fn]}, [${xs.join(", ")}]])` : `${names[fn]}(${xs.join(", ")})`);
     // A closure applied, given out FAIL as a value: on the heap in a heap
@@ -328,10 +340,11 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
     // start and length worked out once, before it. Where one of them
     // turned the buffer away from another (two versions of one array),
     // the loop as written goes on instead (`$s`), reading as before.
-    const keptLocals = loops && !cycle && !asWritten ? keptOf(i) : new Map<number, number>();
+    const keptLocals = loops && !cycle && mode !== "written" ? keptOf(i) : new Map<number, number>();
     const kept = new Map<number, string>([...new Set(keptLocals.values())].sort((x, y) => x - y).map((j) => [j, `w${j}$`]));
     const keptItem = (w: string, j: string) => `${w}b[${w}s + ${j}]`;
-    const counted = loops && !cycle && !asWritten ? countedInts(ir, i) : null;
+    const counted = loops && !cycle && mode !== "written" ? countedInts(ir, i) : null;
+    const bounded = mode === "fast" && counted && keptLocals.size ? boundedReads(ir, i, keptLocals, counted) : null;
     const keptOfArg = (x: SExpr) => { const j = x.k === "local" ? keptLocals.get(x.i) : undefined; return j === undefined ? undefined : kept.get(j); };
     // How a statement leaves when what it reads has no answer (C137c15): the
     // function gives FAIL, or the nearest attempt in it takes its
@@ -357,6 +370,10 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
       // for each of a bird's 27 cells): its check in place, no try.
       if (b.k === "rt" && /^array\.at\.a\d+$/.test(b.fn) && b.args.length === 2 && !e.spent && !e.resumes && !b.args.some((x) => fails(x, ir.funcs))) {
         const w = keptOfArg(b.args[0]);
+        if (w && bounded) {
+          pre.push(`${d}${local(e.res)} = ${keptItem(w, ex(b.args[1], pre, d))};`);
+          return "true";
+        }
         if (w) {
           const k = ex(b.args[1], pre, d), j = temp(), ok = temp();
           pre.push(`${d}const ${j} = ${k};`, `${d}const ${ok} = Number.isInteger(${j}) && ${j} >= 0 && ${j} < ${w}n;`, `${d}if (${ok}) ${local(e.res)} = ${keptItem(w, j)};`);
@@ -601,6 +618,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
               const named = (x: string) => { if (/^[\w$]+$/.test(x)) return x; const t = temp(); pre.push(`${d}const ${t} = ${x};`); return t; };
               const a = named(xs[0]), w = keptOfArg(e.args[0]);
               if (w && m[1] === "length") return `${w}n`;
+              if (w && bounded) return keptItem(w, named(xs[1]));
               if (w) { const j = named(xs[1]); return `(${j} >= 0 && ${j} < ${w}n ? ${keptItem(w, j)} : ${rtName(e.fn)}(${a}, ${j}))`; }
               if (m[1] === "length") return `(${a} instanceof R.ArrayView ? ${a}.n : ${rtName(e.fn)}(${a}))`;
               const j = named(xs[1]);
@@ -766,6 +784,16 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
     const views = [...kept].flatMap(([j, w]) => [`  const ${w} = ${params[j]} instanceof R.ArrayView ? ${params[j]} : R.arrayView(${params[j]}), ${w}b = ${w}.buf.items, ${w}s = ${w}.start, ${w}n = ${w}.n;`]);
     if (counted) views.unshift(`  if (${[...counted.ints, ...counted.steady].map((j) => `typeof ${params[j]} !== "number"`).join(" || ")}) return ${names[i]}$s(${params.join(", ")});`);
     if (kept.size > 1) views.push(`  if (!(${[...kept.values()].map((w) => `${w}.ver.cur`).join(" && ")})) return ${names[i]}$s(${params.join(", ")});`);
+    if (bounded && counted) {
+      // The first and last positions each read is at, in its array.
+      const c = params[bounded.count];
+      const ins = bounded.reads.map(({ array, at }) => {
+        const st = counted.step.get(at)!, w = kept.get(array)!, p = params[at];
+        const by = st.input ? params[st.by as number] : `${st.by}`, last = `(${p} ${st.down ? "-" : "+"} (${c} - 1) * ${by})`;
+        return `${p} >= 0 && ${p} < ${w}n && ${last} >= 0 && ${last} < ${w}n`;
+      });
+      views.push(`  if (!(${c} < 1 || (${ins.join(" && ")}))) return ${names[i]}$c(${params.join(", ")});`);
+    }
     const body = [...inPlace, ...views, ...(loops ? ["  for (;;) {", ...spend("    "), ...block(f.body, "return", "    "), "  }"] : [...spend("  "), ...block(f.body, "return", "  ")])];
     const locals = f.locals.map((_, j) => f.params.length + j).filter((j) => used.has(j)).map((j) => `l${j}`);
     // A definition that isn't a function is worked out once, at its first
@@ -877,7 +905,7 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   if (!envSet("NO_CHOSEN_PARTS")) chosenParts(ir);
   // Small functions using the runtime's reads put in place in loops, so
   // a loop reads the arrays it keeps from their buffers and counts in
-  // numbers (inline-small.ts, kept-arrays.ts, C303a).
+  // numbers (inline-small.ts, kept-arrays.ts, C303b).
   if (!envSet("NO_INLINE")) inlineSmall(ir, true);
   // Ints known small worked out as numbers (int-ranges.ts, C267).
   if (!envSet("NO_INT_RANGES")) intRanges(ir, new Set(ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))));
