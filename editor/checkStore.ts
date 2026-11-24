@@ -143,11 +143,26 @@ const shipped = (): Promise<void> => {
   if (kept.has(`${BUILD}|kept|library-resolved|library`) || typeof document === "undefined" || location.protocol === "file:") return Promise.resolve();
   const read = fetch(SHIPPED).then((r) => (r.ok ? r.json() : null)).then((got: { build: string; kept: Record<string, unknown> } | null) => {
     if (got?.build !== BUILD) return;
-    for (const [k, v] of Object.entries(got.kept)) if (!kept.has(k)) writeLater(k, unpack(v));
+    for (const [k, v] of Object.entries(got.kept)) if (!kept.has(k)) { const u = unpack(v); if (shippedElsewhere) kept.set(k, u); else writeLater(k, u); }
   }, () => {});
   // A slow network checks as before rather than wait.
   return Promise.race([read, new Promise<void>((ok) => setTimeout(ok, 1500))]);
 };
+
+// Written to this browser by Run's worker instead of the page, which only
+// reads them: copying the library's resolving into IndexedDB was a task of
+// 150 to 220 ms on a first visit's editor thread (E319k).
+let shippedElsewhere = false;
+export function shippedKeptByWorker() { shippedElsewhere = true; }
+// The worker's side: what the page read from checks.json and this browser
+// doesn't keep yet, fetched again (from the browser's cache) and kept.
+export function keepShipped(url: string) {
+  if (!db || kept.has(`${BUILD}|kept|library-resolved|library`)) return;
+  void fetch(url).then((r) => (r.ok ? r.json() : null)).then((got: { build: string; kept: Record<string, unknown> } | null) => {
+    if (got?.build !== BUILD) return;
+    for (const [k, v] of Object.entries(got.kept)) if (!kept.has(k)) writeLater(k, unpack(v));
+  }, () => {});
+}
 
 // JSON for what IndexedDB keeps as it is: Maps, Sets, undefined and the
 // numbers JSON has no text for.

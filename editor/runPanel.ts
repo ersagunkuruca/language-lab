@@ -16,7 +16,7 @@ import type { Pins } from "../ters/src/lang/signatures.ts";
 import type * as T from "./typed.ts";
 import { h } from "./dom.ts";
 import { newWorker } from "./runViews.ts";
-import type { RunAsk, RunSays, WarmAsk } from "./runWorker.ts";
+import type { KeepShippedAsk, RunAsk, RunSays, WarmAsk } from "./runWorker.ts";
 import { shippedFor } from "./checkStore.ts";
 import { line, sendCode, words } from "./runCode.ts";
 import { savedFrom } from "../ters/src/lang/tests.ts";
@@ -69,7 +69,12 @@ export function runPanel(host: RunHost) {
   // Started with the page, before any program is open: the worker takes
   // about 0.8 s to start and read the kept checks (I320), and Run in the
   // first second after opening waited on that.
-  function startRun() { if (!idle && !running) idle = newWorker(); }
+  function startRun() {
+    if (idle || running) return;
+    idle = newWorker();
+    // It keeps the build's shipped checks in this browser (checkStore.ts).
+    if (/^https?:$/.test(location.protocol)) idle.postMessage({ keepShipped: new URL("checks.json", location.href).href } satisfies KeepShippedAsk);
+  }
   function stopRun(why?: string) {
     if (running) { running.terminate(); warming = false; }
     running = null;
