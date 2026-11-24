@@ -21,6 +21,8 @@ class El {
   constructor(tag: string) { this.tagName = tag; }
   setAttribute(k: string, v: string) { this.attrs.set(k, String(v)); }
   getAttribute(k: string) { return this.attrs.get(k) ?? null; }
+  removeAttribute(k: string) { this.attrs.delete(k); }
+  get childNodes() { return this.children; }
   private adopt(els: El[]) { for (const e of els) { e.parentElement?.children.splice(e.parentElement.children.indexOf(e), 1); e.parentElement = this; } return els; }
   append(...els: (El | string)[]) { for (const e of els) { if (typeof e === "string") this.textContent += e; else this.children.push(...this.adopt([e])); } }
   prepend(...els: El[]) { this.children.unshift(...this.adopt(els)); }
