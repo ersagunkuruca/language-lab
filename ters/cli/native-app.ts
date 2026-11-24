@@ -136,7 +136,7 @@ export const JNI_C = String.raw`
 #include <unistd.h>
 static JNIEnv *ters_j;
 static jobject ters_a;
-static jmethodID ters_jm[19];
+static jmethodID ters_jm[21];
 static jstring ters_js(const char *s, size_t n) {
   jchar *u = malloc(sizeof *u * (n + 1));
   size_t k = 0;
@@ -195,6 +195,10 @@ static void j_outline(void *c, void *v, const double *xy, size_t n) {
   TERS_J(17, ters_id(v), a);
   (*ters_j)->DeleteLocalRef(ters_j, a);
 }
+// A box marked reveal shown in the box that scrolls round it, or the page
+// (0), and an input's hint (C320b, C320c).
+static void j_reveal(void *c, void *v, double top, double bottom) { (void)c; TERS_J(19, ters_id(v), top, bottom); }
+static void j_hint(void *c, void *v, const char *s, size_t n) { (void)c; jstring t = ters_js(s, n); TERS_J(20, ters_id(v), t); (*ters_j)->DeleteLocalRef(ters_j, t); }
 static int j_ask(void *c, const char *what, size_t n) { (void)c; jstring t = ters_js(what, n); jint r = (*ters_j)->CallIntMethod(ters_j, ters_a, ters_jm[18], t); (*ters_j)->DeleteLocalRef(ters_j, t); return r; }
 #ifdef TERS_SOUND_APP
 // A page's sound (C217) through AAudio: an output stream for each sound
@@ -375,10 +379,11 @@ static void j_snd_allowed(int yes) {
 #endif
 static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw, j_clip, j_scroll, j_sides, j_outline, j_ask,
 #ifdef TERS_SOUND_APP
-  j_sound
+  j_sound,
 #else
-  0
+  0,
 #endif
+  0, j_reveal, j_hint
 };
 // Java checks the stack it is called from: from a handler's fiber, a
 // call that answers goes from the page's own (C313).
@@ -401,8 +406,8 @@ JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, 
   ters_j = env;
   ters_a = (*env)->NewGlobalRef(env, self);
   jclass k = (*env)->GetObjectClass(env, self);
-  const char *ms[19][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" }, { "clip", "(II)V" }, { "scroll", "(ID)V" }, { "sides", "(IDDDDI)V" }, { "outline", "(I[D)V" }, { "ask", "(Ljava/lang/String;)I" } };
-  for (int i = 0; i < 19; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
+  const char *ms[21][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" }, { "clip", "(II)V" }, { "scroll", "(ID)V" }, { "sides", "(IDDDDI)V" }, { "outline", "(I[D)V" }, { "ask", "(Ljava/lang/String;)I" }, { "reveal", "(IDD)V" }, { "hint", "(ILjava/lang/String;)V" } };
+  for (int i = 0; i < 21; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
 #ifdef LAB_OPENER
   lab_opener = j_open;
 #endif
@@ -1118,6 +1123,22 @@ public class MainActivity extends Activity {
       }
     });
   }
+  // A box marked reveal (C320b): the box round it that scrolls, or the
+  // page (id 0), scrolled the least that shows top to bottom (dp), its top
+  // when it can't show both; once it's laid out.
+  void reveal(int id, double top, double bottom) {
+    final View v = id == 0 ? scroll : views.get(id);
+    if (v == null) return;
+    v.post(() -> {
+      int pad = id == 0 ? scroll.getPaddingTop() + scroll.getPaddingBottom() : 0, h = v.getHeight() - pad, now = v.getScrollY(), t = px(top), b = px(bottom);
+      if (b - now > h) now = b - h;
+      if (t < now) now = t;
+      int most = id == 0 ? Math.max(0, page.getHeight() - h) : most(id, v);
+      v.scrollTo(0, Math.max(0, Math.min(now, most)));
+    });
+  }
+  // An input's hint, shown while it's empty (its placeholder, C320c).
+  void hint(int id, String s) { View v = views.get(id); if (v instanceof EditText) ((EditText) v).setHint(s.isEmpty() ? null : s); }
   private int most(int id, View v) { Double h = inside.get(id); return h == null ? 0 : Math.max(0, px(h) - v.getHeight()); }
   void draw(int id, double[] ops) { View v = views.get(id); if (v instanceof Picture) { ((Picture) v).ops = ops; v.invalidate(); } }
 
