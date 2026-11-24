@@ -70,10 +70,23 @@ function built(marker: RegExp, arrays: boolean, body: (k: Lang) => Id) {
   const c = emitC(l, { main }).c;
   assert.match(c, marker);
   const exe = compile(c);
-  const run = (workers: string) => {
+  const once = (workers: string) => {
     const r = spawnSync(exe, [], { env: { ...process.env, TERS_WORKERS: workers, TERS_BRANCHES: "say" } });
     const err = r.stderr.toString();
     return { out: r.status ? `aborted ${err.split("\n").filter((x) => x && !x.startsWith("items on threads"))[0]}` : r.stdout.toString(), threads: Number(/items on threads: (\d+)/.exec(err)?.[1] ?? 0) };
+  };
+  // The thread that shares the items runs them too (lab_pool_run), so on
+  // a loaded machine it may take them all before a worker wakes: a run
+  // with workers is tried again, up to 8 times, till one item ran on
+  // another thread, each try giving the same answer.
+  const run = (workers: string) => {
+    let r = once(workers);
+    for (let k = 1; k < 8 && workers !== "0" && r.threads === 0; k++) {
+      const again = once(workers);
+      assert.equal(again.out, r.out, "a run tried again gave another answer");
+      r = again;
+    }
+    return r;
   };
   return { evaluator, run };
 }
