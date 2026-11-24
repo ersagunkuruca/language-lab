@@ -47,6 +47,8 @@ function encode(x: unknown, names: Map<Fn, string>): unknown {
   if (x === null || x === undefined || typeof x !== "object" && typeof x !== "function") return x;
   if (over()) return NO;
   if (x instanceof ArrayView) {
+    const ns = numbers(x.buf.items, x.start, x.n);
+    if (ns) return { ...ns, view: true };
     const k = byShape(x.buf.items, x.start, x.n);
     if (k) return { ...k, view: true };
     const items: unknown[] = [];
@@ -62,6 +64,7 @@ function encode(x: unknown, names: Map<Fn, string>): unknown {
   if (x instanceof Uint8Array || x instanceof Float64Array || x instanceof Int32Array) return x;
   if (x instanceof Table) return encodeTable(x, names);
   if (Array.isArray(x)) { const r = recordsAsColumns(x) ?? byShape(x, 0, x.length); if (r) return r; }
+  if (Array.isArray(x)) { const ns = numbers(x, 0, x.length); if (ns) return ns; }
   if (Array.isArray(x)) { const xs = x.map((v) => encode(v, names)); return xs.includes(NO) ? NO : xs; }
   const t = x as { tag?: unknown; fields?: unknown[]; f0?: unknown; f1?: unknown };
   // A cons list as its items, walked, not recursed into: a long one (the
@@ -80,6 +83,40 @@ function encode(x: unknown, names: Map<Fn, string>): unknown {
   }
   return NO;
 }
+// Items that are all numbers (wav of's words, a range's Ints) in one
+// Float64Array, which crosses as bytes: as an array of numbers it is
+// copied value by value, to each worker (C329: 192,000 words captured and
+// 384,000 Ints, 125 ms of wav of's 400). Undefined where one isn't a
+// number, or past `late`.
+function numbers(xs: ArrayLike<unknown>, start: number, n: number): { $n: Float64Array } | undefined {
+  if (n < 64) return undefined;
+  const out = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const v = xs[start + i];
+    if (typeof v !== "number") return undefined;
+    out[i] = v;
+    if ((i & 4095) === 4095 && over()) return undefined;
+  }
+  return { $n: out };
+}
+// A job's items: as numbers, or each encoded; NO where one can't cross.
+function encodeItems(items: unknown[]): unknown[] | { $n: Float64Array } | typeof NO {
+  const ns = numbers(items, 0, items.length);
+  if (ns) return ns;
+  if (over()) return NO;
+  const es = items.map((x) => encode(x, names!));
+  return es.includes(NO) ? NO : es;
+}
+// As plain numbers again, those from a to b: a loop (Array.from walks a
+// typed array by its iterator, several times slower).
+function fromNumbers(ns: Float64Array, a = 0, b = ns.length): number[] {
+  const xs = new Array<number>(b - a);
+  for (let i = a; i < b; i++) xs[i - a] = ns[i];
+  return xs;
+}
+// A job's items from a to b, decoded: a worker decodes only the runs it
+// takes.
+const itemsFrom = (es: unknown[] | { $n: Float64Array }) => (a: number, b: number): unknown[] => (Array.isArray(es) ? es.slice(a, b).map(dec) : fromNumbers(es.$n, a, Math.min(b, es.$n.length)));
 // A table read by a job (examples/herd's map of animals, BACKLOG C209):
 // one whose keys are numbers and whose values are records of one case
 // whose fields are numbers crosses as columns in a SharedArrayBuffer, the
@@ -209,6 +246,7 @@ function decode(x: unknown, fns: Record<string, Fn>, closure: (code: Fn, caps: u
   if (Array.isArray(x)) return x.map((v) => decode(v, fns, closure));
   const o = x as { $k?: Shape[]; $a?: unknown[]; $r?: Float64Array; $s?: SharedArrayBuffer; $m?: unknown[]; n?: number; w?: number; tag?: unknown; $f?: string; caps?: unknown[]; $t?: unknown; fields?: unknown[] };
   if (o.$k) { const xs = unshaped(o as never); return (o as { view?: true }).view ? arrayOf(xs) : xs; }
+  if ((o as { $n?: Float64Array }).$n) { const xs = fromNumbers((o as { $n: Float64Array }).$n); return (o as { view?: true }).view ? arrayOf(xs) : xs; }
   if (o.$a) return arrayOf(o.$a.map((v) => decode(v, fns, closure)));
   if (o.$r) { const xs: unknown[] = [], c = o.$r, w = o.w!; for (let i = 0; i < c.length; i += w) { const fields = new Array<number>(w); for (let f = 0; f < w; f++) fields[f] = c[i + f]; xs.push({ tag: o.tag, fields }); } return xs; }
   if (o.$s) return new Table(new SharedEntries(o.$s, o.n!, o.w!, o.tag) as unknown as Map<unknown, unknown>, true);
@@ -293,7 +331,11 @@ export function branchWorker(): boolean {
   const { port, ready } = w.workerData as { port: import("node:worker_threads").MessagePort; ready?: Int32Array };
   if (ready) queueMicrotask(() => { Atomics.add(ready, 0, 1); Atomics.notify(ready, 0); });
   port.on("message", (m: Job) => {
+    // Decoded before a unit is taken, while one is left: the main thread
+    // waits for a unit taken, so its decoding (tens of ms for a big
+    // capture) is not to be part of it (C329).
     let unit: ((i: number) => unknown) | undefined;
+    for (let i = 0; i < m.units; i++) if (Atomics.load(m.claims, 2 + i) === 0) { try { unit = unitsOf(m); } catch { /* again, when a unit is taken */ } break; }
     for (let i = 0; i < m.units; i++) {
       if (Atomics.compareExchange(m.claims, 2 + i, 0, 1) !== 0) continue;
       // Past a unit that decided (all pass, any pass): taken, not run.
@@ -317,15 +359,15 @@ export function branchWorker(): boolean {
   return true;
 }
 // What a job sends, and what comes back for each unit.
-interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; fold?: FoldHow; join?: unknown; until?: "all" | "any" | "first"; search?: unknown; how?: How; ways?: number; calls?: unknown[][] }
+interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[] | { $n: Float64Array }; size?: number; keep?: boolean; fold?: FoldHow; join?: unknown; until?: "all" | "any" | "first"; search?: unknown; how?: How; ways?: number; calls?: unknown[][] }
 interface Answer { job: number; i: number; v?: unknown; abort?: unknown; esc?: number; again?: true }
 const dec = (x: unknown) => decode(x, mod!.fns, mod!.closure);
 function unitsOf(m: Job): (i: number) => unknown {
   if (m.branches) return (i) => (dec(m.branches![i]) as Fn)();
   if (m.calls) return (i) => { const [f, ...xs] = m.calls![i].map(dec); return (f as Fn)(...xs); };
   if (m.search) { const c = dec(m.search); return (i) => answers(c, piece(i + 1, m.ways ?? 1), m.how!); }
-  const f = dec(m.f) as Fn, items = m.items!.map(dec);
-  return m.until ? (i) => deciding(items.slice(i * m.size!, (i + 1) * m.size!), f, m.until === "any", () => stopped(m.claims, i - m.base)) : m.fold ? (i) => together(items.slice(i * m.size!, (i + 1) * m.size!), f, m.fold!, m.join === undefined ? undefined : dec(m.join) as Fn) : (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
+  const f = dec(m.f) as Fn, items = itemsFrom(m.items!);
+  return m.until ? (i) => deciding(items(i * m.size!, (i + 1) * m.size!), f, m.until === "any", () => stopped(m.claims, i - m.base)) : m.fold ? (i) => together(items(i * m.size!, (i + 1) * m.size!), f, m.fold!, m.join === undefined ? undefined : dec(m.join) as Fn) : (i) => run(items(i * m.size!, (i + 1) * m.size!), f, m.keep);
 }
 
 // The list of actions, and the list of their values in the same kind.
@@ -439,25 +481,46 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
     // A job the main thread did alone in under a millisecond: its units
     // are worth less than sending them, so they stay here.
     if (!theirs && site && !always && performance.now() - t0 < 1) quick.add(site);
-    for (let d = Atomics.load(claims, 1); d < theirs; d = Atomics.load(claims, 1)) Atomics.wait(claims, 1, d);
+    // Their answers, as they come. A unit a worker took and hasn't
+    // answered within what a unit takes here is run here too (C329): a
+    // worker's first units run cold (wav of's bytes: 30 to 40 ms against
+    // 1.5 ms here), and a pure unit's answer is the same wherever it ran.
+    // One answered after is dropped, at the next job.
+    const w = wt()!, done = new Uint8Array(left), took = site && alone.get(site), patience = KNOBS.has("wait") || took === undefined ? Infinity : Math.max(1, 2 * took);
+    for (const i of mine) done[i] = 1;
+    let open = theirs;
+    const answers = () => {
+      for (const h of helpers) {
+        for (let m = w.receiveMessageOnPort(h.port); m; m = w.receiveMessageOnPort(h.port)) {
+          const r = m.message as Answer;
+          if (!r.again) onWorkers++;
+          if (r.job !== id || done[r.i]) continue;
+          done[r.i] = 1;
+          open--;
+          if (r.again) values[r.i] = AGAIN;
+          else if ("abort" in r) values[r.i] = new Thrown(new mod!.Aborted(dec(r.abort), r.esc!));
+          else values[r.i] = dec(r.v);
+        }
+      }
+    };
+    while (open > 0) {
+      const d = Atomics.load(claims, 1);
+      answers();
+      if (open <= 0) break;
+      if (Atomics.wait(claims, 1, d, patience) !== "timed-out") continue;
+      let i = left - 1;
+      while (i >= 0 && done[i]) i--;
+      if (i < 0) continue;
+      done[i] = 1;
+      open--;
+      inJob = true;
+      try { values[i] = attempt(() => here(i)); } finally { inJob = false; }
+    }
     const unitHere = site && theirs ? alone.get(site) : undefined;
     if (unitHere !== undefined) {
       const misses = performance.now() - sent >= unitHere * left ? (unpaid.get(site!) ?? 0) + 1 : 0;
       unpaid.set(site!, misses);
       if (misses >= UNPAID && !always) quick.add(site!);
-    }
-  }
-  if (theirs) {
-    const w = wt()!;
-    for (const h of helpers) {
-      for (let m = w.receiveMessageOnPort(h.port); m; m = w.receiveMessageOnPort(h.port)) {
-        const r = m.message as Answer;
-        if (r.job !== id) continue;
-        if (r.again) values[r.i] = AGAIN;
-        else if ("abort" in r) values[r.i] = new Thrown(new mod!.Aborted(dec(r.abort), r.esc!));
-        else values[r.i] = dec(r.v);
-        if (!r.again) onWorkers++;
-      }
     }
   }
   // In order, as running them in order would have: the first to abort or
@@ -670,8 +733,8 @@ export function mapPure(xs: unknown, f: Fn, site: number, keep?: boolean, always
   if (!canShare()) return mapInOrder(xs, f, keep);
   const items = itemsOf(xs), size = Math.max(1, Math.ceil(items.length / cut)), n = Math.ceil(items.length / size), t0 = performance.now();
   const runs = shared(n, (i) => run(items.slice(i * size, (i + 1) * size), f, keep), () => {
-    const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
-    return es.includes(NO) ? NO : { f: g, items: es, size, keep };
+    const g = encode(f, names!), es = g === NO ? NO : encodeItems(items);
+    return es === NO ? NO : { f: g, items: es, size, keep };
   }, (f as Closure).code, always);
   perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
   return sameKind(xs, (runs as unknown[][]).flat());
@@ -696,8 +759,8 @@ export function foldPure(xs: unknown, f: Fn, z: Int, how: FoldHow, site: number,
   if (!items.length) return z;
   const size = Math.max(1, Math.ceil(items.length / cut)), n = Math.ceil(items.length / size), t0 = performance.now();
   const runs = shared(n, (i) => together(items.slice(i * size, (i + 1) * size), f, how, join), () => {
-    const g = encode(f, names!), j = join ? encode(join, names!) : undefined, es = g === NO || j === NO ? [NO] : items.map((x) => encode(x, names!));
-    return es.includes(NO) ? NO : { f: g, items: es, size, fold: how, ...(j ? { join: j } : {}) };
+    const g = encode(f, names!), j = join ? encode(join, names!) : undefined, es = g === NO || j === NO ? NO : encodeItems(items);
+    return es === NO ? NO : { f: g, items: es, size, fold: how, ...(j ? { join: j } : {}) };
   }, (f as Closure).code, always);
   perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
   return (runs as Int[]).reduce(both(how, join), z);
@@ -713,8 +776,8 @@ const deciding = (items: unknown[], f: Fn, any: boolean, stop?: () => boolean): 
 function firstDeciding(xs: unknown, f: Fn, site: number, any: boolean, always?: boolean, cut = RUNS): number {
   const items = itemsOf(xs), size = Math.max(1, Math.ceil(items.length / cut)), n = Math.ceil(items.length / size), t0 = performance.now();
   const runs = sharedUntil(n, (i, stop) => deciding(items.slice(i * size, (i + 1) * size), f, any, stop), () => {
-    const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
-    return es.includes(NO) ? NO : { f: g, items: es, size, until: any ? "any" : "all" };
+    const g = encode(f, names!), es = g === NO ? NO : encodeItems(items);
+    return es === NO ? NO : { f: g, items: es, size, until: any ? "any" : "all" };
   }, (f as Closure).code, always);
   const last = runs[runs.length - 1];
   if (last instanceof Thrown) throw last.e;
