@@ -506,6 +506,20 @@ static void u_scroll(void *c, void *v, double inside) {
   CGRect r = b.bounds; r.origin.y = MAX(0, MIN(r.origin.y, inside - r.size.height)); b.bounds = r;
   if (!known) [b addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:b action:@selector(pan:)]];
 }
+// A box marked reveal (C320b): the box round it that scrolls, or the
+// page, scrolled the least that shows top to bottom, its top when it
+// can't show both.
+static void u_reveal(void *c, void *v, double top, double bottom) {
+  if (!v) { [P.scroll scrollRectToVisible:CGRectMake(0, top, 1, MAX(1, bottom - top)) animated:NO]; return; }
+  UIView *a = V(v);
+  if (![a isKindOfClass:[TBox class]]) return;
+  TBox *b = (TBox *)a;
+  CGRect r = b.bounds;
+  double h = r.size.height, now = r.origin.y;
+  if (bottom - now > h) now = bottom - h;
+  if (top < now) now = top;
+  r.origin.y = MAX(0, MIN(now, MAX(0, b.inside - h))); b.bounds = r;
+}
 static void u_listen(void *c, void *v, const char *e, size_t n, int h) {
   UIView *a = V(v);
   NSString *ev = str(e, n);
@@ -622,7 +636,7 @@ static int u_ask(void *c, const char *s, size_t n) {
   return 0;
 }
 ${sound ? SOUND_M : ""}
-static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, ${sound ? "u_sound" : "0"}, 0, 0, u_hint };
+static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, ${sound ? "u_sound" : "0"}, 0, u_reveal, u_hint };
 
 @implementation TPage
 - (void)viewDidLoad {

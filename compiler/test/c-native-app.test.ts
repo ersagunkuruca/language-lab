@@ -71,6 +71,9 @@ public class MainActivity {
   void outline(int id, double[] xy) {}
   // The person's answer to a permission asked (L236b): -1, asked; answered by main's permission:yes or permission:no.
   int ask(String what) { System.out.println("ask " + what); return -1; }
+  // A box marked reveal and an input's hint (C320b, C320c).
+  void reveal(int id, double top, double bottom) { System.out.println("reveal " + id + " " + top + " " + bottom); }
+  void hint(int id, String s) { System.out.println("hint " + id + " " + s); }
   static String g(double x) { if (x == 0) return "0"; return new BigDecimal(x).round(new MathContext(6)).stripTrailingZeros().toPlainString(); }
   static void print(StringBuilder b, N n, double dx, double dy, int depth) {
     if (!n.shown) return;
@@ -276,6 +279,39 @@ test("a native app's handler asks the activity for a permission and waits for it
   assert.match(shown[1], /^ask microphone\n/);
   assert.match(shown[1], /"asking"/);
   assert.match(shown[2], /"microphone: yes"/);
+});
+
+// A box marked reveal and an input's placeholder reach MainActivity's
+// reveal and hint (C320b, C320c): the list that scrolls round row 10, and
+// the input's Filter.
+test("a native app's revealed row and input's hint reach MainActivity (C320b, C320c)", { skip }, async () => {
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { HTML_V } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang(LIBRARY.code);
+  const el = (tag: string, attrs: [string, string][], kids: string[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs.map(([n, v]) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v))))), k.list(...kids));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => el("main", [], [
+    el("input", [["placeholder", "Filter"]], []),
+    el("div", [["style", "height: 100px; overflow: auto"]], Array.from({ length: 20 }, (_, i) => el("div", [["style", "height: 30px"], ["reveal", i === 10 ? "true" : "false"]], []))),
+  ])));
+  const dir = mkdtempSync(join(tmpdir(), "native-reveal-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
+  writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
+  const ters = join(import.meta.dirname, "../../ters/cli/ters.ts");
+  const out = spawnSync(process.execPath, [ters, "build-native-app", dir, "-o", join(dir, "app")], { encoding: "utf8" });
+  assert.equal(out.status, 0, out.stderr);
+  const inc = join(jdk!, "include");
+  execFileSync("cc", ["-std=c11", "-O2", "-U_FORTIFY_SOURCE", "-DLAB_FIBER_SJLJ", "-fPIC", "-shared", "-pthread", "-Wall", "-Werror", "-Wno-unknown-pragmas", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-but-set-variable", "-Wno-unknown-warning-option", "-Wno-maybe-uninitialized", "-Wno-free-nonheap-object", "-Wno-format-overflow", `-I${inc}`, `-I${join(inc, "linux")}`, "-o", join(dir, "libpage.so"), join(dir, "app/app/src/main/cpp/page.c"), "-lm"]);
+  const src = join(dir, "java", ...PACKAGE.split("."));
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "MainActivity.java"), STAND_IN);
+  execFileSync("javac", ["-d", join(dir, "classes"), join(src, "MainActivity.java")]);
+  const r = spawnSync("java", [`-Djava.library.path=${dir}`, "-cp", join(dir, "classes"), `${PACKAGE}.MainActivity`], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^hint \d+ Filter$/m);
+  // Row 10, 300 to 330 down the list that scrolls, not the page (0).
+  assert.match(r.stdout, /^reveal [1-9]\d* 300\.0 330\.0$/m);
 });
 
 // A page that opens files in other apps (C311): its app gives them through
