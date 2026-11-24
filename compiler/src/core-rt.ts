@@ -112,6 +112,15 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   // `array of range(n)` of Ints with no list between (C228).
   "array.range": (n: I.Int) => rangeArray(Number(n)),
   "array.ofItems": (...xs: unknown[]) => (xs.length >= 16 ? arrayOfItems(toList(xs as Value[]) as never) : arrayOf(xs)),
+  // `array of(append(items of a, items of b))` (core-js.ts writtenArrays,
+  // C324): the two arrays' items copied into one, made as `array of`
+  // makes it.
+  "array.concat": (a: Parameters<typeof arrayView>[0], b: Parameters<typeof arrayView>[0]) => {
+    const x = arrayView(a), y = arrayView(b), xs = new Array<unknown>(x.n + y.n), A = x.buf.items, B = y.buf.items;
+    for (let i = 0; i < x.n; i++) xs[i] = A[x.start + i];
+    for (let i = 0; i < y.n; i++) xs[x.n + i] = B[y.start + i];
+    return xs.length >= 16 ? arrayOfItems(new ItemsList(xs, 0) as never) : arrayOf(xs);
+  },
   "array.get": (a: Parameters<typeof arrayView>[0], k: number) => { const v = arrayView(a), i = Number(k); if (!(i >= 0 && i < v.n)) throw FAIL; return v.buf.items[v.start + i]; },
   // The array's items from place k on, a view of the same buffer (C30 s2b:
   // the rest an array's fold hands its arm, scalar.ts restAsView).
