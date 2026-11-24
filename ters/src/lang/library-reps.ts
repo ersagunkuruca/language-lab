@@ -104,13 +104,16 @@ export function endedAsWritten(info: Info, defs: Iterable<Id>): Id[] {
   return [...defs].filter((d) => info.typeOf.has(d) && !info.divergent.has(d));
 }
 
-// Pins without those that name one of `types` anywhere; null where none does.
-function unpinnedOf(pins: Pins | undefined, types: Set<Id>): Pins | null {
+// Pins without those that name one of `types` anywhere, on a definition
+// `takes` says (the sounds module's `wav of` on Bytes, not Map's own
+// `put`: crew-page's page lost its arrays when those went); null where
+// none does.
+function unpinnedOf(pins: Pins | undefined, types: Set<Id>, takes: (d: Id) => boolean): Pins | null {
   if (!pins) return null;
   const names = (t: Type): boolean => t.t === "con" ? types.has(t.id) || t.args.some(names) : t.t === "fn" ? [...t.params, t.ret].some(names) : false;
   const out: Pins = {};
   let dropped = false;
-  for (const d in pins) { if (names(pins[d].type)) dropped = true; else out[d] = pins[d]; }
+  for (const d in pins) { if (names(pins[d].type) && takes(d)) dropped = true; else out[d] = pins[d]; }
   return dropped ? out : null;
 }
 
@@ -141,7 +144,12 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     // type, as the check carried says (carried-reps.ts). Where the check
     // made again (TERS_RECHECK, carried-types.test) refuses the rewrite
     // with such pins, it reads those definitions by their bodies.
-    const unpinned = unpinnedOf(info.options?.pins, new Set(r.reps.map((x) => x.of)));
+    // Only on a definition the rewrite changed, or one that calls one
+    // (`sample at` passes its Bytes to `bytes as 16 bits`): Map's own `put`
+    // keeps its pin, as crew-page's page needs.
+    const changed = (d: Id) => r.code.nodes[d] !== code.nodes[d] || subtree(r.code, d).some((x) => r.code.nodes[x] !== code.nodes[x]);
+    const unpinned = unpinnedOf(info.options?.pins, new Set(r.reps.map((x) => x.of)), (d) => changed(d) || [...dependenciesOfAll(r.code, [d])].some((x) => x !== d && code.nodes[x]?.kind === "def" && changed(x)));
+
     if (!carried && unpinned && checked.errors.length > info.errors.length) checked = infer(r.code, r.names, undefined, { ...checkWith, pins: unpinned });
     if (checked.errors.length <= info.errors.length) {
       // Lists go alone (choiceOf); with Map or Set chosen first, they're
