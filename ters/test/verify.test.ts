@@ -120,3 +120,17 @@ test("a recursion whose type leaves out Diverge is checked to end", () => {
   const changed = { ...code, nodes: withNodes(code.nodes, { [call]: { ...code.nodes[call], args: [nRef] } as Node }) };
   assert.deepEqual(verify(changed, e, own).problems.map((x) => [x.id, x.rule]), [[down, "a recursion whose type leaves out Diverge ends"]]);
 });
+
+test("a generic let's uses are its instances: used at another type, refused once it isn't generic", () => {
+  // folders' `node` in `tree` is a let general in its depth, used at Int
+  // (C320, #3248); verify took each use as the binder's own type.
+  const p = loadProgram(join(root, "examples", "folders"));
+  const info = infer(p.code, p.pres.names, undefined, p.options ?? checkOptions);
+  const e = elaborate(p.code, info), own = p.own.defs;
+  assert.deepEqual(verify(p.code, e, own).problems, []);
+  const lets = [...e.schemes.keys()].filter((id) => p.code.nodes[id]?.kind === "binder");
+  assert.ok(lets.length > 0, "no generic let");
+  const fixed = new Map(e.schemes);
+  for (const id of lets) fixed.set(id, { ...fixed.get(id)!, vars: [] });
+  assert.ok(verify(p.code, { ...e, schemes: fixed }, own).problems.some((x) => x.rule === "a use of a generic let is an instance of its scheme"));
+});

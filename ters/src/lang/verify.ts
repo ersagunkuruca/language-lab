@@ -66,6 +66,11 @@ export function elaborate(code: Code, info: Info, defs: Id[] = code.defs): Elabo
     }
     const sc = info.schemes.get(d);
     if (sc) schemes.set(d, { vars: sc.vars.map((v) => n.v(v)), type: n.type(info.subst.zonk(sc.type)) });
+    // A generic let's binder (L224), whose uses are its instances.
+    for (const id of subtree(code, d)) {
+      const ls = info.letSchemes?.get(id);
+      if (ls) schemes.set(id, { vars: ls.vars.map((v) => n.v(v)), type: n.type(info.subst.zonk(ls.type)) });
+    }
   }
   const answered = new Set<Id>();
   for (const d of defs) for (const id of subtree(code, d)) if (info.answered?.has(id)) answered.add(id);
@@ -181,7 +186,11 @@ export function verify(code: Code, e: Elaboration, defs: Id[] = code.defs, under
       }
       case "ref": {
         const target = code.nodes[n.target];
-        if (target?.kind === "binder") { const bt = ty(n.target); if (!bt) skip("a binder with no type"); else if (!same(bt, t)) bad(id, "a name is its binder's type"); break; }
+        if (target?.kind === "binder") {
+          const ls = e.schemes.get(n.target);
+          if (ls) { if (!instance(ls.type, t, general(new Set(ls.vars)))) bad(id, "a use of a generic let is an instance of its scheme"); break; }
+          const bt = ty(n.target); if (!bt) skip("a binder with no type"); else if (!same(bt, t)) bad(id, "a name is its binder's type"); break;
+        }
         if (target?.kind === "def") { const sc = schemeOf(n.target); if (!sc) { skip("a definition with no scheme"); break; } if (!instance(sc.type, t, general(new Set(sc.vars)))) bad(id, "a use is an instance of its definition's scheme"); break; }
         if (target?.kind === "builtin") {
           // A written list (infer.ts listOfType): n items of one type.

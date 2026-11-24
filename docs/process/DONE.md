@@ -40,6 +40,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I359 | verify.test.ts on folders: a generic let's uses (L224) are checked as instances of its scheme, not as the binder's own type; Info carries letSchemes | #3257 |
 | I358 | The agreement check stopped with "Maximum call stack size exceeded" on mnist-page's `label`: relate's `known` (is a term fully known) went into a list a JS call a cell, and the digits are 74 KB of bytes. It walks with a stack of its own, as `fromValue` and `plain` do since I357. ters/test/agreement.test.ts | #3257 |
 | I357 | Run backwards on pond's `seeded over` or moths' `filed` said "Maximum call stack size exceeded": the search turned the known values into its terms (relate.ts `fromValue`) and checked them for functions (`plain`) a JS call per item, and the values' worker overflowed on a list of 2304 keys. Both walk with a stack of their own now; back-long-lists.test (a list of 200,000, seeded over given 20,000 keys). | #3244 |
 | I356 | Opening pond's `seeded over` or moths' `filed` replaced the whole editor with "The editor failed to draw this program (postMessage … Maximum call stack size exceeded)", a regression of I319 from E319e: values given to the values' worker were sent as they are, and postMessage's copy recursed down a long cons list. They're now sent flat (editor/flatValues.ts: each datum once, fields by place, made and read back without recursion), and a send that still fails is the values' error, not the editor's. Test: flat-values.test.ts (a list 200,000 deep). | #3241 |
