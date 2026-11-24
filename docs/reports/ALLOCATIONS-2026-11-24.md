@@ -430,6 +430,30 @@ The hand edit (C327a) measured 21% from `merge sorted` alone; the rest
 comes from the views every other array function stops making. Next is
 the same on WebAssembly (C327c2), where a view is a GC struct today.
 
+## C327c2, WebAssembly measured by hand (2026-11-24, evening)
+
+Before building the same thing for WebAssembly, the same hand edit:
+flock's `merge sorted`, from `ters wasi`, disassembled with binaryen
+and changed to keep its two views as locals (buffer, start, length). It
+then makes one view per merge instead of one per step
+(`compiler/gaps/allocations/c327c2-flock-merge.py`). Node 22 (V8),
+medians of 7 alternating runs, same output:
+
+| edit | before | after |
+|---|---|---|
+| `merge sorted`'s views as locals | 5,277 ms | 5,075 ms: 4% faster |
+| its `Ordering` answers as three globals, not a struct a compare | 5,245 ms | 5,213 ms: no change |
+
+On C the same edit was 21%. V8 allocates a short-lived struct by
+bumping a pointer, and its young-generation collector frees one by
+not copying it, so a view costs a few instructions, not a count kept up
+and a free list. The profile agrees: the whole collector is 11.6% of
+flock's run, and that bounds what removing every view could save.
+
+So C327c2 is closed as measured: views by value on WebAssembly would
+mean multi-value lowering in every function that takes an array, for
+4% at the hottest site.
+
 ## How this was measured
 
 On this container (4 cores), gcc 13 at `ters native`'s flags. Cells by
