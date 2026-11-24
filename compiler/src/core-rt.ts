@@ -12,7 +12,8 @@ import { hashset$items, show as showFloat, table$empty, table$entries, table$has
 import { directRead, directTable, tableRead, tablePutOwned, tableRemoveOwned, type Table } from "../../ters/src/lang/table.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
-import { fileInfoValue, LIST_SHAPE, LIST_SHAPE_BOOLS, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
+import { fileInfoValue, LIST_SHAPE, LIST_SHAPE_BOOLS, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Value } from "../../ters/src/lang/run-values.ts";
+import type { Runtime, World } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { answerByShapes, type HostOp } from "../../ters/src/lang/hosts.ts";
 import { Cells, NoValue, Pending, pathValue } from "../../ters/src/lang/cells.ts";

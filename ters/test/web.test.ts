@@ -259,3 +259,23 @@ test("a page that runs nothing side by side carries none of what does, and one t
   // dice's map of its rolls may run on the page's workers.
   assert.match(await built("dice"), workers);
 });
+
+// A page holds main's code and the runtime it runs, never the editor's
+// model of a program, the loader's upgrades of old saved files, the
+// checker or the evaluator (run.ts: a page's values are run-values.ts's).
+test("a page carries no model, loader, checker or evaluator code", async () => {
+  const { webCorePage } = await import("../cli/web.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { infer } = await import("../src/lang/infer.ts");
+  const NOT_IN_A_PAGE = /(^|\/)src\/(model|files|saved|prelude|presentation|kept)\.ts$|(^|\/)src\/lang\/(run|std|infer|load|library|prelude-ids|descent|types|ports|records|reached|supports)\.ts$/;
+  for (const example of ["dice", "flock-frame-page"]) {
+    const p = loadProgram(join(import.meta.dirname, "../examples", example));
+    const info = infer(p.code, p.pres.names, undefined, p.options);
+    const modules: string[] = [];
+    const html = await webCorePage(example, p.code, info, p.pres.names, p.named("main"), undefined, modules);
+    assert.ok(modules.some((m) => m.endsWith("core-page.ts")), modules.join(" "));
+    assert.deepEqual(modules.filter((m) => NOT_IN_A_PAGE.test(m)), [], example);
+    // The upgrades a saved file is read through (model.ts SHAPE_STEPS).
+    assert.doesNotMatch(html, /\(L130d\)|usesGiveTheirPorts/, example);
+  }
+});

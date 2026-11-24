@@ -5,7 +5,7 @@
 // runs nothing side by side carries none of it.
 
 import { arrayOf } from "../../ters/src/lang/array-view.ts";
-import { toList, type Value } from "../../ters/src/lang/run.ts";
+import { toList, type Value } from "../../ters/src/lang/run-values.ts";
 import type * as I from "../../ters/src/lang/int.ts";
 import { allEvery, countEvery, FAIL, firstOf, rangeCount, RUNTIME, type Branches } from "./core-rt.ts";
 import { bothOn, bothPure, bothSecond, branchesFrom, branchWorker, pageBranches, pageGpu, pageWorker, mapAway, searchAway, chooseSplit, rangeSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";

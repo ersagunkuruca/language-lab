@@ -3,7 +3,7 @@
 // world (browser.ts), as page-runtime.ts gives compile.ts's pages, with
 // the printed functions called as core-js.ts calls them.
 
-import { equal, type Value } from "../../ters/src/lang/run.ts";
+import { equal, type Value } from "../../ters/src/lang/run-values.ts";
 import { Cells, handOver, nodeOf } from "../../ters/src/lang/cells.ts";
 import { browserWorld, pageStorage, type PickedFolder, type Store } from "../../ters/src/lang/browser.ts";
 import { mountHtml, type Doc, type Node_ } from "../../ters/src/lang/html.ts";

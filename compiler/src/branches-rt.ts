@@ -26,7 +26,7 @@
 import { CONS, NIL } from "../../ters/src/lang/std-ids.ts";
 import { ArrayView, arrayOf } from "../../ters/src/lang/array-view.ts";
 import { Table } from "../../ters/src/lang/table.ts";
-import { counted, OutOfSteps, setStepsLeft, stepsLeft, toList } from "../../ters/src/lang/run.ts";
+import { counted, OutOfSteps, setStepsLeft, stepsLeft, toList } from "../../ters/src/lang/run-values.ts";
 import { add, type Int } from "../../ters/src/lang/int.ts";
 import { Pending } from "../../ters/src/lang/cells.ts";
 
