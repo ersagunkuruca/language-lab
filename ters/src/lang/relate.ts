@@ -104,14 +104,30 @@ const boolT = (b: boolean) => dataT(b ? TRUE : FALSE);
 // Values coming in from the forward evaluator. Its functions carry the node
 // they came from (META), which is what lets a function passed in be run
 // backwards: functions are not black boxes.
+// With a stack of its own: a JS call per item overflowed on a list of a
+// few thousand (pond's seeded over, moths' filed, I357).
 export function fromValue(x: unknown): Term {
+  if (!isData(x)) return fromLeaf(x);
+  const root = dataT(x.tag);
+  const todo: [Data, DataT][] = [[x as Data, root]];
+  for (let job = todo.pop(); job; job = todo.pop()) {
+    const [v, t] = job;
+    for (const f of v.fields) {
+      if (!isData(f)) { t.fields.push(fromLeaf(f)); continue; }
+      const c = dataT(f.tag);
+      t.fields.push(c);
+      todo.push([f as Data, c]);
+    }
+  }
+  return root;
+}
+function fromLeaf(x: unknown): Term {
   if (typeof x === "function") {
     const m = (x as unknown as Record<symbol, { lambda?: Id; env?: Env; prim?: Id }>)[META];
     if (m?.lambda) return { k: "closure", lambda: m.lambda, env: m.env!, orig: x };
     if (m?.prim) return { k: "prim", id: m.prim, orig: x };
     throw new NotInvertible("this function came from outside the program, so it can't be looked inside");
   }
-  if (isData(x)) return dataT(x.tag, (x as Data).fields.map(fromValue));
   return x as Term;
 }
 
@@ -1340,7 +1356,16 @@ export function interpreter(given: Code, opts: Options = {}) {
   // Diverge (the budget stops it), and null when anything in it is still unknown or the evaluator can't
   // be had.
   // A value with no function in it (a generic input may be given one).
-  const plain = (v: Value): boolean => typeof v !== "object" || ("tag" in v && Array.isArray((v as Data).fields) && (v as Data).fields.every((f) => plain(f as Value)));
+  // With a stack of its own, as a long list is (I357).
+  const plain = (v: Value): boolean => {
+    for (const todo = [v]; todo.length; ) {
+      const x = todo.pop()!;
+      if (typeof x !== "object") continue;
+      if (!("tag" in x) || !Array.isArray((x as Data).fields)) return false;
+      todo.push(...((x as Data).fields as Value[]));
+    }
+    return true;
+  };
   function forward(c: Closure, args: Term[], s: State, gradient = false): Value[] | null {
     const prep = ready!;
     if (prep.runner === undefined) {
