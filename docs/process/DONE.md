@@ -1537,6 +1537,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I351 | A function input called under first's Choice and outside it (the else) made every caller handle the Choice: mnist's squash was `(a, (Float64) -[Choice, e]-> a) -[Choice, e]-> a`. A call of a lambda's input whose row nothing fixes is now a row inside the row around it, settled with its group: the input does the calls' shared labels on the tail that goes inside all of theirs (first's inside the row around it), so squash is `-[e]->` and a printer given is still refused under the Choice (infer.ts settleInsideCalls) | #3251 |
 | L290c | An inner otherwise that reads its field is a row, the field named (`["turn", way] → …` after `["turn", "right"] → …`), and rows fold into the otherwise unless a row after one could catch it; `examples/turtle`, commands as the cases of one match on words, written through the MCP | #3238 |
 | L290b | A value inside a pattern: a field a case's body matches on by value reads as that value in the row (`cons("-", rest) → 1`, `["-", ">", ..rest] → …`), and the MCP reads such patterns, a case or value at any depth, as the nested matches they stand for (a match compiler, `patternMatch`) | #3237 |
 | L290a | The MCP writes a match on values as the view prints it (`match op` / `"+" → …` / `otherwise → …`), `split` takes `values` for a case per value then otherwise, and `replace` finds a case by its value; a value written twice is refused (Ersagun 11-23: nested ifs in a parser read as pattern matching) | #3235 |
