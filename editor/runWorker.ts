@@ -35,6 +35,7 @@ import type { TestAsk, TestSays } from "./testAsk.ts";
 import type { PictureAsk, PictureSays } from "./pictureAsk.ts";
 import type { CheckAsk, CheckSays } from "./checkAsk.ts";
 import type { TraceAsk, TraceSays } from "./traceAsk.ts";
+import { unflatten } from "./flatValues.ts";
 import type { RunCodeAsk, RunCodeSays } from "./runCodeAsk.ts";
 import { trace } from "../ters/src/lang/trace.ts";
 import { OutOfSteps, type Value } from "../ters/src/lang/run.ts";
@@ -211,7 +212,7 @@ function answer(e: MessageEvent<Ask>) {
   }
   // Values on the wires, for as long as the graph waits (traceAsk.ts, E319e).
   if ("traceValues" in e.data) {
-    const { names, pins, def, args, ms, slow, copied, title, files } = e.data;
+    const { names, pins, def, ms, slow, copied, title, files } = e.data, args = unflatten(e.data.args);
     try {
       setDisplayNames(names);
       setProgramPins(pins);
