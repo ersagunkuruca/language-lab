@@ -20,7 +20,7 @@ for (const example of ["dice", "folders"]) {
     const screen = readFileSync(join(app, "screen.c"), "utf8"), build = readFileSync(join(app, "build.sh"), "utf8");
     // ters_ui as the page's C declares it, every call answered but sound.
     assert.match(screen, /typedef struct ters_ui \{/);
-    assert.match(screen, /static ters_ui U = \{ 0, u_box, u_text, .* u_outline, u_ask, 0, u_focus, u_reveal \};/);
+    assert.match(screen, /static ters_ui U = \{ 0, u_box, u_text, .* u_outline, u_ask, 0, u_focus, u_reveal, u_hint \};/);
     assert.match(screen, /ID2D1Factory_CreateHwndRenderTarget/);
     assert.match(screen, /IDWriteFactory_CreateTextLayout/);
     assert.match(screen, /L"EDIT"/);

@@ -878,3 +878,18 @@ test("a box marked reveal in C is scrolled into view in the box round it that sc
   const page = run(el("main", [], rows(40, 30)));
   assert.match(page[0], / scrolled 346$/, page.join("\n"));
 });
+
+// An input's placeholder (C320c) is told to the screen as its hint.
+test("an input's placeholder in C is told to the screen as its hint (C320c)", { skip }, () => {
+  const k = new Lang();
+  const el = (tag: string, attrs: [string, string][], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs.map(([n, v]) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v))))), k.list(...kids));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => el("main", [], [el("input", [["placeholder", "Filter"]], []), el("input", [], [])])));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:400"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const inputs = r.stdout.toString().split("\x1e\n")[0].split("\n").map((s) => s.trim()).filter((s) => s.startsWith("input "));
+  assert.deepEqual(inputs.map((s) => s.includes(' hint "Filter"')), [true, false], inputs.join("\n"));
+});

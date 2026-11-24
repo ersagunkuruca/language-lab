@@ -339,6 +339,8 @@ static void u_set_value(void *c, void *v, const char *s, size_t n) {
 static void u_append(void *c, void *p, void *k) { NSView *a = V(p), *b = V(k); if (a && b) [a addSubview:b]; }
 static void u_clear(void *c, void *v) { for (NSView *k in [V(v).subviews copy]) [k removeFromSuperview]; }
 static void u_focus(void *c, void *v) { P.focusNext = V(v); }
+// An input's hint (placeholder, C320c).
+static void u_hint(void *c, void *v, const char *s, size_t n) { NSView *x = V(v); if ([x isKindOfClass:[NSTextField class]]) ((NSTextField *)x).placeholderString = n ? str(s, n) : nil; }
 // A box marked reveal (C320b): the box round it that scrolls, or the
 // page, scrolled the least that shows top to bottom, its top when it
 // can't show both.
@@ -526,7 +528,7 @@ static int u_ask(void *c, const char *s, size_t n) {
   return 0;
 }
 ${sound ? macSound() : ""}
-static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, ${sound ? "u_sound" : "0"}, u_focus, u_reveal };
+static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, ${sound ? "u_sound" : "0"}, u_focus, u_reveal, u_hint };
 
 // The display's frames (CVDisplayLink, on its own thread), each handed to
 // the main thread once the one before is done.

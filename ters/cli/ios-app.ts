@@ -437,6 +437,8 @@ static void u_set_value(void *c, void *v, const char *s, size_t n) {
   if ([x isKindOfClass:[UITextView class]] && ![((UITextView *)x).text isEqualToString:t]) ((UITextView *)x).text = t;
   P.quiet = NO;
 }
+// An input's hint (placeholder, C320c).
+static void u_hint(void *c, void *v, const char *s, size_t n) { UIView *x = V(v); if ([x isKindOfClass:[UITextField class]]) ((UITextField *)x).placeholder = n ? str(s, n) : nil; }
 static void u_append(void *c, void *p, void *k) { UIView *a = V(p), *b = V(k); if (a && b) [a addSubview:b]; }
 static void u_clear(void *c, void *v) { for (UIView *k in [V(v).subviews copy]) [k removeFromSuperview]; }
 static void u_gone(void *c, void *v) { NSNumber *n = @((int)(intptr_t)v); [P.views removeObjectForKey:n]; [P.moments removeObjectForKey:n]; [P.heard removeObjectForKey:n]; }
@@ -620,7 +622,7 @@ static int u_ask(void *c, const char *s, size_t n) {
   return 0;
 }
 ${sound ? SOUND_M : ""}
-static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, ${sound ? "u_sound" : "0"} };
+static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, ${sound ? "u_sound" : "0"}, 0, 0, u_hint };
 
 @implementation TPage
 - (void)viewDidLoad {

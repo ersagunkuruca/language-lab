@@ -18,7 +18,7 @@ test("a Mac app is the page's C on AppKit's views, a resizable window, built by 
   const screen = readFileSync(join(dir, "app", "Screen.m"), "utf8"), build = readFileSync(join(dir, "app", "build.sh"), "utf8");
   // ters_ui as the page's C declares it, every call answered.
   assert.match(screen, /typedef struct ters_ui \{/);
-  assert.match(screen, /static ters_ui U = \{ 0, u_box, u_text, .* u_outline, u_ask, (0|u_sound), u_focus, u_reveal \};/);
+  assert.match(screen, /static ters_ui U = \{ 0, u_box, u_text, .* u_outline, u_ask, (0|u_sound), u_focus, u_reveal, u_hint \};/);
   // Sound on the engine alone: a Mac has no audio session.
   assert.doesNotMatch(screen, /AVAudioSession/);
   assert.match(screen, /#import <AppKit\/AppKit.h>/);
