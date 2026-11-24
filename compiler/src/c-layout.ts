@@ -72,6 +72,9 @@ typedef struct ters_ui {
   // attribute reveal was set, as a browser's scrollIntoView with block
   // nearest (C320b). May be null.
   void (*reveal)(void *ctx, void *v, double top, double bottom);
+  // An input's hint, shown while it's empty (its placeholder; empty for
+  // none: C320c). May be null.
+  void (*hint)(void *ctx, void *v, const char *s, size_t n);
 } ters_ui;
 
 // A table's parts (C319): the table, a group of rows (thead, tbody,
@@ -229,6 +232,7 @@ static void tl_set_attribute(void *c, void *x, const char *k, size_t kn, const c
   tl_dirty(e, TL_DIRTY);
   if (kn == 9 && !memcmp(k, "autofocus", 9) && tl_ui->focus) tl_ui->focus(tl_ui->ctx, e->view);
   if (kn == 6 && !memcmp(k, "reveal", 6) && !(vn == 5 && !memcmp(v, "false", 5))) tl_revealing = e;
+  if (kn == 11 && !memcmp(k, "placeholder", 11) && tl_ui->hint) tl_ui->hint(tl_ui->ctx, e->view, v, vn);
   char **at = kn == 2 && !memcmp(k, "id", 2) ? &e->id : kn == 5 && !memcmp(k, "class", 5) ? &e->cls : kn == 5 && !memcmp(k, "style", 5) ? &e->style : 0;
   if (at) { free(*at); *at = tl_dup(v, vn); }
   else if (kn == 5 && !memcmp(k, "value", 5)) tl_ui->set_value(tl_ui->ctx, e->view, v, vn);
@@ -245,6 +249,7 @@ static void tl_remove_attribute(void *c, void *x, const char *k, size_t kn) {
   tl_dirty(e, TL_DIRTY);
   char **at = kn == 2 && !memcmp(k, "id", 2) ? &e->id : kn == 5 && !memcmp(k, "class", 5) ? &e->cls : kn == 5 && !memcmp(k, "style", 5) ? &e->style : 0;
   if (at) { free(*at); *at = 0; }
+  if (kn == 11 && !memcmp(k, "placeholder", 11) && tl_ui->hint) tl_ui->hint(tl_ui->ctx, e->view, "", 0);
   for (int j = 0; j < e->na; j++) if (strlen(e->ak[j]) == kn && !memcmp(e->ak[j], k, kn)) { free(e->ak[j]); free(e->av[j]); e->ak[j] = e->ak[e->na - 1]; e->av[j] = e->av[e->na - 1]; e->na--; break; }
 }
 static void tl_append(void *c, void *p, void *k) {
@@ -1989,7 +1994,7 @@ void ters_ui_resize(double width, double height, int dark) { ters_page_lock(); t
 // The first arguments may be width:N (360 by default), height:N (none by
 // default, so 100vh is 640) and dark.
 export const UI_HEADLESS_C = String.raw`
-typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold, clip, nout; double inside, scrolled, side[4], out[24]; uint32_t sidec; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
+typedef struct uv { char *tag, *s, *hint, **ev; int *eh, ne, nk, shown, bold, clip, nout; double inside, scrolled, side[4], out[24]; uint32_t sidec; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
 static uv *u_new(const char *tag, size_t tn, const char *s, size_t n) { uv *v = calloc(1, sizeof *v); if (tag) v->tag = tl_dup(tag, tn); if (s) v->s = tl_dup(s, n); return v; }
 static void *u_box(void *c, const char *t, size_t n) { (void)c; return u_new(t, n, 0, 0); }
 static void *u_text(void *c, const char *s, size_t n) { (void)c; return u_new(0, 0, s, n); }
@@ -2004,7 +2009,7 @@ static void u_listen(void *c, void *x, const char *ev, size_t n, int h) {
 }
 // The box with the focus (autofocus).
 static uv *u_focused;
-static void u_gone(void *c, void *x) { (void)c; uv *v = x; if (u_focused == v) u_focused = 0; for (int j = 0; j < v->ne; j++) free(v->ev[j]); free(v->ev); free(v->eh); free(v->kids); free(v->tag); free(v->s); free(v->ops); free(v); }
+static void u_gone(void *c, void *x) { (void)c; uv *v = x; if (u_focused == v) u_focused = 0; for (int j = 0; j < v->ne; j++) free(v->ev[j]); free(v->ev); free(v->eh); free(v->kids); free(v->tag); free(v->s); free(v->hint); free(v->ops); free(v); }
 static void u_draw(void *c, void *x, const double *ops, size_t n) { (void)c; uv *v = x; free(v->ops); v->ops = malloc(sizeof *ops * (n + 1)); memcpy(v->ops, ops, sizeof *ops * n); v->nops = n; }
 static void u_clip(void *c, void *x, int on) { (void)c; ((uv *)x)->clip = on; }
 static void u_scroll(void *c, void *x, double inside) { (void)c; ((uv *)x)->inside = inside; }
@@ -2041,6 +2046,7 @@ static double u_least(double now, double top, double bottom, double h, double mo
   if (top < now) now = top;
   return fmax(0, fmin(now, fmax(0, most - h)));
 }
+static void u_hint(void *c, void *x, const char *s, size_t n) { (void)c; uv *v = x; free(v->hint); v->hint = n ? tl_dup(s, n) : 0; }
 static void u_reveal(void *c, void *x, double top, double bottom) {
   (void)c; uv *v = x;
   if (v) v->scrolled = u_least(v->scrolled, top, bottom, v->h, v->inside);
@@ -2060,6 +2066,7 @@ static void u_print(uv *v, double dx, double dy, int depth) {
   if (v->tag && (v->side[0] || v->side[1] || v->side[2] || v->side[3])) printf(" sides %g %g %g %g %08X", v->side[0], v->side[1], v->side[2], v->side[3], v->sidec);
   if (v->tag && v->nout) { printf(" outline"); for (int i = 0; i < v->nout; i++) printf(" %g,%g", v->out[2 * i], v->out[2 * i + 1]); }
   if (!v->tag) printf(" %g%s %08X \"%s\"", v->size, v->bold ? " bold" : "", (unsigned)v->color, v->s);
+  if (v->hint) printf(" hint \"%s\"", v->hint);
   if (v == u_focused) printf(" focus");
   putchar('\n');
   // A picture's shapes, one a line: the box round its points on the page
@@ -2149,7 +2156,7 @@ int main(int argc, char **argv) {
 #else
     0,
 #endif
-    u_focus, u_reveal
+    u_focus, u_reveal, u_hint
   };
   double width = 360, height = 0; int dark = 0, a = 1;
   for (; a < argc; a++) {

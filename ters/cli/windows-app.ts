@@ -154,6 +154,9 @@ struct Node {
   size_t nout;
   // An input's EDIT control, its font and the brush behind its text.
   HWND edit;
+  // Its hint (placeholder), drawn while it's empty.
+  WCHAR *hint;
+  int hn;
   HFONT font;
   HBRUSH brush;
   uint32_t brushof;
@@ -230,7 +233,7 @@ static void freeNode(Node *n) {
   if (n->edit) DestroyWindow(n->edit);
   if (n->font) DeleteObject(n->font);
   if (n->brush) DeleteObject(n->brush);
-  free(n->said); free(n->wsaid); free(n->ops); free(n->outline); free(n->kids);
+  free(n->said); free(n->wsaid); free(n->hint); free(n->ops); free(n->outline); free(n->kids);
   free(n);
 }
 static void detach(Node *k) {
@@ -317,6 +320,15 @@ static void u_clear(void *c, void *v) {
   a->nk = 0;
 }
 static void u_focus(void *c, void *v) { Node *a = V_(v); if (a) FOCUS_NEXT = a->num; }
+// An input's hint (C320c): EDIT shows none of its own without comctl32's
+// version 6, so it is drawn over an empty one when it paints.
+static void u_hint(void *c, void *v, const char *s, size_t n) {
+  Node *a = V_(v);
+  if (!a) return;
+  free(a->hint); a->hint = n ? wide(s, n, &a->hn) : NULL;
+  if (!n) a->hn = 0;
+  if (a->edit) InvalidateRect(a->edit, NULL, TRUE);
+}
 // A box marked reveal (C320b): the box round it that scrolls, or the
 // page, scrolled the least that shows top to bottom, its top when it
 // can't show both.
@@ -471,7 +483,7 @@ static int u_ask(void *c, const char *s, size_t n) {
   say("ask %.*s: Windows has no dialog for it\n", (int)n, s);
   return 0;
 }
-static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, 0, u_focus, u_reveal };
+static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, 0, u_focus, u_reveal, u_hint };
 
 // The keys held now, told to the page before what comes with them (C312).
 static void held(void) {
@@ -658,6 +670,25 @@ static LRESULT CALLBACK edited(HWND h, UINT m, WPARAM w, LPARAM l) {
       break;
     // Enter in a one-line input and Tab type nothing (and don't beep).
     case WM_CHAR: if (w == '\t' || (w == '\r' && n && n->kind == K_INPUT)) return 0; break;
+    // Its hint while it's empty, half way between its text's colour and
+    // what's behind it, where its text would start.
+    case WM_PAINT: {
+      LRESULT r = CallWindowProcW(EDIT_PROC, h, m, w, l);
+      if (n && n->hint && !GetWindowTextLengthW(h)) {
+        HDC dc = GetDC(h);
+        RECT at;
+        SendMessageW(h, EM_GETRECT, 0, (LPARAM)&at);
+        uint32_t ink = n->ink ? n->ink : DARK ? 0xffffffff : 0xff000000, bg = n->brush ? n->brushof : PBG, mid = 0;
+        for (int i = 0; i < 24; i += 8) mid |= ((((ink >> i) & 255) + ((bg >> i) & 255)) / 2) << i;
+        HGDIOBJ was = SelectObject(dc, n->font ? (HGDIOBJ)n->font : (HGDIOBJ)SendMessageW(h, WM_GETFONT, 0, 0));
+        SetTextColor(dc, gdi(mid));
+        SetBkMode(dc, TRANSPARENT);
+        DrawTextW(dc, n->hint, n->hn, &at, DT_NOPREFIX | (n->kind == K_INPUT ? DT_SINGLELINE : DT_WORDBREAK));
+        SelectObject(dc, was);
+        ReleaseDC(h, dc);
+      }
+      return r;
+    }
   }
   return CallWindowProcW(EDIT_PROC, h, m, w, l);
 }
