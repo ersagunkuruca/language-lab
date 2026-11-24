@@ -28,6 +28,7 @@ import { itemPaths } from "./item-paths.ts";
 import { chosenParts } from "./chosen-parts.ts";
 import { keptItems, pushedInOrder } from "./kept-items.ts";
 import { intRanges } from "./int-ranges.ts";
+import { loopRecords } from "./loop-records.ts";
 import { boundedReads, countedInts, keptArraysOf } from "./kept-arrays.ts";
 import { ownedArrays } from "./owned-arrays.ts";
 import { columns } from "./columns.ts";
@@ -907,6 +908,9 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   // a loop reads the arrays it keeps from their buffers and counts in
   // numbers (inline-small.ts, kept-arrays.ts, C303b).
   if (!envSet("NO_INLINE")) inlineSmall(ir, true);
+  // And a record such a loop carries round, as its fields, where its
+  // fields are read only in what was put in place (loop-records.ts, C304a).
+  if (!envSet("NO_LOOP_RECORDS")) loopRecords(ir);
   // Ints known small worked out as numbers (int-ranges.ts, C267).
   if (!envSet("NO_INT_RANGES")) intRanges(ir, new Set(ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))));
   // Reads that wait on the places their values are used at (C162).
