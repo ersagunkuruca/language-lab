@@ -627,18 +627,23 @@ export function children(n: Node): Id[] {
 // again in any version of the nodes while each is still the one there: a
 // copy of the program changing a few nodes walks only the definitions
 // holding them (a version changed in place walks again too).
+// A few walks a root: a compile's passes hold one definition's root under
+// other nodes in their versions, and one walk a root was walked again in
+// each, so a walk wasn't the same array from one compile to the next
+// (stage 4: 59 of machine's 339 definitions, their nodes all the same).
 type Walk = { ids: Id[]; met: Node[] };
-const subtreesKept = new WeakMap<Node, Walk>();
+const subtreesKept = new WeakMap<Node, Walk[]>();
+const WALKS = 4;
 function subtreeWalk(nodes: Record<Id, Node>, root: Id): Walk {
-  const rn = nodes[root], k = rn && subtreesKept.get(rn);
-  if (k) {
-    const { ids, met } = k;
+  const rn = nodes[root], ks = rn && subtreesKept.get(rn);
+  if (ks) for (let j = 0; j < ks.length; j++) {
+    const k = ks[j], { ids, met } = k;
     let same = true;
     for (let i = 1; i < ids.length; i++) if (nodes[ids[i]] !== met[i]) { same = false; break; }
-    if (same) return k;
+    if (same) { if (j) { ks.splice(j, 1); ks.unshift(k); } return k; }
   }
   const ids = walked(nodes, root), w = { ids, met: ids.map((id) => nodes[id]) };
-  if (rn) subtreesKept.set(rn, w);
+  if (rn) { if (ks) { ks.unshift(w); if (ks.length > WALKS) ks.pop(); } else subtreesKept.set(rn, [w]); }
   return w;
 }
 export function subtree(code: Code, root: Id): Id[] {
@@ -720,28 +725,38 @@ export function targetsUnder(code: Code, root: Id): readonly Id[] {
 // refers to) already know, so an edit's recompile reads again only what
 // it changed. Content: each field the same value, a list or record of ids
 // the same ids.
-const steadyKept = keptMap<Id, Node>();
-const sameField = (a: unknown, b: unknown): boolean => {
+const steadyKept = keptMap<Id, Node[]>(), STEADY_VERSIONS = 4;
+const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && Object.getPrototypeOf(x) === Object.prototype;
+const sameField = (a: unknown, b: unknown, depth = 0): boolean => {
   if (a === b) return true;
-  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i]);
-  if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(b) && Object.getPrototypeOf(a) === Object.prototype && Object.getPrototypeOf(b) === Object.prototype) {
+  if (depth > 8) return false;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((x, i) => sameField(x, b[i], depth + 1));
+  if (plain(a) && plain(b)) {
     const ka = Object.keys(a), kb = Object.keys(b);
-    return ka.length === kb.length && ka.every((k) => (a as Record<string, unknown>)[k] === (b as Record<string, unknown>)[k]);
+    return ka.length === kb.length && ka.every((k) => k in b && sameField(a[k], b[k], depth + 1));
   }
   return false;
 };
 const sameSteady = (a: Node, b: Node): boolean => {
   const ka = Object.keys(a), kb = Object.keys(b);
-  return ka.length === kb.length && ka.every((k) => sameField((a as unknown as Record<string, unknown>)[k], (b as unknown as Record<string, unknown>)[k]));
+  return ka.length === kb.length && ka.every((k) => k in b && sameField((a as unknown as Record<string, unknown>)[k], (b as unknown as Record<string, unknown>)[k]));
 };
 export function steadied(code: Code, defs: readonly Id[] = code.defs): Code {
-  if (steadyKept.size > 500_000) steadyKept.clear();
+  if (steadyKept.size > 200_000) steadyKept.clear();
   let swap: Record<Id, Node> | null = null;
   for (const d of defs) for (const id of subtreeKept(code, d)) {
-    const n = code.nodes[id], k = steadyKept.get(id);
-    if (!n || k === n) continue;
-    if (k && sameSteady(k, n)) (swap ??= {})[id] = k;
-    else steadyKept.set(id, n);
+    const n = code.nodes[id];
+    if (!n) continue;
+    const ks = steadyKept.get(id);
+    if (!ks) { steadyKept.set(id, [n]); continue; }
+    if (ks[0] === n) continue;
+    // A few versions an id: the passes give one node other contents in
+    // turn (a literal given its type), each met again next compile.
+    const j = ks.findIndex((k) => k === n || sameSteady(k, n));
+    if (j < 0) { ks.unshift(n); if (ks.length > STEADY_VERSIONS) ks.pop(); continue; }
+    const k = ks[j];
+    if (j) { ks.splice(j, 1); ks.unshift(k); }
+    if (k !== n) (swap ??= {})[id] = k;
   }
   if (!swap) return code;
   const out = { ...code, nodes: withNodes(code.nodes, swap) };
