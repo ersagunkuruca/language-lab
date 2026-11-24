@@ -327,6 +327,21 @@ static uint32_t tl_colour(const char *p, const char *e) {
 // A length at p, in px; em against size. Sets *ok to 0 when it isn't one.
 static double tl_len(const char *p, const char *e, double size, int *ok, const char **after) {
   p = tl_ws(p, e);
+  // calc(a + b - c …) of lengths (C320a): a pane as high as the window
+  // less its bars, calc(100vh - 80px).
+  if (e - p >= 5 && !memcmp(p, "calc(", 5)) {
+    const char *q = p + 5; double sum = 0; int sign = 1;
+    for (;;) {
+      int o = 1; const char *a; double x = tl_len(q, e, size, &o, &a);
+      if (o != 1) { *ok = 0; if (after) *after = p; return 0; }
+      sum += sign * x; q = tl_ws(a, e);
+      if (q < e && *q == ')') { q++; break; }
+      if (q < e && (*q == '+' || *q == '-')) { sign = *q == '-' ? -1 : 1; q++; continue; }
+      *ok = 0; if (after) *after = p; return 0;
+    }
+    *ok = 1; if (after) *after = q;
+    return sum;
+  }
   char *end;
   double x = strtod(p, &end);
   if (end == p) { *ok = 0; if (after) *after = p; return 0; }
@@ -1053,6 +1068,9 @@ static double tl_flow(tl_n *e, double w) {
   const tl_css *c = &e->c;
   double ox = c->pad[3] + c->bw, oy = c->pad[0] + c->bw;
   double y = 0;
+  // Its content box's height when it has one set (C320a): a row of one
+  // line, and a grid's rows, fill it.
+  double inner_h = c->set_h ? tl_border_h(c) - c->pad[0] - c->pad[2] - 2 * c->bw : -1;
   if (c->display == TL_FLEX && c->row) {
     // A row of items, in lines when it wraps: each as wide as its basis
     // (or its content), then grown into the line's room by flex-grow, or
@@ -1086,6 +1104,7 @@ static double tl_flow(tl_n *e, double w) {
       }
       double x = 0, lineh = 0;
       for (int i = 0; i < m; i++) if (tl_outer_h(it[ln[i]]) > lineh) lineh = tl_outer_h(it[ln[i]]);
+      if (!c->wrap && inner_h >= 0) lineh = inner_h;
       for (int i = 0; i < m; i++) {
         tl_n *k = it[ln[i]];
         double oh = tl_outer_h(k), dy = c->items == 2 ? (lineh - oh) / 2 : c->items == 3 ? lineh - oh : 0;
@@ -1151,9 +1170,17 @@ static double tl_flow(tl_n *e, double w) {
       double rest = left - held;
       for (int i = 0; i < nc; i++) if (cols[i].kind == 1) cw[i] = cw[i] <= cols[i].b + 0.001 ? cols[i].b : hfr > 0 && rest > 0 ? rest * cols[i].a / hfr : 0;
     }
-    for (int r = 0; r * nc < m; r++) {
-      double rh = 0, x = 0;
+    // Each row as high as its highest item; in a grid of a set height,
+    // the room left shared among the rows (align-content's stretch, C320a).
+    int nrow = (m + nc - 1) / nc; double rhs[256], total = 0;
+    for (int r = 0; r < nrow && r < 256; r++) {
+      double rh = 0;
       for (int i = 0; i < nc && r * nc + i < m; i++) { tl_n *k = cells[r * nc + i]; tl_lay(k, k->tag ? cw[i] - k->c.mar[1] - k->c.mar[3] : cw[i]); if (tl_outer_h(k) > rh) rh = tl_outer_h(k); }
+      rhs[r] = rh; total += rh + (r ? c->gap_r : 0);
+    }
+    if (inner_h > total && nrow > 0 && nrow <= 256) for (int r = 0; r < nrow; r++) rhs[r] += (inner_h - total) / nrow;
+    for (int r = 0; r * nc < m && r < 256; r++) {
+      double rh = rhs[r], x = 0;
       for (int i = 0; i < nc && r * nc + i < m; i++) {
         tl_n *k = cells[r * nc + i];
         // align-items: stretch (a grid's normal), start, center or end (C319).

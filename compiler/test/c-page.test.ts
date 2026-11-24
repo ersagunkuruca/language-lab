@@ -820,3 +820,34 @@ test("tables, fractions at least 0, flex-basis on inputs, color-mix, nowrap and 
   assert.equal(box(page.at(-1)!)[3], 7, all);
   assert.equal(box(at(800).at(-1)!)[3], 0);
 });
+
+// A window-high app's bars and panes (C320a): calc() of lengths, a row of
+// one line as high as its box's set height (its items centred in it), and
+// a grid of a set height sharing what is left among its rows.
+test("calc(), a set height's flex line and a grid's rows stretched to a set height in C (C320a)", { skip }, () => {
+  const k = new Lang();
+  const el = (tag: string, attrs: [string, string][], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs.map(([n, v]) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v))))), k.list(...kids));
+  const text = (t: string) => k.call(HTML_V.text, k.thunk(() => k.lit(t)));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => el("main", [], [
+    el("div", [["style", "height: calc(50vh - 20px + 1em)"]], []),
+    el("div", [["style", "display: flex; align-items: center; height: 52px"]], [el("span", [], [text("bar")])]),
+    el("div", [["style", "display: grid; grid-template-columns: 1fr; height: 100px; align-items: center"]], [el("div", [], [text("a")]), el("div", [], [text("b")])]),
+  ])));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:400", "height:600"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const page = r.stdout.toString().split("\x1e\n")[0].split("\n").map((s) => s.trim()).filter(Boolean), all = page.join("\n");
+  const box = (s: string) => s.split(" ").slice(1, 5).map(Number);
+  const divs = page.filter((s) => s.startsWith("div ")).map(box);
+  // 300 - 20 + 15 (the base sheet's 15px font).
+  assert.equal(divs[0][3], 295, all);
+  // The bar's text in the middle of its 52: (52 - 22.5) / 2 down.
+  const bar = box(page.find((s) => s.includes('"bar"'))!);
+  assert.equal(bar[1] - divs[1][1], 14.75, all);
+  // Two rows of 50, each item in the middle of its own.
+  const [a, b] = ["a", "b"].map((t) => box(page.find((s) => s.includes(`"${t}"`))!));
+  assert.deepEqual([a[1] - divs[2][1], b[1] - divs[2][1]], [13.75, 63.75], all);
+});
