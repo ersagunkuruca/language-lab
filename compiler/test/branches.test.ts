@@ -410,7 +410,9 @@ test("a fold over a tree works out its two halves on workers, the same total as 
 // written out at every call and read back on each worker, so sharing them
 // cost more than the rows themselves (20.2 s at 200,000 orders, 3.1 s on
 // this thread). What a job sends is counted, and those stay here: with
-// workers it takes about what it takes without (6.5 times before).
+// workers it takes about what it takes without (6.5 times before). The
+// writing itself stops once it couldn't pay (C323b): written out whole
+// first and then dropped, it was still 3.3 times on Check main's runner.
 test("bazaar's cheap per-row maps over a big index stay on the main thread (C323)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
   const made = await run([ters, "compile", join(here, "../gaps/bazaar"), "-o", "bazaar.mjs"], {}, dir);

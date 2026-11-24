@@ -38,8 +38,14 @@ type WT = typeof import("node:worker_threads");
 // { tag, fields } (as the evaluator has them, which compiled code reads
 // too), arrays as their items. Null where something can't.
 const NO = Symbol("can't cross");
+// Writing out stops past `late` (C323): a job is sent only where that is
+// worth it, and that is known before the writing, so a big value isn't
+// written out whole to be dropped. Looked at every 1024 values.
+let late = Infinity, ticks = 0, gaveUp = false;
+const over = () => gaveUp || ((++ticks & 1023) === 0 && (gaveUp = performance.now() > late));
 function encode(x: unknown, names: Map<Fn, string>): unknown {
   if (x === null || x === undefined || typeof x !== "object" && typeof x !== "function") return x;
+  if (over()) return NO;
   if (x instanceof ArrayView) {
     const k = byShape(x.buf.items, x.start, x.n);
     if (k) return { ...k, view: true };
@@ -150,6 +156,7 @@ function byShape(xs: unknown[], start: number, n: number): unknown {
   if (typeof first !== "object" || first === null || first.tag === undefined) return undefined;
   const shapes: Shape[] = [], ids = new Uint8Array(n), nums: number[] = [], bigs: bigint[] = [];
   for (let i = 0; i < n; i++) {
+    if (over()) return undefined;
     const x = xs[start + i], a = nums.length, b = bigs.length;
     let id = 0;
     for (; id < shapes.length; id++) { if (fits(x, shapes[id], nums, bigs)) break; nums.length = a; bigs.length = b; }
@@ -403,7 +410,13 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
     alone.set(site, performance.now() - t0);
   }
   const sent = performance.now(), helpers = pool ?? [];
-  let payload = left > 0 && helpers.length ? send() : NO;
+  const unit = site && !always ? alone.get(site) : undefined;
+  // Written for no longer than sharing would save, a third of it (read
+  // back taken as three times the writing, below).
+  const saves = unit !== undefined && !KNOBS.has("send") ? unit * left * (1 - 1 / (helpers.length + 1)) : Infinity;
+  late = sent + saves / 3;
+  let payload: Payload | typeof NO = NO;
+  try { payload = left > 0 && helpers.length ? send() : NO; } finally { late = Infinity; if (gaveUp) { gaveUp = false; quick.add(site!); payload = NO; } }
   // What the workers are sent, counted (C323). Each worker reads it back
   // whole before its first unit, and reading takes longer than writing
   // (objects made, every worker's collector at once): taken as three
@@ -411,7 +424,6 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
   // than the units here, they run here, now and from now on: bazaar's
   // per-row maps close over a filed index of 200,000 rows, written out
   // at every call (20.2 s with the workers, 3.1 s without).
-  const unit = site && !always ? alone.get(site) : undefined;
   if (payload !== NO && unit !== undefined && !KNOBS.has("send") && 3 * (performance.now() - sent) + (unit * left) / (helpers.length + 1) >= unit * left) { quick.add(site!); payload = NO; }
   if (payload === NO) for (; left > 0; left--) values[left - 1] = attempt(() => here(left - 1));
   const mine = new Set<number>(), id = ++job;
@@ -551,16 +563,36 @@ let main: boolean | undefined;
 const isMain = () => (main ??= !!wt()?.isMainThread);
 // What each site's last call took, in milliseconds.
 const took = new WeakMap<Fn, number>();
+let sampled = 0;
 // Given f, how many inputs it takes (k), the first call's and the
 // second's, and the budget.
 export function bothPure(f: Fn, k: number): unknown {
-  // Below the leaves, on a worker, or not worth it: one after the other,
-  // nothing made for it (this is most calls).
-  if (!plan && (inBoth || !canShare() || !isMain() || inJob || quick.has(f))) {
-    if (k === 1) { const x = f(arguments[2]); second = f(arguments[3]); return x; }
-    if (k === 2) { const x = f(arguments[2], arguments[3]); second = f(arguments[4], arguments[5]); return x; }
+  // Run here, one after the other, nothing made for it (most calls):
+  // below the leaves, on a worker, a quick site, or one whose last call
+  // took under a millisecond (mini's types, a few nodes each, met at
+  // every unification; bazaar's expressions, a few nodes a row), where
+  // probing for leaves costs more than the call (C280). Everything below
+  // the two calls runs here too (inBoth: both.on is false there, so its
+  // calls of itself don't come back, C323). A site under a millisecond is
+  // timed again one call in 64, and planned and shared again once it
+  // takes longer.
+  if (!plan) {
+    const below = inBoth || !canShare() || !isMain() || inJob || quick.has(f);
+    const last = below ? undefined : took.get(f);
+    const fuel = arguments[2 + 2 * k];
+    if (below || (last !== undefined && last < 1) || !(fuel === Infinity || fuel === undefined)) {
+      const timed = !below && last !== undefined && (++sampled & 63) === 0, t0 = timed ? performance.now() : 0, was = inBoth;
+      inBoth = true;
+      try {
+        let x: unknown;
+        if (k === 1) { x = f(arguments[2]); second = f(arguments[3]); }
+        else if (k === 2) { x = f(arguments[2], arguments[3]); second = f(arguments[4], arguments[5]); }
+        else { const rest = Array.prototype.slice.call(arguments, 2, 2 + 2 * k) as unknown[]; x = f(...rest.slice(0, k)); second = f(...rest.slice(k)); }
+        return x;
+      } finally { inBoth = was; if (timed) took.set(f, performance.now() - t0); }
+    }
   }
-  const rest = Array.prototype.slice.call(arguments, 2) as unknown[], fuel = rest.pop(), a = rest.slice(0, k), b = rest.slice(k);
+  const rest = Array.prototype.slice.call(arguments, 2) as unknown[], a = rest.slice(0, k), b = rest.slice(k, 2 * k);
   if (plan) {
     const p = plan;
     // A probe's call met its two calls: they are what it stands for.
@@ -569,22 +601,6 @@ export function bothPure(f: Fn, k: number): unknown {
     plan = null;
     second = p.kids[1];
     return p.kids[0];
-  }
-  if (inBoth || !canShare() || !isMain() || inJob || quick.has(f) || !(fuel === Infinity || fuel === undefined)) {
-    const x = f(...a);
-    second = f(...b);
-    return x;
-  }
-  // A site whose last call took under a millisecond (mini's types, a few
-  // nodes each, met at every unification): run in place, timed, with no
-  // probing for leaves, which cost it more than the call (C280). One
-  // that took longer is planned and shared again.
-  const last = took.get(f);
-  if (last !== undefined && last < 1) {
-    const t0 = performance.now(), x = f(...a);
-    second = f(...b);
-    took.set(f, performance.now() - t0);
-    return x;
   }
   const t0 = performance.now();
   inBoth = true;
