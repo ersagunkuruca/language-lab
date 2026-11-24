@@ -5297,6 +5297,10 @@ array again for each field (three reads where one would do). Newton is
 Natively it is 2.4x, about what Adam is: C's records of two doubles cost
 little.
 
+After C303c, C303d and C304a (2026-11-24) the sum is two numbers, not a
+Dual a round, and the reads are in range unchecked: Newton over 1000
+digits three times 89 s now 42 s, 10x the ideal.
+
 **DG6. `ters wasi` can't read MNIST's training images.** `read bytes`
 conses a list of Ints, one cell a byte, then makes the Bytes from it: at
 47 MB V8 stops with "requested new array is too large", and with Node's

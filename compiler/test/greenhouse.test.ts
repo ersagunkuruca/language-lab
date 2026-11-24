@@ -55,7 +55,7 @@ test("greenhouse native: the pool's update, its map calling the function its cal
 
 test("greenhouse JS: a moth read by number at its parts is checked in place, no try, its stand-in made only past the end (C268)", () => {
   const code = ran("cat", [js]);
-  const body = code.split(/\n(?= {2}function f\d+\()/).find((f) => /^ {2}function f\d+\(l0, l1, l2, l3, l4\) \{\n {4}let [^\n]*\n {4}for \(; ; \) \{/.test(f) && f.includes('"met"'));
+  const body = code.split(/\n(?= {2}function f\d+\()/).find((f) => /^ {2}function f\d+\((?:l\d+, )*l\d+\) \{\n {4}let [^\n]*\n {4}for \(; ; \) \{/.test(f) && f.includes('"met"'));
   assert.ok(body, "the loop gathering moths near a moth");
   assert.doesNotMatch(body, /try \{/, "no attempt left");
   // As rows, or as columns (G1b2).

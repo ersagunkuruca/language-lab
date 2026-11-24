@@ -12,6 +12,7 @@
 import type { Id } from "../../ters/src/model.ts";
 import type { CoreIR, RType, SExpr, SFunc } from "./scalar.ts";
 import { isRecord, kids, mapKids, mapLocals } from "./scalar.ts";
+import { PURE_OPS } from "./share-calls.ts";
 
 export function loopRecords(ir: CoreIR): void {
   // A record some code changes in place (a search's box) stays one.
@@ -42,10 +43,15 @@ export function loopRecords(ir: CoreIR): void {
 // call given it), stays one (C236, GAPS round 19 S2): split, it would be
 // made again wherever it is used whole, every round, where kept it is made
 // never (scan's Dfa, rebuilt per character to call `dfa next` with it).
+// A let of the record (a function put in place has its inputs as lets,
+// C303b) is the record: its reads are the record's (C304a, mnist's Dual
+// sums, whose fields are read only in `dual add`, put in place in the loop).
 function carried(f: SFunc, fi: number, p: number, t: RType): boolean {
   let rounds = 0, reads = 0, ok = true, fresh = false, uses = 0, passed = 0;
+  const same = aliases(f.body, p);
   const walk = (e: SExpr) => {
     if (!ok) return;
+    if (e.k === "let" && same.has(e.i)) { walk(e.body); return; }
     if (e.k === "call" && e.fn === fi) {
       rounds++;
       const a = made(e.args[p]).value;
@@ -56,8 +62,8 @@ function carried(f: SFunc, fi: number, p: number, t: RType): boolean {
       // inputs before it, which must read nothing that could change.
       if (made(e.args[p]).lets.length && !e.args.slice(0, p).every(plain)) ok = false;
     }
-    if (e.k === "get" && e.rec.k === "local" && e.rec.i === p && e.t.key === t.key) reads++;
-    if (e.k === "local" && e.i === p) uses++;
+    if (e.k === "get" && e.rec.k === "local" && (e.rec.i === p || same.has(e.rec.i)) && e.t.key === t.key) reads++;
+    if (e.k === "local" && (e.i === p || same.has(e.i))) uses++;
     if ((e.k === "let" && e.i === p) || (e.k === "case" && e.s === p) || ((e.k === "attempt" || e.k === "search") && e.res === p)
       || (e.k === "apply" && e.tmp === p) || (e.k === "list" && (e.item === p || e.acc === p)) || (e.k === "handle" && (e.reason === p || e.save === p || e.frame === p))
       || (e.k === "budget" && (e.save === p || e.res === p))) ok = false;
@@ -73,10 +79,11 @@ function split(ir: CoreIR, fi: number, p: number, t: RType): void {
   const FIELD = -1;
   const fieldAt = (i: number): SExpr => ({ k: "local", i: FIELD - i });
   const fields = () => t.fields.map((_, i) => fieldAt(i));
-  const gi = ir.funcs.length;
+  const gi = ir.funcs.length, same = aliases(f.body, p);
   const rw = (e: SExpr): SExpr => {
-    if (e.k === "get" && e.rec.k === "local" && e.rec.i === p && e.t.key === t.key) return fieldAt(e.i);
-    if (e.k === "local" && e.i === p) return { k: "make", t, args: fields() };
+    if (e.k === "let" && same.has(e.i)) return rw(e.body);
+    if (e.k === "get" && e.rec.k === "local" && (e.rec.i === p || same.has(e.rec.i)) && e.t.key === t.key) return fieldAt(e.i);
+    if (e.k === "local" && (e.i === p || same.has(e.i))) return { k: "make", t, args: fields() };
     if (e.k === "call" && e.fn === fi) {
       const { lets, value: a } = made(e.args[p]);
       const args = e.args.flatMap((x, i) => (i !== p ? [rw(x)] : a.k === "make" ? a.args.map(rw) : fields()));
@@ -102,6 +109,17 @@ function split(ir: CoreIR, fi: number, p: number, t: RType): void {
   f.spends = false;
 }
 
+// The locals that are input p: each bound once, by a let of it (or of one).
+function aliases(body: SExpr, p: number): Set<number> {
+  const binds = new Map<number, number>();
+  const count = (e: SExpr) => { const i = e.k === "let" ? e.i : e.k === "case" ? e.s : e.k === "attempt" || e.k === "search" ? e.res : undefined; if (i !== undefined) binds.set(i, (binds.get(i) ?? 0) + 1); kids(e).forEach(count); };
+  count(body);
+  const same = new Set<number>();
+  const walk = (e: SExpr) => { if (e.k === "let" && e.value.k === "local" && (e.value.i === p || same.has(e.value.i)) && binds.get(e.i) === 1 && !e.check && !e.seeded) same.add(e.i); kids(e).forEach(walk); };
+  walk(body);
+  return same;
+}
+
 // A value under the lets that name its parts: wc's next counts are
 // `let blank = … in make(…)`.
 type Let = Extract<SExpr, { k: "let" }>;
@@ -110,4 +128,11 @@ function made(e: SExpr): { lets: Let[]; value: SExpr } {
   while (e.k === "let") { lets.push(e); e = e.body; }
   return { lets, value: e };
 }
-const plain = (e: SExpr) => e.k === "local" || e.k === "num" || e.k === "int" || e.k === "text" || e.k === "bool";
+// An input worked out before the lets now, after them before: one that
+// only computes and always answers (a step `i + 1`, C304a) reads the same
+// either way, the lets setting only locals of their own.
+const plain = (e: SExpr): boolean =>
+  e.k === "local" || e.k === "num" || e.k === "int" || e.k === "text" || e.k === "bool"
+  || (e.k === "op" && PURE_OPS.has(e.op) && e.args.every(plain))
+  || (e.k === "rt" && !e.host && /^int\.(add|sub|mul|neg|less|equal)$/.test(e.fn) && e.args.every(plain))
+  || (e.k === "get" && plain(e.rec));

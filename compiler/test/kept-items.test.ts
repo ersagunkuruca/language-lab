@@ -36,7 +36,8 @@ test("arrays built by pushes are columns that grow (G1b2)", () => {
   const thing = ir.arrays.find((a) => typeof a.item === "object" && "name" in a.item && a.item.name === "Thing")!;
   const a = `.a${thing.index}`;
   // The loops making and reading them: columns only.
-  const ops = (name: string) => { const f = ir.funcs.find((g) => g.name === name); assert.ok(f, name); const fns: string[] = []; found(f.body, (e) => { if (e.k === "rt" && e.fn.endsWith(a)) fns.push(e.fn); return false; }); return fns; };
+  // A loop carrying a record as its fields runs as its `.loop` (loop-records.ts).
+  const ops = (name: string) => { const fs = ir.funcs.filter((g) => g.name === name || g.name === `${name}.loop`); assert.ok(fs.length, name); const fns: string[] = []; for (const f of fs) found(f.body, (e) => { if (e.k === "rt" && e.fn.endsWith(a)) fns.push(e.fn); return false; }); return fns; };
   for (const name of ["keep·is moth.value.kept", "pool slots items from$from", "gathered$from"]) {
     const fns = ops(name);
     assert.ok(fns.length && fns.every((fn) => /^array\.c(push|get\d+|length|in|build)\./.test(fn)), `${name}: ${fns.join(", ")}`);
