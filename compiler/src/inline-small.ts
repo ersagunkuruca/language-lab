@@ -12,7 +12,7 @@
 // calls put in place first when it comes earlier.
 
 import { kids, mapKids, mapLocals, tidied, type CoreIR, type SExpr } from "./scalar.ts";
-import { pureFuncs, pureTree } from "./share-calls.ts";
+import { PURE_OPS, pureFuncs, pureTree, SAFE_RT } from "./share-calls.ts";
 
 const SMALL = 40;
 const size = (e: SExpr): number => 1 + kids(e).reduce((n, k) => n + size(k), 0);
@@ -21,10 +21,34 @@ const calls = (e: SExpr, g: number): boolean => (e.k === "call" && e.fn === g) |
 const plainBody = (e: SExpr, pure: Set<number>): boolean =>
   e.k === "let" ? !e.check && !e.seeded && pureTree(e.value, pure) && plainBody(e.body, pure) : pureTree(e, pure);
 
+// In a loop (a function calling itself last), a small function that uses
+// the runtime's reads and Ints is put in place too (C303): mnist's `at or
+// 0`, `first(xs item at i, else 0)`, and `n ≤ 0`. There the printer reads
+// an array the loop keeps from its buffer and counts its positions as
+// numbers (kept-arrays.ts), which it can do only for what the loop's own
+// body does. Lets, branches and attempts of pure expressions and the
+// runtime's functions that only read and compute.
+const readTree = (e: SExpr, pure: Set<number>): boolean => {
+  switch (e.k) {
+    case "rt": return !e.host && SAFE_RT(e.fn) && e.args.every((a) => readTree(a, pure));
+    case "attempt": return !e.spent && !e.resumes && kids(e).every((a) => readTree(a, pure));
+    case "let": return !e.check && !e.seeded && readTree(e.value, pure) && readTree(e.body, pure);
+    case "if": return kids(e).every((a) => readTree(a, pure));
+    case "call": return !e.cps && !e.tail && pure.has(e.fn) && e.args.every((a) => readTree(a, pure));
+    case "op": return PURE_OPS.has(e.op) && e.args.every((a) => readTree(a, pure));
+    default: return pureTree(e, pure);
+  }
+};
+const loops = (e: SExpr, fi: number): boolean => (e.k === "call" && e.fn === fi && e.tail) || kids(e).some((k) => loops(k, fi));
+
 const stops = (e: SExpr): boolean => (e.k === "call" && !!e.cps) || e.k === "handle" || kids(e).some(stops);
-export function inlineSmall(ir: CoreIR): number {
+// `inLoops`: only those using the runtime, only into loops, run after
+// the passes that read a loop's calls as they are written (columns.ts,
+// the flock's and greenhouse's loops over arrays of records).
+export function inlineSmall(ir: CoreIR, inLoops = false): number {
   const pure = pureFuncs(ir);
-  const small = ir.funcs.map((g, i) => pure.has(i) && !g.inner && size(g.body) <= SMALL && plainBody(g.body, pure) && !calls(g.body, i));
+  const small = ir.funcs.map((g, i) => !inLoops && pure.has(i) && !g.inner && size(g.body) <= SMALL && plainBody(g.body, pure) && !calls(g.body, i));
+  const reader = ir.funcs.map((g, i) => inLoops && pure.has(i) && !g.inner && size(g.body) <= SMALL && readTree(g.body, pure) && !calls(g.body, i));
   let changed = 0;
   ir.funcs.forEach((f, fi) => {
     // Not into a function that may stop and go on later (a call that keeps
@@ -33,9 +57,11 @@ export function inlineSmall(ir: CoreIR): number {
     // and a let added now may not be in it (open-file.test's `byte items`,
     // put into a handled body, read none).
     if (f.inner || stops(f.body)) return;
+    const loop = loops(f.body, fi);
+    if (inLoops && !loop) return;
     const put = (e: SExpr): SExpr => {
       const r = mapKids(e, put);
-      if (r.k !== "call" || r.cps || r.tail || r.fn === fi || !small[r.fn]) return r;
+      if (r.k !== "call" || r.cps || r.tail || r.fn === fi || !(small[r.fn] || (loop && reader[r.fn]))) return r;
       const g = ir.funcs[r.fn];
       // Each of g's locals (its inputs first) a new local of f.
       const at = g.locals.map((t) => f.locals.push(t) - 1);

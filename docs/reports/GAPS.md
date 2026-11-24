@@ -5281,6 +5281,13 @@ Array of boxed numbers rather than a Float64Array. Workers buy nothing:
 with them a fifth of the time is `encode`, the parameters and pixels
 sent item by item for each map. 16x to 21x the ideal; native 3x.
 
+After C303a (2026-11-24) `dot` reads its two arrays from their buffers,
+the view worked out once before the loop, and steps its positions and
+count as numbers: 3.1 s of an Adam pass over 3,000 digits is now 0.12 s,
+and Adam over 10,000 digits is 9.2 s, 7.9x the ideal (it was 15.1 s).
+Most of what is left is still that loop, put by V8 in its callers: its
+items are boxed numbers in a JS Array, the ideal's a Float64Array.
+
 **DG5. Duals in an array are records, read once a field.** In the Newton
 mode the network runs on `Array Dual`: each item a two-field record, each
 multiply-add allocating one, and `dot`'s body reads the same item from the
