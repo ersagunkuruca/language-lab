@@ -1209,7 +1209,9 @@ const openChoice = (id: Id) => {
   render();
   document.querySelector(`[data-choice-row~="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
 };
-const whereRunsOf = whereRuns({ code: () => doc.code, names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, render: () => render() });
+// What it says is in the side column only (structure.ts), so only that is
+// drawn again when it answers (E319k).
+const whereRunsOf = whereRuns({ code: () => doc.code, names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, render: () => renderSide() });
 const { implementButton, makeNamed, newDefinitionForm, pick, row, runTop, structurePanel, words } = structure({
   doc: () => doc, ui, applyT: (e, then, place, pins) => applyT(e, then, place, pins), render: () => render(), topT: (i, r) => topT(i, r), defBody: (d) => defBody(d), defNamed: (n) => defNamed(n),
   ownDefs: () => ownDefs(), typeText: (t, n) => typeText(t, n), pinRow, textField, seg,
@@ -1285,7 +1287,12 @@ const blocksRoom = (): number => {
 };
 const refitBlocks = () => {
   const n = blocksRoom();
-  if (n && n !== (blocksChars || 80)) { blocksChars = n === 80 ? 0 : n; render(); }
+  if (!n || n === (blocksChars || 80)) return;
+  blocksChars = n === 80 ? 0 : n;
+  // Only the blocks drawn again: a whole render redrew the graph and the
+  // side column too (E319k: 300 ms on rapidity picture, at every load).
+  const info = typesOf(), wrap = document.querySelector<HTMLElement>("#app .p-text .blocks-wrap");
+  if (info && wrap && ui.text === "blocks" && !EMBED) { wrap.replaceChildren(blocksOf(info), ...looseBlocks(info)); changes.markChanges(wrap); } else render();
 };
 const blocksFit = new ResizeObserver(refitBlocks);
 const watchBlocks = () => requestAnimationFrame(() => {
