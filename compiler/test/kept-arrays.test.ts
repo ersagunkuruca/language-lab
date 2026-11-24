@@ -3,7 +3,9 @@
 // n, acc)`, an array's view and buffer worked out once before the loop
 // and its two positions and its count stepped with `+` and `-`. Where two
 // of its arrays are versions of one buffer, or a position or step is a
-// big Int, it goes on as written (`$s`): every answer is the definition's.
+// big Int, it goes on as written (`$s`). Where its first and last
+// positions are in the arrays (C303b), its reads aren't checked; else it
+// runs checking them (`$c`). Every answer is the definition's.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -32,7 +34,9 @@ test("mnist's dot reads its two arrays from their buffers and steps its position
   const t = text(dot!);
   assert.match(t, /const w0\$ = l0 instanceof R\.ArrayView \? l0 : R\.arrayView\(l0\), w0\$b = w0\$\.buf\.items/);
   assert.match(t, /typeof l1 !== "number"/);
-  assert.match(t, /w0\$b\[w0\$s \+ t\d+\]/);
+  assert.match(t, /= w0\$b\[w0\$s \+ l\d+\];/, "read unchecked");
+  assert.match(t, /return f\d+\$c\(/, "with its checks where a read may fall outside");
+  assert.match(js.slice(js.indexOf(`function ${names[dot!]}$c(`)), /Number\.isInteger\(t\d+\) && t\d+ >= 0 && t\d+ < w0\$n/);
   assert.match(t, /= \(l1 \+ l2\);/);
   assert.doesNotMatch(t, /\.buf\.items\[/, "no buffer looked up in the loop");
 });

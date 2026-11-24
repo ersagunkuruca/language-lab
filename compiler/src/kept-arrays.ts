@@ -126,6 +126,10 @@ export interface Counted {
   steady: number[];
   // The steps, worked out as numbers.
   plain: WeakSet<SExpr>;
+  // Each counted input's step: down or up, by a constant or an input.
+  step: Map<number, { down: boolean; by: bigint | number; input: boolean }>;
+  // The inputs stepped by every call of the loop's next round.
+  always: Set<number>;
 }
 const SMALL = 2n ** 28n;
 export function countedInts(ir: CoreIR, fi: number): Counted | null {
@@ -138,6 +142,9 @@ export function countedInts(ir: CoreIR, fi: number): Counted | null {
   const dropped = new Set<number>(), inPlace = new Set(f.params.map((_, j) => j));
   const steps = new Map<number, Set<string>>(), reads = new Map<number, Set<number>>();
   const stepNodes: [SExpr, number][] = [];
+  const stepOf = new Map<number, { down: boolean; by: bigint | number; input: boolean }>();
+  const stepped = new Map<number, number>();
+  let rounds = 0;
   const alias = (e: SExpr) => (e.k === "local" ? of.get(e.i) : undefined);
   // A constant or an input: its key, and the input it reads.
   const steady = (e: SExpr): [string, number | undefined] | null => {
@@ -167,12 +174,21 @@ export function countedInts(ir: CoreIR, fi: number): Counted | null {
         break;
       case "call":
         if (e.fn === fi && e.tail) {
+          rounds++;
           e.args.forEach((a, j) => {
             if (alias(a) === j) return;
             inPlace.delete(j);
             if (a.k === "rt" && (a.fn === "int.add" || a.fn === "int.sub") && a.args.length === 2) {
               const [x, y] = a.args, st = alias(x) === j ? steady(y) : a.fn === "int.add" && alias(y) === j ? steady(x) : null;
-              if (st) { (steps.get(j) ?? steps.set(j, new Set()).get(j)!).add(`${a.fn} ${st[0]}`); needs(j, st[1]); stepNodes.push([a, j]); return; }
+              if (st) {
+                (steps.get(j) ?? steps.set(j, new Set()).get(j)!).add(`${a.fn} ${st[0]}`);
+                needs(j, st[1]);
+                stepNodes.push([a, j]);
+                stepped.set(j, (stepped.get(j) ?? 0) + 1);
+                const by = alias(x) === j ? y : x, lit = by.k === "int" ? by.v : by.k === "local" ? lits.get(by.i) : undefined;
+                stepOf.set(j, { down: a.fn === "int.sub", by: lit ?? st[1]!, input: lit === undefined });
+                return;
+              }
             }
             walk(a);
           });
@@ -188,5 +204,69 @@ export function countedInts(ir: CoreIR, fi: number): Counted | null {
   const plain = new WeakSet<SExpr>();
   for (const [a, j] of stepNodes) if (ints.includes(j)) plain.add(a);
   const read = new Set(ints.flatMap((j) => [...reads.get(j) ?? []]));
-  return { ints, steady: [...read].filter((s) => !ints.includes(s)).sort((a, b) => a - b), plain };
+  const always = new Set(ints.filter((j) => stepped.get(j) === rounds));
+  return { ints, steady: [...read].filter((s) => !ints.includes(s)).sort((a, b) => a - b), plain, step: new Map(ints.map((j) => [j, stepOf.get(j)!])), always };
+}
+
+// Reads that stay in their arrays (C303b): a loop that goes on only while
+// a count is at least 1, takes 1 from it in every next round, and reads
+// its kept arrays only on the way on, each at a counted position stepped
+// by a constant step, reads at the positions p, p + s, …, p + (c − 1)s
+// at most, c the count it starts with. When the first and the last of
+// those are in the array (worked out once before the loop: in numbers,
+// and past 2^53 too far to be in any array), no read in it can fall
+// outside, and each reads its slot unchecked (core-js.ts). Otherwise the
+// loop runs with its checks (`$c`).
+export interface Bounded { count: number; reads: { array: number; at: number }[] }
+export function boundedReads(ir: CoreIR, fi: number, kept: Map<number, number>, counted: Counted): Bounded | null {
+  const f = ir.funcs[fi], n = f.params.length;
+  const of = new Map<number, number>(f.params.map((_, j) => [j, j]));
+  const lits = new Map<number, bigint>();
+  // The lets the loop starts with (a function put in place has its
+  // inputs as lets), down to its test.
+  let e = f.body;
+  while (e.k === "let") {
+    if (e.value.k === "local" && e.value.i < n) of.set(e.i, e.value.i);
+    else if (e.value.k === "int") lits.set(e.i, e.value.v);
+    e = e.body;
+  }
+  if (e.k !== "if") return null;
+  const lit = (x: SExpr) => (x.k === "int" ? x.v : x.k === "local" ? lits.get(x.i) : undefined);
+  const alias = (x: SExpr) => (x.k === "local" ? of.get(x.i) : undefined);
+  // The test as "c ≥ 1", and which way goes on (its own lets first).
+  let cond = e.cond, flip = false;
+  while (cond.k === "let") {
+    if (cond.value.k === "local" && cond.value.i < n) of.set(cond.i, cond.value.i);
+    else if (cond.value.k === "int") lits.set(cond.i, cond.value.v);
+    cond = cond.body;
+  }
+  if (cond.k === "op" && cond.op === "not" && cond.args.length === 1) { cond = cond.args[0]; flip = true; }
+  if (cond.k !== "rt" || cond.fn !== "int.less" || cond.args.length !== 2) return null;
+  const [a, b] = cond.args;
+  let count: number | undefined, onIfLess: boolean;
+  if (lit(a) === 0n && alias(b) !== undefined) { count = alias(b); onIfLess = true; } // 0 < c
+  else if (alias(a) !== undefined && lit(b) === 1n) { count = alias(a); onIfLess = false; } // c < 1
+  else return null;
+  const step = counted.step.get(count!);
+  if (step === undefined || !counted.always.has(count!) || !step.down || step.input || step.by !== 1n) return null;
+  const [on, off] = onIfLess !== flip ? [e.then, e.else] : [e.else, e.then];
+  const selfCall = (x: SExpr): boolean => (x.k === "call" && x.fn === fi) || kids(x).some(selfCall);
+  const keptRead = (x: SExpr): boolean => (x.k === "rt" && ARRAY_READ.test(x.fn) && x.args[0]?.k === "local" && kept.has(x.args[0].i)) || kids(x).some(keptRead);
+  if (selfCall(off) || keptRead(off)) return null;
+  // Every read of a kept array on the way on, at a counted position.
+  const reads = new Map<string, { array: number; at: number }>();
+  let ok = true;
+  const walk = (x: SExpr) => {
+    if (x.k === "let" && x.value.k === "local" && of.has(x.value.i)) of.set(x.i, of.get(x.value.i)!);
+    if (x.k === "rt" && ARRAY_READ.test(x.fn) && x.args[0]?.k === "local" && kept.has(x.args[0].i)) {
+      if (x.fn.startsWith("array.length.")) return;
+      const at = x.args[1] && alias(x.args[1]);
+      if (at === undefined || !counted.step.has(at)) { ok = false; return; }
+      const array = kept.get(x.args[0].i)!;
+      reads.set(`${array} ${at}`, { array, at });
+    }
+    kids(x).forEach(walk);
+  };
+  walk(on);
+  return ok && reads.size ? { count: count!, reads: [...reads.values()] } : null;
 }
