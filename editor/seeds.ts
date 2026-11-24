@@ -123,6 +123,15 @@ export function seeds(host: SeedHost) {
     // any run, short or long (I136: the long run made + New definition a
     // second slower; I157: the short one, a new main's run, 0.35 s more).
     if (!calledDefs(doc().code).has(def)) return undefined;
+    // Before the program's arithmetic is resolved (the page reopened on a
+    // large definition), the resolving goes in a task of its own and the
+    // definition draws again after it (E319k: 450 ms of rapidity
+    // picture's first drawing was this).
+    if (!mainRuns.has(doc().code) && !warming.has(doc().code) && !resolvedKnown(doc().code, info)) {
+      const was = doc().code, open = ui.def;
+      setTimeout(() => { if (doc().code !== was) return; resolvedFor(was, info, pres().names); if (ui.def === open) { seeds.get(was)?.m.delete(def); render(); } }, 0);
+      return undefined;
+    }
     const short = mainCalls(info, entry).get(body.id);
     if (short || longRuns.has(doc().code)) return short ?? mainCalls(info, entry, true).get(body.id);
     const sofar = longPaused.get(doc().code)?.got.get(body.id);

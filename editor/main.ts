@@ -3076,6 +3076,10 @@ if (!EMBED && ASKED.has("code")) void unpackSnippet(ASKED.get("code")!).then((p)
 }, () => { ui.note = UNREADABLE; ui.refused = true; render(); });
 
 function started() {
+  // The definition open when the page was left, if large, drawn as one
+  // opened is: its graph in a task of its own (E319k). In one task with
+  // the rest it was 1.1 to 1.4 s on rapidity picture.
+  graphLater = subtree(doc.code, ui.def).length > GRAPH_LATER;
   render();
   if (!EMBED) startRun();
   // What every first click asks, found before it (selection.ts).

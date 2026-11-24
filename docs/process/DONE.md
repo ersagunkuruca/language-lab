@@ -40,6 +40,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| E319k (step 6) | A page reopened on a large definition drew it in one task of 1.1 to 1.4 s (spacetime's rapidity picture): the page's start drew it at once, where opening one by a click draws its graph in a task of its own, and its seeds resolved the program's arithmetic on the way (450 ms). The start now draws as a click does, and a seed waiting on the resolving gets it in a task of its own, then the definition draws again. Longest task at load about 370 ms. | #3288 |
 | E319k (step 5) | The side column worked out what Delete and each input's ↑ ↓ × would do every time it was drawn, and it's drawn again on each of the Run worker's answers: on spacetime's rapidity picture, Delete alone was 40 to 100 ms of each redraw, the panel 150 to 170. They're worked out once a version of the program (structure.ts `once`); Delete and Undo checked in the browser. | #3285 |
 | I359 | verify.test.ts on folders: a generic let's uses (L224) are checked as instances of its scheme, not as the binder's own type; Info carries letSchemes | #3257 |
 | I358 | The agreement check stopped with "Maximum call stack size exceeded" on mnist-page's `label`: relate's `known` (is a term fully known) went into a list a JS call a cell, and the digits are 74 KB of bytes. It walks with a stack of its own, as `fromValue` and `plain` do since I357. ters/test/agreement.test.ts | #3257 |
