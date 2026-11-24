@@ -4,7 +4,7 @@
 import { changedOver, dependencies, idsSeeded, layerOf, litOrigin, nodesOfKind, onLayer, sameValue, steadied, subtree, withNodes, type Code, type Id, type Node } from "../src/model.ts";
 import type { Pins } from "../src/lang/signatures.ts";
 import type { Names } from "../src/presentation.ts";
-import { checksKept, infer, inferEdited, type Info } from "../src/lang/infer.ts";
+import { checksKept, infer, type Info } from "../src/lang/infer.ts";
 import { choose, jobProblem, represent, type Measured, type Representation } from "../src/lang/represent.ts";
 import { choosingFor, endedAsWritten, storedRows, withLibraryRepresentations, type Pick } from "../src/lang/library-reps.ts";
 import { classKey, optionsText } from "../src/lang/class-key.ts";
@@ -54,8 +54,8 @@ export function represented<P extends Program>(p00: P, main: Id, hostMaps: boole
 // (the key leaves those out but for their sign and kind: classKey), kept
 // with what it was made from: a program that differs from that one only
 // in some literals' values (an edit of a number, the editor's drag) takes
-// it again with those values put in, and is checked again over its check
-// (infer.ts inferEdited). No decision reads a literal's value (the key),
+// it again with those values put in, and with its check. No decision
+// reads a literal's value (the key),
 // and the rewrite only carries it: a literal it left where it was takes
 // the new value there. One the rewrite copied or turned into something
 // else (a copy for one side of a split, a literal job's call) has no
@@ -92,8 +92,10 @@ function butLiterals<P extends Program>(key: string, q: P): P | null {
   const code: Code = { ...out.code, nodes: withNodes(out.code.nodes, into) };
   const layer = layerOf(out.code);
   if (layer) onLayer(code, layer);
-  const info = inferEdited(out.code, code, out.names, out.info, out.info.options!);
-  if (!info || info.errors.length !== out.info.errors.length) return null;
+  // Its check is the last one's: each literal changed stays in its class,
+  // all a check tells of it (class-key.ts), over a trial of its
+  // substitution, which the steps after bind variables of their own in.
+  const info = { ...out.info, subst: out.info.subst.trial() };
   choicesAgain++;
   return { ...out, code, info };
 }
