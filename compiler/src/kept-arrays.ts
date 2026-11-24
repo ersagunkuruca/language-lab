@@ -15,10 +15,17 @@
 // be versions of one buffer; then reading the second turned the buffer
 // away from the first, and the printed loop reads them as before (a flag
 // worked out once, before the loop).
+//
+// An array of records stored as columns (columns.ts) is kept too (C304c:
+// mnist's Newton dot over Duals): its length and columns worked out once,
+// each read an index into a column. Columns have no versions.
 
 import { kids, type CoreIR, type SExpr } from "./scalar.ts";
 
-export const ARRAY_READ = /^array\.(at|get|length)\.a\d+$/;
+export const ARRAY_READ = /^array\.(at|get|length|cin|cget\d+|clength)\.a\d+$/;
+export const COLUMN_READ = /^array\.c(in|get\d+|length)\.a\d+$/;
+// A read at a position, and an array's length, either way it is stored.
+const AT_READ = /^array\.(at|get|cin|cget\d+)\.a\d+$/, LENGTH = /^array\.c?length\.a\d+$/;
 // What a loop's body may do besides reading its arrays: numbers' and
 // Ints' runtime functions read no array.
 const NUMBERS_RT = /^(int\.|number\.)/;
@@ -53,7 +60,7 @@ function arrayFree(ir: CoreIR): boolean[] {
 // none where its body does anything else with arrays.
 export function keptArrays(ir: CoreIR, fi: number, free = arrayFree(ir)): Map<number, number> {
   const f = ir.funcs[fi];
-  const read = new Set<number>(), kept = new Set(f.params.map((_, j) => j));
+  const read = new Set<number>(), kept = new Set(f.params.map((_, j) => j)), asColumns = new Set<number>(), asRows = new Set<number>();
   const of = new Map<number, number>(f.params.map((_, j) => [j, j]));
   const binds = new Map<number, number>();
   const bind = (e: SExpr) => { const i = e.k === "let" ? e.i : e.k === "attempt" ? e.res : e.k === "case" ? e.s : undefined; if (i !== undefined) binds.set(i, (binds.get(i) ?? 0) + 1); kids(e).forEach(bind); };
@@ -73,6 +80,7 @@ export function keptArrays(ir: CoreIR, fi: number, free = arrayFree(ir)): Map<nu
           const j = e.args[0]?.k === "local" ? of.get(e.args[0].i) : undefined;
           if (j === undefined) { ok = false; return; }
           read.add(j);
+          (COLUMN_READ.test(e.fn) ? asColumns : asRows).add(j);
           e.args.slice(1).forEach((a) => walk(a));
           return;
         }
@@ -97,8 +105,22 @@ export function keptArrays(ir: CoreIR, fi: number, free = arrayFree(ir)): Map<nu
   // An input read as an array is kept only when it is used as nothing
   // else (walk drops one used anywhere but as an array read's array or
   // handed on in place); and every array read is of one kept.
-  if (!ok || ![...read].every((j) => kept.has(j))) return new Map();
+  if (!ok || ![...read].every((j) => kept.has(j) && !(asColumns.has(j) && asRows.has(j)))) return new Map();
   return new Map([...of].filter(([, j]) => read.has(j)));
+}
+
+// The columns read of each kept input stored as columns, by input.
+export function keptColumns(ir: CoreIR, fi: number, kept: Map<number, number>): Map<number, Set<number>> {
+  const out = new Map<number, Set<number>>();
+  const walk = (e: SExpr) => {
+    if (e.k === "rt" && COLUMN_READ.test(e.fn) && e.args[0]?.k === "local" && kept.has(e.args[0].i)) {
+      const j = kept.get(e.args[0].i)!, cs = out.get(j) ?? out.set(j, new Set()).get(j)!, m = /^array\.cget(\d+)\./.exec(e.fn);
+      if (m) cs.add(Number(m[1]));
+    }
+    kids(e).forEach(walk);
+  };
+  walk(ir.funcs[fi].body);
+  return out;
 }
 
 export const keptArraysOf = (ir: CoreIR): ((fi: number) => Map<number, number>) => {
@@ -153,7 +175,7 @@ export function countedInts(ir: CoreIR, fi: number): Counted | null {
   const steady = (e: SExpr): [string, number | undefined] | null => {
     const v = e.k === "int" ? e.v : e.k === "local" ? lits.get(e.i) : undefined;
     if (v !== undefined) return v < SMALL && v > -SMALL ? [`${v}`, undefined] : null;
-    if (e.k === "rt" && /^array\.length\.a\d+$/.test(e.fn) && e.args.length === 1) {
+    if (e.k === "rt" && LENGTH.test(e.fn) && e.args.length === 1) {
       const a = alias(e.args[0]);
       if (a === undefined) return null;
       lengths.add(a);
@@ -174,7 +196,7 @@ export function countedInts(ir: CoreIR, fi: number): Counted | null {
         break;
       case "rt":
         // An array's item at the input: read as it is.
-        if (/^array\.(at|get)\.a\d+$/.test(e.fn) && e.args.length === 2 && alias(e.args[1]) !== undefined) { walk(e.args[0]); return; }
+        if (AT_READ.test(e.fn) && e.args.length === 2 && alias(e.args[1]) !== undefined) { walk(e.args[0]); return; }
         if ((e.fn === "int.less" || e.fn === "int.equal") && e.args.length === 2) {
           const [a, b] = e.args, ja = alias(a), jb = alias(b), sa = steady(a), sb = steady(b);
           if (ja !== undefined && jb === undefined && sb) { needs(ja, sb[1]); return; }
@@ -274,23 +296,29 @@ export function boundedReads(ir: CoreIR, fi: number, kept: Map<number, number>, 
   const walk = (x: SExpr) => {
     if (x.k === "let" && x.value.k === "local" && of.has(x.value.i)) of.set(x.i, of.get(x.value.i)!);
     if (x.k === "rt" && ARRAY_READ.test(x.fn) && x.args[0]?.k === "local" && kept.has(x.args[0].i)) {
-      if (x.fn.startsWith("array.length.")) return;
+      if (LENGTH.test(x.fn)) return;
       const at = x.args[1] && alias(x.args[1]);
       if (at === undefined || !counted.step.has(at)) { ok = false; return; }
       const array = kept.get(x.args[0].i)!;
       reads.set(`${array} ${at}`, { array, at });
     }
-    if (x.k === "rt" && x.fn === "int.less" && x.args.length === 2) tests.push(x);
+    if (x.k === "rt" && ((x.fn === "int.less" && x.args.length === 2) || /^array\.cin\./.test(x.fn))) tests.push(x);
     kids(x).forEach(walk);
   };
   walk(on);
   if (!ok || !reads.size) return null;
   const known = new WeakMap<SExpr, boolean>();
   for (const t of tests) {
+    // A column array's own test of a position (`item at`'s check).
+    if (t.fn.startsWith("array.cin.")) {
+      const [x, j] = t.args, at = alias(j);
+      if (x.k === "local" && kept.has(x.i) && at !== undefined && reads.has(`${kept.get(x.i)} ${at}`)) known.set(t, true);
+      continue;
+    }
     const [j, b] = t.args, at = alias(j);
     if (at === undefined) continue;
     if (lit(b) === 0n && [...reads.values()].some((r) => r.at === at)) known.set(t, false);
-    else if (b.k === "rt" && /^array\.length\.a\d+$/.test(b.fn) && b.args[0]?.k === "local" && kept.has(b.args[0].i) && reads.has(`${kept.get(b.args[0].i)} ${at}`)) known.set(t, true);
+    else if (b.k === "rt" && LENGTH.test(b.fn) && b.args[0]?.k === "local" && kept.has(b.args[0].i) && reads.has(`${kept.get(b.args[0].i)} ${at}`)) known.set(t, true);
   }
   return { count: count!, reads: [...reads.values()], known };
 }

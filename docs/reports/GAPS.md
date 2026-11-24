@@ -5301,7 +5301,8 @@ After C303c, C303d and C304a (2026-11-24) the sum is two numbers, not a
 Dual a round, and the reads are in range unchecked: Newton over 1000
 digits three times 89 s now 42 s, 10x the ideal. With C304b the Dual
 array's own test of each position is worked out before the loop too:
-29.5 s, 7.0x.
+29.5 s, 7.0x. With C304c the Dual arrays are two columns each, read
+in place by the loop: 13.3 s, 2.9x.
 
 **DG6. `ters wasi` can't read MNIST's training images.** `read bytes`
 conses a list of Ints, one cell a byte, then makes the Bytes from it: at

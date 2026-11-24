@@ -65,11 +65,13 @@ test("dot's answers are the definition's: in and out of range, two versions of o
   assert.equal(f(ax, big + 2n, -big, ay, 0, 1, 3, 0), want(xs, big + 2n, -big, ys, 0, 1, 3, 0));
 });
 
-test("a Dual array's own test of a counted position is worked out before the loop (C304b)", () => {
+test("mnist's Dual arrays are columns, kept by dot's loop and read unchecked (C304b, C304c)", () => {
   const i = core.funcs.findIndex((f) => f.name === "dot at Dual, Int.loop");
   assert.ok(i >= 0);
   const s = js.indexOf(`function ${names[i]}(`), t = js.slice(s, js.indexOf(`function ${names[i]}$s(`));
+  assert.match(t, /const w0\$ = l0, w0\$n = w0\$\.n, w0\$c0 = w0\$\.c0, w0\$c1 = w0\$\.c1;/);
   const loop = t.slice(t.indexOf("for (;;)"));
-  assert.match(loop, /if \(\(\(!false\) && true\)\)/);
-  assert.doesNotMatch(loop, /< w\d\$n/, "no position tested in the loop");
+  assert.match(loop, /= w0\$c0\[l\d+\];/);
+  assert.match(loop, /= w3\$c1\[l\d+\];/);
+  assert.doesNotMatch(loop, /< w\d\$n|\.n\)|\.c\d\[/, "no position tested, no column looked up in the loop");
 });

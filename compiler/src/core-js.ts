@@ -29,7 +29,7 @@ import { chosenParts } from "./chosen-parts.ts";
 import { keptItems, pushedInOrder } from "./kept-items.ts";
 import { intRanges } from "./int-ranges.ts";
 import { loopRecords } from "./loop-records.ts";
-import { boundedReads, countedInts, keptArraysOf } from "./kept-arrays.ts";
+import { boundedReads, countedInts, keptArraysOf, keptColumns } from "./kept-arrays.ts";
 import { ownedArrays } from "./owned-arrays.ts";
 import { columns } from "./columns.ts";
 import { linearCalls } from "./linear-calls.ts";
@@ -257,8 +257,9 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
     const plainCopy = () => {
       if (!selfLoops(f.body, i)) return [];
       const counted = countedInts(ir, i), kept = keptOf(i);
+      const rows = new Set(kept.values()).size - keptColumns(ir, i, kept).size;
       return [
-        ...(new Set(kept.values()).size > 1 || counted ? [func(f, i, null, "written").replace(`function ${names[i]}(`, `function ${names[i]}$s(`)] : []),
+        ...(rows > 1 || counted ? [func(f, i, null, "written").replace(`function ${names[i]}(`, `function ${names[i]}$s(`)] : []),
         ...(counted && kept.size && boundedReads(ir, i, kept, counted) ? [func(f, i, null, "checked").replace(`function ${names[i]}(`, `function ${names[i]}$c(`)] : []),
       ];
     };
@@ -344,6 +345,8 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
     const keptLocals = loops && !cycle && mode !== "written" ? keptOf(i) : new Map<number, number>();
     const kept = new Map<number, string>([...new Set(keptLocals.values())].sort((x, y) => x - y).map((j) => [j, `w${j}$`]));
     const keptItem = (w: string, j: string) => `${w}b[${w}s + ${j}]`;
+    const columnsOf = keptLocals.size ? keptColumns(ir, i, keptLocals) : new Map<number, Set<number>>();
+    const isColumns = (w: string) => [...kept].some(([j, v]) => v === w && columnsOf.has(j));
     const counted = loops && !cycle && mode !== "written" ? countedInts(ir, i) : null;
     const bounded = mode === "fast" && counted && keptLocals.size ? boundedReads(ir, i, keptLocals, counted) : null;
     const keptOfArg = (x: SExpr) => { const j = x.k === "local" ? keptLocals.get(x.i) : undefined; return j === undefined ? undefined : kept.get(j); };
@@ -594,10 +597,12 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
                 pre.push(`${d}${c}.n++;`);
                 return c;
               }
-              if (m[1] === "length") return `${xs[0]}.n`;
+              // A kept array's length and columns, worked out before the loop.
+              const w = keptOfArg(e.args[0]), at = w ?? `${xs[0]}.`;
+              if (m[1] === "length") return `${at}n`;
               // Whether a position is one of the array's (`item at`'s check).
-              if (m[1] === "in") { const j = temp(); pre.push(`${d}const ${j} = ${xs[1]};`); return `(Number.isInteger(${j}) && ${j} >= 0 && ${j} < ${xs[0]}.n)`; }
-              if (m[2] !== undefined) return `${xs[0]}.c${m[2]}[${xs[1]}]`;
+              if (m[1] === "in") { const j = temp(); pre.push(`${d}const ${j} = ${xs[1]};`); return `(Number.isInteger(${j}) && ${j} >= 0 && ${j} < ${at}n)`; }
+              if (m[2] !== undefined) return `${at}c${m[2]}[${xs[1]}]`;
               if (m[1] === "new") {
                 const t = temp(), r = ir.arrays[Number(m[4])].item as RType;
                 pre.push(`${d}const ${t} = ${xs[0]};`);
@@ -784,9 +789,12 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
     const inPlace = !f.def.startsWith("@") || params.length !== (f.name === "item at" ? 3 : f.name === "length" ? 1 : -1) ? []
       : f.name === "length" ? [`  if (${params[0]} instanceof R.ItemsList) return ${params[0]}.b.length - ${params[0]}.i;`]
       : [`  if (${params[0]} instanceof R.ItemsList && typeof ${params[1]} === "number") return Number.isInteger(${params[1]}) && ${params[1]} >= 0 && ${params[0]}.i + ${params[1]} < ${params[0]}.b.length ? ${params[0]}.b[${params[0]}.i + ${params[1]}] : ${params[2]};`];
-    const views = [...kept].flatMap(([j, w]) => [`  const ${w} = ${params[j]} instanceof R.ArrayView ? ${params[j]} : R.arrayView(${params[j]}), ${w}b = ${w}.buf.items, ${w}s = ${w}.start, ${w}n = ${w}.n;`]);
+    const views = [...kept].flatMap(([j, w]) => columnsOf.has(j)
+      ? [`  const ${w} = ${params[j]}, ${w}n = ${w}.n${[...columnsOf.get(j)!].sort((x, y) => x - y).map((c) => `, ${w}c${c} = ${w}.c${c}`).join("")};`]
+      : [`  const ${w} = ${params[j]} instanceof R.ArrayView ? ${params[j]} : R.arrayView(${params[j]}), ${w}b = ${w}.buf.items, ${w}s = ${w}.start, ${w}n = ${w}.n;`]);
+    const rowViews = [...kept.values()].filter((w) => !isColumns(w));
     if (counted) views.unshift(`  if (${[...counted.ints, ...counted.steady].map((j) => `typeof ${params[j]} !== "number"`).join(" || ")}) return ${names[i]}$s(${params.join(", ")});`);
-    if (kept.size > 1) views.push(`  if (!(${[...kept.values()].map((w) => `${w}.ver.cur`).join(" && ")})) return ${names[i]}$s(${params.join(", ")});`);
+    if (rowViews.length > 1) views.push(`  if (!(${rowViews.map((w) => `${w}.ver.cur`).join(" && ")})) return ${names[i]}$s(${params.join(", ")});`);
     if (bounded && counted) {
       // The first and last positions each read is at, in its array.
       const c = params[bounded.count];
@@ -913,6 +921,9 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   // And a record such a loop carries round, as its fields, where its
   // fields are read only in what was put in place (loop-records.ts, C304a).
   if (!envSet("NO_LOOP_RECORDS")) loopRecords(ir);
+  // And a record chosen between there read by its parts (C304c: a column
+  // array's `item at` or else a constant Dual, put in place in mnist's dot).
+  if (!envSet("NO_CHOSEN_PARTS")) chosenParts(ir);
   // Ints known small worked out as numbers (int-ranges.ts, C267).
   if (!envSet("NO_INT_RANGES")) intRanges(ir, new Set(ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))));
   // Reads that wait on the places their values are used at (C162).
@@ -925,6 +936,9 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
 // And `array of(append(items of a, items of b))` of two arrays of its
 // own kind: `array.concat`, the two copied into one, with no list between
 // (C324: bazaar's `concat arrays`, joining two rows at every match).
+// And `array of(items of a)` is a itself, an array being a value (C304c:
+// mnist's Newton weights, made by a map on workers, then read back as a
+// list into an array of Duals that columns can't make, so kept as rows).
 function writtenArrays(ir: CoreIR): void {
   const append = new Set(ir.funcs.flatMap((f, i) => (originalOf(f.def) === PRELUDE_DEFS.append ? [i] : [])));
   const go = (e: SExpr): SExpr => {
@@ -935,6 +949,7 @@ function writtenArrays(ir: CoreIR): void {
     if (l.k === "list") return { ...x, fn: `array.ofItems.${m[1]}`, args: l.items };
     const items = (y: SExpr) => (y.k === "rt" && y.fn === `array.items.${m[1]}` && y.args.length === 1 ? y.args[0] : null);
     if (l.k === "call" && append.has(l.fn) && !l.cps && l.args.length === 2 && items(l.args[0]) && items(l.args[1])) return { ...x, fn: `array.concat.${m[1]}`, args: [items(l.args[0])!, items(l.args[1])!] };
+    if (items(l)) return items(l)!;
     return x;
   };
   for (const f of ir.funcs) f.body = go(f.body);
