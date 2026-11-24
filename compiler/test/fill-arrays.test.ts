@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Id } from "../../ters/src/model.ts";
+import { subtree, type Id } from "../../ters/src/model.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
@@ -16,6 +16,7 @@ import { makeRunner, type Value } from "../../ters/src/lang/run.ts";
 import { PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
 import { ARRAY_OPS, INT_OPS } from "../../ters/src/lang/std.ts";
 import { kids, lowerScalar, type SExpr } from "../src/scalar.ts";
+import { fillArrays } from "../src/fill-arrays.ts";
 import { coreMain, loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
 import { emitC } from "../src/c.ts";
@@ -74,6 +75,17 @@ test("an array of a mapped range is filled with no list, and gives what the eval
 // `bytes of(append(header, map(range(size), byte)))`, filled by position
 // into the array `byte array bytes of` is given; it prints what the
 // evaluator does.
+// A call of a call, or of a function given as a value, is no `array of`:
+// `pick(n)(map(range(n), f))` stays as written (Check
+// main after #3284: gradient(f)(…)'s slopes were taken for an array).
+test("a call of anything but a definition by name is left alone", () => {
+  const k = new Lang(LIBRARY.code);
+  const d = k.def("applied");
+  k.define(d, k.fn(["pick", "n"], (pick, n) => k.call(k.call(pick, n), k.call(PRELUDE_DEFS["map"], k.call(INT_OPS.range, n), k.fn(["x"], (x) => x)))));
+  const code = base(k.code), names = baseNames(k.names), mine = new Set(subtree(code, d));
+  assert.deepEqual(fillArrays(code, names).made.filter((x) => mine.has(x)), []);
+});
+
 test("wav-file's Bytes are a byte array filled by position (L271c)", async () => {
   const { loadProgram } = await import("../../ters/src/lang/load.ts");
   const { representationsIn } = await import("../../ters/src/lang/represent.ts");

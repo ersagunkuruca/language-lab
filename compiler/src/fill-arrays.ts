@@ -56,7 +56,12 @@ export function fillArrays(code: Code, names: Names): { code: Code; names: Names
   const sites: { id: Id; by: Id | null; before: Id | null; n: Id; f: Id }[] = [];
   for (const [id, n] of nodeEntries(code.nodes)) {
     if (!isCall(n) || n.args?.length !== 1) continue;
-    const t = target(n.fn), by = t === ARRAY_OPS.of ? null : t;
+    // A call of anything but a definition by name is no site: a call of
+    // a call, `slopes(f)(map(range(n), g))`, isn't `array of` (Check main
+    // after #3284: reverse-gradient's slopes left as a tree).
+    const t = target(n.fn);
+    if (!t) continue;
+    const by = t === ARRAY_OPS.of ? null : t;
     if (by && !taker(by)) continue;
     const m = mapped(n.args[0]);
     if (m) { sites.push({ id, by, before: null, ...m }); continue; }

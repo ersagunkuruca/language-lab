@@ -135,7 +135,14 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     // Its units aren't checked again: a rewrite changes none (I261).
     const checkWith = { ...info.options, ...(r.insiders.length ? { insiders: [...(info.options?.insiders ?? []), ...r.insiders] } : {}), ends, units: false as const };
     const carried = carriedChoice(code, info, r.code, r.reps, defs);
-    const checked = carried ? { ...carried, options: checkWith } : infer(r.code, r.names, undefined, checkWith);
+    let checked = carried ? { ...carried, options: checkWith } : infer(r.code, r.names, undefined, checkWith);
+    // A pin that names a type stored now (the sounds module's on Bytes,
+    // L271c) is the meaning's: the definitions under it take the stored
+    // type, as the check carried says (carried-reps.ts). Where the check
+    // made again (TERS_RECHECK, carried-types.test) refuses the rewrite
+    // with such pins, it reads those definitions by their bodies.
+    const unpinned = unpinnedOf(info.options?.pins, new Set(r.reps.map((x) => x.of)));
+    if (!carried && unpinned && checked.errors.length > info.errors.length) checked = infer(r.code, r.names, undefined, { ...checkWith, pins: unpinned });
     if (checked.errors.length <= info.errors.length) {
       // Lists go alone (choiceOf); with Map or Set chosen first, they're
       // chosen again on what that made, the Map and Set rows asked for as
@@ -145,12 +152,9 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
       // A chosen row's own type that holds lists (a pool's slots) made the
       // program's own, so its lists are stored as the program's are.
       const held = r.reps.some((x) => TOGETHER[x.of]) ? ownLibraryHolders(r.code, { ...checked, options: { ...checked.options, insiders } }, r.names, main, defs, r.reps.map((x) => x.type)) : null;
-      // A pin that names a type stored now (the sounds module's on Bytes,
-      // L271c) is the meaning's: the definitions under it take the stored
-      // type, as the check carried says, so the lists' choice on what this
-      // made checks them by their bodies.
-      const pins = unpinnedOf(checked.options?.pins, new Set(r.reps.map((x) => x.of)));
-      const next = held ? { code: held.code, info: held.info, names: held.names, defs: held.own } : { code: r.code, info: { ...checked, options: { ...checked.options, insiders, ...(pins ? { pins } : {}) } }, names: r.names, defs };
+      // Those pins are dropped for the lists' choice on what this made, so
+      // it checks those definitions by their bodies.
+      const next = held ? { code: held.code, info: held.info, names: held.names, defs: held.own } : { code: r.code, info: { ...checked, options: { ...checked.options, insiders, ...(unpinned ? { pins: unpinned } : {}) } }, names: r.names, defs };
       const lists = withLibraryRepresentations(next.code, next.info, next.names, main, next.defs, [...asked, ...r.reps], options);
       return lists.chosen.length
         ? { ...lists, chosen: [...r.chosen, ...lists.chosen], insiders: [...r.insiders, ...lists.insiders], picks: [...(r.picks ?? []), ...(lists.picks ?? [])] }
