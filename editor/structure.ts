@@ -40,6 +40,16 @@ export interface StructureHost {
 export function structure(host: StructureHost) {
   const { doc, ui, applyT, render, topT, defBody, defNamed, ownDefs, typeText, pinRow, textField, seg, whereRuns } = host;
   const node = (id: Id) => doc().code.nodes[id];
+  // What a button would do, worked out once a version of the program: the
+  // side column is drawn again on each of the worker's answers, and a large
+  // definition's Delete alone took 40 to 100 ms each time (E319k).
+  let onceFor: { code: object; sh: object; m: Map<string, unknown> } | null = null;
+  const once = <R>(key: string, f: () => R): R => {
+    const d = doc();
+    if (onceFor?.code !== d.code || onceFor.sh !== d.names.short) onceFor = { code: d.code, sh: d.names.short, m: new Map() };
+    if (!onceFor.m.has(key)) onceFor.m.set(key, f());
+    return onceFor.m.get(key) as R;
+  };
   // A type, picked the way it's written: what it starts with (Float64, Int, a
   // data type, one of the type's own parameters) and, for one that takes
   // arguments, a picker for each, nested: Pair, then Int and Text. `none`
@@ -441,13 +451,13 @@ export function structure(host: StructureHost) {
       return out;
     } else return null;
 
-    const del = own.length > 1 ? Top.deleteDefinition(code, sh, ui.def) : { ok: false as const, reason: "it's the program's only definition" };
+    const del = own.length > 1 ? once(`delete ${ui.def}`, () => Top.deleteDefinition(code, sh, ui.def)) : { ok: false as const, reason: "it's the program's only definition" };
     // Duplicating checks the whole program, so it's worked out on the click.
     const typeDef = code.nodes[(code.nodes[ui.def] as NodeOf<"def">).body ?? ""]?.kind === "typedef";
     const dup = () => { const r = T.duplicate(code, sh, info, ui.def); if (r.ok) { ui.def = r.select!; ui.back = []; } applyT(r); };
     // A function used in one place goes inside it, as a let (E251); the
     // let's Make it a definition brings it out again.
-    const inside = T.insideOf(code, ui.def);
+    const inside = once(`inside ${ui.def}`, () => T.insideOf(code, ui.def));
     const putIn = () => { const r = T.putInside(code, sh, info, ui.def); if (r.ok) { ui.def = r.select!; ui.selected = null; ui.back = []; } applyT(r); };
     out.append(h("div", { class: "acts" },
       "host" in inside ? edit(`Put inside ${names[inside.host] ?? "its one use"}`, `${dname} as a let in ${names[inside.host] ?? "the definition using it"}, the one place it's used: the same meaning, one definition fewer. Undo puts it back`, { ok: true }, putIn) : null,
@@ -479,13 +489,13 @@ export function structure(host: StructureHost) {
 
   function paramRow(info: T.Info, names: Names, p: Id, of: Id = ui.def) {
     const code = doc().code, sh = doc().names.short;
-    const mv = (by: -1 | 1) => Top.moveParameter(code, sh, of, p, by);
-    const rm = Top.removeParameter(code, sh, of, p, true);
+    const mv = (by: -1 | 1) => once(`move ${of} ${p} ${by}`, () => Top.moveParameter(code, sh, of, p, by));
+    const rm = once(`remove ${of} ${p}`, () => Top.removeParameter(code, sh, of, p, true));
     return row(pick(p, names[p] ?? "input"),
       edit("↑", "Move earlier", mv(-1), () => runTop(info, mv(-1)), "btn mini"),
       edit("↓", "Move later", mv(1), () => runTop(info, mv(1)), "btn mini"),
       // A used input can go too: its uses become holes, to fill or clear.
-      edit("×", T.usesOf(code, p).length ? "Remove input: where it's used becomes a hole" : "Remove input", rm, () => runTop(info, rm, (r) => { ui.selected = r.select !== of ? r.select : of === ui.def ? null : of; }), "btn mini"));
+      edit("×", once(`used ${p}`, () => T.usesOf(code, p).length) ? "Remove input: where it's used becomes a hole" : "Remove input", rm, () => runTop(info, rm, (r) => { ui.selected = r.select !== of ? r.select : of === ui.def ? null : of; }), "btn mini"));
   }
 
   // A function written inside a body, (x) => …, passed to map or keep say:
