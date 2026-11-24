@@ -510,7 +510,10 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   const all = { nodes: withNodes(k.code.nodes, nodes), defs: [...code.defs, ...copied, ...made] };
   // The way back from a builtin's list (listBoundary's `made`) is written
   // on List, and stays so.
-  const kept = [...made.filter((d) => !own.includes(d)), ...(boundary ? [...boundary.made, ...boundary.edges] : [])];
+  // So are an asked row's own definitions (Bytes as a byte array's,
+  // written on List Int), where lists go to arrays beside it.
+  const rowsAsked = lists ? asked.filter((r) => plainRow(code, r)).flatMap((r) => [...Object.values(r.impl), ...(r.meaning ? [r.meaning] : []), ...(r.store ? [r.store] : [])]) : [];
+  const kept = [...made.filter((d) => !own.includes(d)), ...(boundary ? [...boundary.made, ...boundary.edges] : []), ...rowsAsked];
   const out = chosen.reduce((c, rep) => represent(c, own, rep, kept), all);
   return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}`), insiders: made, reps: chosen, picks: chosen.map((r) => ({ of: r.of, rep: r.name })) };
 }
@@ -1017,15 +1020,18 @@ const STRUCTURAL = new Set<Id>([S.oneOf, S.fail, ...Object.values(ARRAY_OPS)]);
 // of a library type holding lists (bounce's Algebra) may be passed about,
 // only not taken apart or made, since its lists stay as written.
 export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, asked: Representation[] = [], owned: Set<Id> = new Set(), asWritten?: Set<Id>): { nodes: Record<Id, Node>; reached: Id[]; made: Id[]; edges: Id[] } | null {
-  const program = new Set([...defs, ...owned]), inside = holdsType(code, LIST), stored = new Set([...asked.map((r) => r.of), ...RUNTIME_READ]);
-  // A runtime-read type (a frame's pass) holds what the runtime reads either way.
-  const hasList = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || (inside(t.id) && !RUNTIME_READ.has(t.id)) || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false; };
+  const stored = new Set([...asked.map((r) => r.of), ...RUNTIME_READ]);
+  const program = new Set([...defs, ...owned]), inside = holdsType(code, LIST);
+  // A runtime-read type (a frame's pass) holds what the runtime reads either
+  // way, and a type an asked row stores (Bytes as a byte array) no list.
+  const hasList = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || (inside(t.id) && !stored.has(t.id)) || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false; };
   // A type the library defines with a list in it (Set and Map as written,
   // Algebra): its definition isn't the program's, so the rewrite leaves
   // its fields List while the values in them would be arrays. A type
   // already stored by an asked row (Map as a hash table) holds no list.
   const libraryHolder = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? (t.id !== LIST && !program.has(t.id) && !stored.has(t.id) && inside(t.id)) || t.args.some(libraryHolder) : t.t === "fn" ? [...t.params, t.ret].some(libraryHolder) : false; };
-  const { closed, edge } = listEdges(code, info, program, stored);
+  const rowDefsOf = new Set(asked.filter((r) => plainRow(code, r)).flatMap((r) => [...Object.values(r.impl), ...(r.meaning ? [r.meaning] : []), ...(r.store ? [r.store] : [])]));
+  const { closed, edge } = listEdges(code, info, program, stored, rowDefsOf);
   const openHolder = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? (!closed(t) && t.id !== LIST && !program.has(t.id) && !stored.has(t.id) && inside(t.id)) || t.args.some(openHolder) : t.t === "fn" ? [...t.params, t.ret].some(openHolder) : false; };
   // What the rewrite reaches (represent.ts), and what it keeps as it is.
   const own = new Set<Id>();
@@ -1035,7 +1041,7 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
   while (todo.length) {
     const d = todo.pop()!;
     // An asked row's meaning is written on its type as written, and stays.
-    if (reached.has(d) || rep.impl[d] || asked.some((r) => r.meaning === d) || asWritten?.has(d) || edge(d)) continue;
+    if (reached.has(d) || rep.impl[d] || asked.some((r) => r.meaning === d) || asWritten?.has(d) || edge(d) || rowDefsOf.has(d)) continue;
     const def = code.nodes[d];
     if (def?.kind !== "def" || (def.body && code.nodes[def.body]?.kind === "typedef")) continue;
     if (own.has(d)) return null;
@@ -1122,7 +1128,11 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
     // which would put `array of` inside the path (clinic's desks).
     const rec = target === SET ? info.typeOf.get(c.args[1]) : undefined, recT = rec && info.subst.zonk(rec);
     const setPasses = target === SET && recT?.t === "con" && program.has(recT.id) && !owned.has(recT.id);
-    const passes = PASSES_ON.has(target) || target === S.oneOf || target === S.fail || setPasses;
+    // `list of` given lists (a Sound's channels, `[left, right]`) makes a
+    // list of them as they are: its answer is stored whole, its items
+    // already the row's (L271c).
+    const ofLists = target === S.listOf && c.args.length > 0;
+    const passes = PASSES_ON.has(target) || target === S.oneOf || target === S.fail || setPasses || ofLists;
     const sig = edgeOf ?? SIGS[target](new Subst());
     if (sig.t !== "fn") return null;
     const args = c.args.map((a, i) => {
@@ -1134,8 +1144,8 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
     if (args.includes(null)) return null;
     const ret = info.typeOf.get(c.id);
     const changed = args.some((a, i) => a !== c.args[i]);
-    if (ret && hasList(ret) && !closed(info.subst.zonk(ret)) && !(passes && !plainList(sig.ret, ret))) {
-      if (!plainList(sig.ret, ret)) return null;
+    if (ret && hasList(ret) && !closed(info.subst.zonk(ret)) && (ofLists || !(passes && !plainList(sig.ret, ret)))) {
+      if (!ofLists && !plainList(sig.ret, ret)) return null;
       // The call keeps its id, so its name and comments stay on it.
       const inner = freshId(), of = freshId();
       nodes[inner] = { ...c, id: inner, args: args as Id[] };
@@ -1153,7 +1163,11 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
 // plain lists (`byte items`, `utf8 of`), called as a builtin is, its lists
 // converted where they cross (pack's bytes, GAPS round 18 P1). `edge`
 // gives its type, or null.
-export function listEdges(code: Code, info: Info, program: Set<Id>, stored: Set<Id> = new Set()) {
+// An asked row's own definitions (Bytes as a byte array: `byte array
+// bytes of`, given a List Int) are edges too, where each part of their
+// type is a plain list or holds none (`rowDefs`): written on List, their
+// lists converted where they cross (L271c, lists as arrays beside it).
+export function listEdges(code: Code, info: Info, program: Set<Id>, stored: Set<Id> = new Set(), rowDefs: Set<Id> = new Set()) {
   const inside = holdsType(code, LIST);
   const hasList = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || inside(t.id) || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false; };
   // Its fields are plain lists, or hold none (Bytes' List Int); not a
@@ -1173,7 +1187,7 @@ export function listEdges(code: Code, info: Info, program: Set<Id>, stored: Set<
     let t = program.has(d) || code.nodes[d]?.kind !== "def" ? undefined : info.typeOf.get(d);
     t = t && info.subst.zonk(t);
     const parts = t?.t === "fn" ? [...t.params, t.ret].map((p) => info.subst.zonk(p)) : [];
-    const yes = parts.some(closed) && parts.every((p) => closed(p) || plain(p) || !hasList(p));
+    const yes = (parts.some(closed) || (rowDefs.has(d) && parts.some(plain))) && parts.every((p) => closed(p) || plain(p) || !hasList(p) || stored.has(p.t === "con" ? p.id : ""));
     edgeType.set(d, yes ? t! : null);
     return yes ? t! : null;
   };
@@ -1290,6 +1304,14 @@ interface Boundary { nodes: Record<Id, Node>; made: Id[]; names: Names; copyOf: 
 
 // Does a type's definition name `of` in its fields, itself or through
 // another type that does?
+// A row of a type with no parameters (Bytes as a byte array), whose
+// definitions read the type as written, a plain list inside: those stay
+// written on List beside lists as arrays. A Map's or a Set's row is
+// rewritten with the program (swarm's table keys into an array, C58j).
+function plainRow(code: Code, r: Representation): boolean {
+  const td = code.nodes[(code.nodes[r.of] as NodeOf<"def"> | undefined)?.body ?? ""];
+  return td?.kind === "typedef" && !td.params.length;
+}
 function holdsType(code: Code, of: Id): (id: Id) => boolean {
   const memo = new Map<Id, boolean>();
   const holds = (id: Id): boolean => {

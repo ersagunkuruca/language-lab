@@ -22,19 +22,29 @@ import type { Names } from "../../ters/src/presentation.ts";
 import { infer, inferRewritten, type Info } from "../../ters/src/lang/infer.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { PRELUDE_DEFS, originalOf } from "../../ters/src/lang/prelude-ids.ts";
-import { ARRAY_OPS, INT_OPS } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, INT_OPS, LIST } from "../../ters/src/lang/std.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
 
 const MAP = PRELUDE_DEFS["map"], APPEND = PRELUDE_DEFS["append"];
+// Where the program's lists are arrays (library-reps.ts), its map and
+// append are the array row's, the range made an array first, and a
+// taker of a list given one through `items of array` (L271c: wav of
+// beside a Sound stored so).
+const ARRAY_ROW = LIBRARY.reps.find((r) => r.of === LIST && r.name === "array of List");
+const isMap = (t: Id) => originalOf(t) === MAP || t === ARRAY_ROW?.impl[MAP];
+const isAppend = (t: Id) => originalOf(t) === APPEND || t === ARRAY_ROW?.impl[APPEND];
 
 export function fillArrays(code: Code, names: Names): { code: Code; names: Names; made: Id[] } {
   const target = (id: Id | undefined) => { const n = id ? code.nodes[id] : undefined; return n?.kind === "ref" ? n.target : null; };
   const calls = (id: Id | undefined, f: (t: Id) => boolean, n: number) => { const x = id ? code.nodes[id] : undefined; if (!isCall(x) || x.args?.length !== n) return null; const t = target(x.fn); return t && f(t) ? x.args : null; };
   // map(range(n), f): n and f.
   const mapped = (id: Id | undefined) => {
-    const m = calls(id, (t) => originalOf(t) === MAP, 2);
-    const r = m && calls(m[0], (t) => t === INT_OPS.range, 1);
+    const m = calls(id, isMap, 2);
+    const r = m && (calls(m[0], (t) => t === INT_OPS.range, 1) ?? calls(calls(m[0], (t) => t === ARRAY_OPS.of, 1)?.[0], (t) => t === INT_OPS.range, 1));
     return m && r ? { n: r[0], f: m[1] } : null;
   };
+  // The list given, or the array whose items are given.
+  const givenOf = (id: Id) => { const a = calls(id, (t) => t === ARRAY_OPS.items, 1); return a ? { id: a[0], array: true } : { id, array: false }; };
   // A definition of one parameter that reads it only as `array of` it
   // (bytes-array.ts's `byte array bytes of`, where Bytes are stored as a
   // byte array): its parameter and that call.
@@ -53,7 +63,7 @@ export function fillArrays(code: Code, names: Names): { code: Code; names: Names
     takers.set(d, r);
     return r;
   };
-  const sites: { id: Id; by: Id | null; before: Id | null; n: Id; f: Id }[] = [];
+  const sites: { id: Id; by: Id | null; before: Id | null; beforeArray: boolean; n: Id; f: Id }[] = [];
   for (const [id, n] of nodeEntries(code.nodes)) {
     if (!isCall(n) || n.args?.length !== 1) continue;
     // A call of anything but a definition by name is no site: a call of
@@ -63,10 +73,11 @@ export function fillArrays(code: Code, names: Names): { code: Code; names: Names
     if (!t) continue;
     const by = t === ARRAY_OPS.of ? null : t;
     if (by && !taker(by)) continue;
-    const m = mapped(n.args[0]);
-    if (m) { sites.push({ id, by, before: null, ...m }); continue; }
-    const a = calls(n.args[0], (t) => originalOf(t) === APPEND, 2), m2 = a && mapped(a[1]);
-    if (a && m2) sites.push({ id, by, before: a[0], ...m2 });
+    const g = givenOf(n.args[0]);
+    const m = mapped(g.id);
+    if (m) { sites.push({ id, by, before: null, beforeArray: false, ...m }); continue; }
+    const a = calls(g.id, isAppend, 2), m2 = a && mapped(a[1]);
+    if (a && m2) sites.push({ id, by, before: a[0], beforeArray: g.array, ...m2 });
   }
   if (!sites.length) return { code, names, made: [] };
   const k = new Lang(code), nodes = copyNodes(code.nodes);
@@ -89,7 +100,7 @@ export function fillArrays(code: Code, names: Names): { code: Code; names: Names
     return c;
   };
   for (const s of sites) {
-    const start = s.before ? k.call(ARRAY_OPS.of, s.before) : k.call(ARRAY_OPS.empty);
+    const start = s.before ? k.call(ARRAY_OPS.of, s.beforeArray ? k.call(ARRAY_OPS.items, s.before) : s.before) : k.call(ARRAY_OPS.empty);
     // The list made before taken out: the map's call, its range's, and
     // an append's, with the refs naming them.
     const was = code.nodes[s.id] as { fn: Id; args: Id[] };
@@ -100,7 +111,7 @@ export function fillArrays(code: Code, names: Names): { code: Code; names: Names
       dropNode(nodes, c.fn);
       const t = target(c.fn);
       if (t === INT_OPS.range) break;
-      x = originalOf(t!) === APPEND ? c.args[1] : c.args[0];
+      x = isAppend(t!) ? c.args[1] : c.args[0];
     }
     const filled: Node = { id: s.id, kind: "call", fn: k.x(fill), args: [start, k.int(0), s.n, s.f] } as Node;
     if (!s.by) nodes[s.id] = filled;
