@@ -36,7 +36,7 @@ import { ownedPushes } from "./owned-pushes.ts";
 import { ownedRecords } from "./owned-records.ts";
 import { ownedTables } from "./owned-tables.ts";
 import { envSet, zeroParts } from "./zero-parts.ts";
-import { ARITH, ARRAY_OPS, FALSE, FIRST, PAIR_V, S, SECOND, TRUE } from "../../ters/src/lang/std.ts";
+import { ARITH, ARRAY_OPS, BYTES_V, FALSE, FIRST, PAIR_V, S, SECOND, TRUE } from "../../ters/src/lang/std.ts";
 import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std-impl.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
@@ -182,6 +182,9 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
   // `fields` where it has no f0.
   const classes = new Map<string, string>();
   const made = (variant: Id, xs: string[]): string => {
+    // Bytes hold their items as one array (C321), so `byte at` reads one
+    // in place, not a list's cells from its start.
+    if (variant === BYTES_V && xs.length === 1) xs = [`R.itemsOf(${xs[0]})`];
     const key = `${variant}/${xs.length}`;
     if (!classes.has(key)) classes.set(key, `K${classes.size}`);
     return `new ${classes.get(key)}(${xs.join(", ")})`;
@@ -726,7 +729,14 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
     const step = (everyStep || ir.info.divergent.has(f.def)) && !f.piece ? [fuel ? "if (fuel === Infinity) R.step();" : "R.step();"] : [];
     const spend = (d: string) => [...(f.spends ? [`${d}if (--fuel < 0) throw R.OUT;`] : []), ...step.map((x) => d + x)];
     const params = f.params.map((_, j) => local(j));
-    const body = loops ? ["  for (;;) {", ...spend("    "), ...block(f.body, "return", "    "), "  }"] : [...spend("  "), ...block(f.body, "return", "  ")];
+    // The library's `item at` and `length` on a list over one array (the
+    // runtime's ItemsList: Bytes' items, a table's keys) read it in place,
+    // as an array's are (C321): walked a cell at a time, `byte at` read
+    // mnist-page's 74 KB of digits from their start, 3 s a batch.
+    const inPlace = !f.def.startsWith("@") || params.length !== (f.name === "item at" ? 3 : f.name === "length" ? 1 : -1) ? []
+      : f.name === "length" ? [`  if (${params[0]} instanceof R.ItemsList) return ${params[0]}.b.length - ${params[0]}.i;`]
+      : [`  if (${params[0]} instanceof R.ItemsList && typeof ${params[1]} === "number") return Number.isInteger(${params[1]}) && ${params[1]} >= 0 && ${params[0]}.i + ${params[1]} < ${params[0]}.b.length ? ${params[0]}.b[${params[0]}.i + ${params[1]}] : ${params[2]};`];
+    const body = [...inPlace, ...(loops ? ["  for (;;) {", ...spend("    "), ...block(f.body, "return", "    "), "  }"] : [...spend("  "), ...block(f.body, "return", "  ")])];
     const locals = f.locals.map((_, j) => f.params.length + j).filter((j) => used.has(j)).map((j) => `l${j}`);
     // A definition that isn't a function is worked out once, at its first
     // use, as compile.ts has it (`??=`): sheet's `symbols`, a set made from

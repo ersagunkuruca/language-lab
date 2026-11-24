@@ -20,7 +20,7 @@ import { worldTimers, type Timers } from "../../ters/src/lang/timers.ts";
 import { NoAnswer } from "../../ters/src/lang/html.ts";
 import { worldRandom } from "../../ters/src/lang/random.ts";
 import * as I from "../../ters/src/lang/int.ts";
-import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
+import { ItemsList, bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
@@ -498,6 +498,17 @@ export const RUNTIME = {
   FAIL, OUT, Aborted, Pending, Unsupported, planned, moded,
   // An array's item read in place (core-js.ts, G3d).
   ArrayView, arrayView,
+  // A list over one array (Bytes' items, a table's keys), read by position
+  // in place (core-js.ts, C321), and a list made one: Bytes made in
+  // compiled code hold their items so.
+  ItemsList,
+  itemsOf: (l: unknown): ItemsList => {
+    if (l instanceof ItemsList) return l;
+    if (l instanceof ArrayView) return new ItemsList(l.buf.items.slice(l.start, l.start + l.n), 0);
+    const xs: unknown[] = [];
+    for (let c = l as { tag: string; fields: unknown[]; f0?: unknown; f1?: unknown }; c.tag === CONS; c = (c.f1 ?? c.fields[1]) as typeof c) xs.push(c.f0 ?? c.fields[0]);
+    return new ItemsList(xs, 0);
+  },
   branchesFrom: ((...a) => branched().branchesFrom(...a)) as typeof branchesFrom,
   branchWorker: ((...a) => branched().branchWorker(...a)) as typeof branchWorker,
   pageBranches: ((...a) => branched().pageBranches(...a)) as typeof pageBranches,
