@@ -74,10 +74,16 @@ export function countedCalls(code: Code, self: Id, lam: NodeOf<"lambda">, isInt?
     if (f.target === S.not) return guardsOf(n.args[0], !holds);
     // a and b true: both are; a or b false: neither is.
     if ((f.target === S.and && holds) || (f.target === S.or && !holds)) return n.args.flatMap((a) => guardsOf(a, holds));
-    if (!LESS.has(f.target)) return [];
+    // ≤, > and ≥ (the library's `at most`, `more than` and `at least`,
+    // each a < of its two inputs, maybe swapped, maybe negated): read as
+    // that < (C303: `if n ≤ 0 then acc else dot(…, n − 1, …)`).
+    const wrap = LESS.has(f.target) ? { swap: false, negated: false } : lessOf(code, f.target);
+    if (!wrap) return [];
+    const [a0, a1] = wrap.swap ? [n.args[1], n.args[0]] : [n.args[0], n.args[1]];
+    const h = holds !== wrap.negated;
     // holds: a < b. Otherwise b ≤ a. The smaller side may count up towards
     // the larger, the larger down towards the smaller.
-    const [lo, hi] = holds ? [n.args[0], n.args[1]] : [n.args[1], n.args[0]];
+    const [lo, hi] = h ? [a0, a1] : [a1, a0];
     const out: Guard[] = [];
     const ilo = inputOf(lo), ihi = inputOf(hi), bh = boundOf(hi, ilo), bl = boundOf(lo, ihi);
     if (ilo !== undefined && bh !== null) out.push({ input: ilo, up: true, bound: bh });
@@ -140,4 +146,20 @@ export function countedCalls(code: Code, self: Id, lam: NodeOf<"lambda">, isInt?
     if (fine) for (const c of calls) if (c.counts.some((x) => x.input === j)) out.add(`${c.call}:${j}`);
   }
   return out;
+}
+
+// A definition of two inputs that is their < (an Int's or the generic
+// one), maybe with them swapped, maybe negated: how its call reads as a <.
+function lessOf(code: Code, d: Id): { swap: boolean; negated: boolean } | null {
+  const def = code.nodes[d];
+  const lam = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
+  if (lam?.kind !== "lambda" || lam.params.length !== 2) return null;
+  let body = code.nodes[lam.body], negated = false;
+  const fnOf = (n: Node | undefined) => (isCall(n) && code.nodes[n.fn]?.kind === "ref" ? (code.nodes[n.fn] as NodeOf<"ref">).target : undefined);
+  if (isCall(body) && fnOf(body) === S.not && body.args.length === 1) { negated = true; body = code.nodes[body.args[0]]; }
+  if (!isCall(body) || !LESS.has(fnOf(body)!) || body.args.length !== 2) return null;
+  const at = body.args.map((a) => { const r = code.nodes[a]; return r?.kind === "ref" ? lam.params.indexOf(r.target) : -1; });
+  if (at[0] === 0 && at[1] === 1) return { swap: false, negated };
+  if (at[0] === 1 && at[1] === 0) return { swap: true, negated };
+  return null;
 }

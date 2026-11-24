@@ -190,6 +190,26 @@ test("bounded counting: untyped literals count an input that is an Int", () => {
   assert.ok(p.effects(defs["any down"]).includes(DIVERGE), p.type(defs["any down"]));
 });
 
+// C303: ≤, > and ≥ are the library's `at most`, `more than` and `at least`,
+// each a < of its inputs, swapped or negated; a guard written with one
+// counts as that < does (`if n ≤ 0 then acc else dot(…, n − 1, …)`).
+test("bounded counting: a guard written with ≤, > or ≥ counts as its <", () => {
+  const defs: Record<string, Id> = {};
+  const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
+  const p = program((k) => {
+    const def = (name: string, params: string[], body: (self: Id, ...ps: Id[]) => Id) => { const d = k.def(name); defs[name] = d; k.define(d, k.fn(params, (...ps) => body(d, ...ps))); };
+    const minus = (a: Id) => k.call(I.sub, a, k.int(1)), plus = (a: Id) => k.call(I.add, a, k.int(1));
+    def("at most down", ["n", "acc"], (self, n, acc) => k.if(k.call(lib("at most"), n, k.int(0)), acc, k.call(self, minus(n), plus(acc))));
+    def("more than down", ["n", "acc"], (self, n, acc) => k.if(k.call(lib("more than"), n, k.int(0)), k.call(self, minus(n), plus(acc)), acc));
+    def("at least up", ["i", "n"], (self, i, nn) => k.if(k.call(lib("at least"), i, nn), i, k.call(self, plus(i), nn)));
+    // counted the wrong way: ≤ 0 stops, but the count goes up
+    def("at most up", ["n"], (self, n) => k.if(k.call(lib("at most"), n, k.int(0)), n, k.call(self, plus(n))));
+  }, LIBRARY.code);
+  assert.deepEqual(p.errors, []);
+  for (const d of ["at most down", "more than down", "at least up"]) assert.ok(!p.effects(defs[d]).includes(DIVERGE), `${d}: ${p.type(defs[d])}`);
+  assert.ok(p.effects(defs["at most up"]).includes(DIVERGE), p.type(defs["at most up"]));
+});
+
 test("only functions can be recursive: a value defined in terms of itself is refused", () => {
   const p = program((k) => {
     const ones = k.def("ones");
