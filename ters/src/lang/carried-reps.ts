@@ -120,9 +120,18 @@ export function carriedChoice(code: Code, info: Info, next: Code, reps: Represen
     };
     return put(general);
   };
-  for (const d of rewritten) for (const id of subtree(next, d)) {
+  // Inside out, so a call's inputs are typed before it.
+  for (const d of rewritten) for (const id of [...subtree(next, d)].reverse()) {
     const n = next.nodes[id];
-    if (n?.kind !== "call" || n.given !== undefined || typeOf.has(n.fn)) continue;
+    if (n?.kind !== "call" || n.given !== undefined) continue;
+    if (typeOf.has(n.fn)) {
+      // A call the rewrite made of a builtin it found there (`read
+      // bytes`, its Bytes stored where it gives them, plainBoundary): the
+      // builtin's own type, which takes and gives the meaning.
+      const was = info.typeOf.get(n.fn), ft = was && info.subst.zonk(was);
+      if (!typeOf.has(id) && ft?.t === "fn" && next.nodes[n.fn]?.kind === "ref" && next.nodes[(next.nodes[n.fn] as { target: Id }).target]?.kind === "builtin") { typeOf.set(n.fn, ft); typeOf.set(id, ft.ret); }
+      continue;
+    }
     const f = next.nodes[n.fn];
     if (f?.kind !== "ref") return null;
     const sc = schemes.get(f.target);

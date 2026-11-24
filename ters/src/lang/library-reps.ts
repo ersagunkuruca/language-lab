@@ -33,6 +33,7 @@ import { ownLibraryHolders } from "./own-holders.ts";
 import { keptMap } from "../kept.ts";
 import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
 import { INT, STRING, Subst, type Type } from "./types.ts";
+import type { Pins } from "./signatures.ts";
 
 // What equal, show and compare see of a value: these, given a stored one,
 // are its row's (byType), which go through its meaning.
@@ -103,6 +104,16 @@ export function endedAsWritten(info: Info, defs: Iterable<Id>): Id[] {
   return [...defs].filter((d) => info.typeOf.has(d) && !info.divergent.has(d));
 }
 
+// Pins without those that name one of `types` anywhere; null where none does.
+function unpinnedOf(pins: Pins | undefined, types: Set<Id>): Pins | null {
+  if (!pins) return null;
+  const names = (t: Type): boolean => t.t === "con" ? types.has(t.id) || t.args.some(names) : t.t === "fn" ? [...t.params, t.ret].some(names) : false;
+  const out: Pins = {};
+  let dropped = false;
+  for (const d in pins) { if (names(pins[d].type)) dropped = true; else out[d] = pins[d]; }
+  return dropped ? out : null;
+}
+
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
   // A match on an Int's cases is written out on Int before Nat is stored
   // (int-cases.ts, L249b).
@@ -134,7 +145,12 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
       // A chosen row's own type that holds lists (a pool's slots) made the
       // program's own, so its lists are stored as the program's are.
       const held = r.reps.some((x) => TOGETHER[x.of]) ? ownLibraryHolders(r.code, { ...checked, options: { ...checked.options, insiders } }, r.names, main, defs, r.reps.map((x) => x.type)) : null;
-      const next = held ? { code: held.code, info: held.info, names: held.names, defs: held.own } : { code: r.code, info: { ...checked, options: { ...checked.options, insiders } }, names: r.names, defs };
+      // A pin that names a type stored now (the sounds module's on Bytes,
+      // L271c) is the meaning's: the definitions under it take the stored
+      // type, as the check carried says, so the lists' choice on what this
+      // made checks them by their bodies.
+      const pins = unpinnedOf(checked.options?.pins, new Set(r.reps.map((x) => x.of)));
+      const next = held ? { code: held.code, info: held.info, names: held.names, defs: held.own } : { code: r.code, info: { ...checked, options: { ...checked.options, insiders, ...(pins ? { pins } : {}) } }, names: r.names, defs };
       const lists = withLibraryRepresentations(next.code, next.info, next.names, main, next.defs, [...asked, ...r.reps], options);
       return lists.chosen.length
         ? { ...lists, chosen: [...r.chosen, ...lists.chosen], insiders: [...r.insiders, ...lists.insiders], picks: [...(r.picks ?? []), ...(lists.picks ?? [])] }
@@ -250,7 +266,9 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   // types their meanings use are chosen for what is left.
   const replaced = () => chosen.flatMap((r) => (r.canonical ? [] : Object.keys(r.impl)));
   const byType = [...new Set(LIBRARY.reps.filter((r) => r.byType && !COMPANIONS.has(r.of)).map((r) => r.of))];
-  if (!replayed) types: for (const ty of [...byType.filter((t) => TOGETHER[t]), ...byType.filter((t) => !TOGETHER[t])]) {
+  // Lists last: a choice of them goes alone and ends this one, so a type
+  // after them (Bytes, read by position in wav-file) was never looked at.
+  if (!replayed) types: for (const ty of [...byType.filter((t) => TOGETHER[t]), ...byType.filter((t) => !TOGETHER[t] && t !== LIST), ...byType.filter((t) => t === LIST)]) {
     const spec = LIBRARY.reps.find((r) => r.of === ty && r.canonical)!;
     const hold = options.held?.get(ty);
     const refuse = (why: string): never => { throw new Error(`${names[ty] ?? LIBRARY.names[ty] ?? ty} can't be held as ${hold} here: ${why}`); };

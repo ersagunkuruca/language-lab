@@ -8,12 +8,16 @@
 //
 // from an empty array, or, for `array of(append(xs, map(range(n), f)))`,
 // from the array of xs: one loop, each item pushed into the room the
-// array has (array-view.ts pushBack), no list made. The items are made in the order the map
-// makes them. The program is checked again only when one was found.
+// array has (array-view.ts pushBack), no list made. The items are made
+// in the order the map makes them. Where Bytes are stored as a byte
+// array, a WAV file's `bytes of(append(header, map(range(size), byte)))`
+// is a call of `byte array bytes of`, which reads its list only as
+// `array of` it: its copy given the filled array is called instead. The
+// program is checked again only when one was found.
 // (Fusion: Wadler's deforestation, 1990; CREDITS.md.)
 
 import type { Code, Id, Node } from "../../ters/src/model.ts";
-import { isCall, copyNodes, dropNode, nodeEntries } from "../../ters/src/model.ts";
+import { isCall, copyNodes, dropNode, freshId, mapIds, nodeEntries, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, inferRewritten, type Info } from "../../ters/src/lang/infer.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
@@ -31,24 +35,60 @@ export function fillArrays(code: Code, names: Names): { code: Code; names: Names
     const r = m && calls(m[0], (t) => t === INT_OPS.range, 1);
     return m && r ? { n: r[0], f: m[1] } : null;
   };
-  const sites: { id: Id; before: Id | null; n: Id; f: Id }[] = [];
+  // A definition of one parameter that reads it only as `array of` it
+  // (bytes-array.ts's `byte array bytes of`, where Bytes are stored as a
+  // byte array): its parameter and that call.
+  const takers = new Map<Id, { p: Id; at: Id } | null>();
+  const taker = (d: Id | null) => {
+    if (!d) return null;
+    if (takers.has(d)) return takers.get(d)!;
+    let r: { p: Id; at: Id } | null = null;
+    const def = code.nodes[d], fn = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
+    if (fn?.kind === "lambda" && fn.params.length === 1) {
+      const p = fn.params[0], ids = subtree(code, fn.id);
+      const uses = ids.filter((x) => target(x) === p);
+      const at = uses.length === 1 ? ids.find((x) => { const c = code.nodes[x]; return isCall(c) && c.args?.length === 1 && c.args[0] === uses[0] && target(c.fn) === ARRAY_OPS.of; }) : undefined;
+      if (at) r = { p, at };
+    }
+    takers.set(d, r);
+    return r;
+  };
+  const sites: { id: Id; by: Id | null; before: Id | null; n: Id; f: Id }[] = [];
   for (const [id, n] of nodeEntries(code.nodes)) {
-    if (!isCall(n) || n.args?.length !== 1 || target(n.fn) !== ARRAY_OPS.of) continue;
+    if (!isCall(n) || n.args?.length !== 1) continue;
+    const t = target(n.fn), by = t === ARRAY_OPS.of ? null : t;
+    if (by && !taker(by)) continue;
     const m = mapped(n.args[0]);
-    if (m) { sites.push({ id, before: null, ...m }); continue; }
+    if (m) { sites.push({ id, by, before: null, ...m }); continue; }
     const a = calls(n.args[0], (t) => originalOf(t) === APPEND, 2), m2 = a && mapped(a[1]);
-    if (a && m2) sites.push({ id, before: a[0], ...m2 });
+    if (a && m2) sites.push({ id, by, before: a[0], ...m2 });
   }
   if (!sites.length) return { code, names, made: [] };
   const k = new Lang(code), nodes = copyNodes(code.nodes);
   const fill = k.def("filled");
   k.define(fill, k.fn(["array", "at", "count", "f"], (a, i, n, f) =>
     k.if(k.call(INT_OPS.less, i, n), k.call(fill, k.call(ARRAY_OPS.push, a, k.call(f, i)), k.call(INT_OPS.add, i, k.int(1)), n, f), a)));
+  // A taker given the array instead: a copy of it whose `array of` its
+  // parameter is the parameter.
+  const given = new Map<Id, Id>();
+  const givenArray = (d: Id) => {
+    const done = given.get(d);
+    if (done) return done;
+    const { p, at } = taker(d)!, fn = (code.nodes[d] as { body: Id }).body, use = (code.nodes[at] as { args: Id[] }).args[0];
+    const ids = new Map(subtree(code, fn).map((x) => [x, freshId()]));
+    const to = (x: Id) => ids.get(x) ?? x;
+    for (const [x, y] of ids) if (x !== use) nodes[y] = x === at ? { id: y, kind: "ref", target: to(p) } as Node : mapIds(code.nodes[x], to);
+    const c = k.def(`${names[d] ?? "it"} given the array`);
+    (k.code.nodes as Record<Id, Node>)[c] = { id: c, kind: "def", body: to(fn) } as Node;
+    given.set(d, c);
+    return c;
+  };
   for (const s of sites) {
     const start = s.before ? k.call(ARRAY_OPS.of, s.before) : k.call(ARRAY_OPS.empty);
     // The list made before taken out: the map's call, its range's, and
     // an append's, with the refs naming them.
-    const was = code.nodes[s.id] as { args: Id[] };
+    const was = code.nodes[s.id] as { fn: Id; args: Id[] };
+    dropNode(nodes, was.fn);
     for (let x: Id | undefined = was.args[0]; x;) {
       const c = code.nodes[x] as { fn: Id; args: Id[] };
       dropNode(nodes, x);
@@ -57,7 +97,14 @@ export function fillArrays(code: Code, names: Names): { code: Code; names: Names
       if (t === INT_OPS.range) break;
       x = originalOf(t!) === APPEND ? c.args[1] : c.args[0];
     }
-    nodes[s.id] = { id: s.id, kind: "call", fn: k.x(fill), args: [start, k.int(0), s.n, s.f] } as Node;
+    const filled: Node = { id: s.id, kind: "call", fn: k.x(fill), args: [start, k.int(0), s.n, s.f] } as Node;
+    if (!s.by) nodes[s.id] = filled;
+    else {
+      // The taker's call given the filled array.
+      const inner = freshId();
+      nodes[inner] = { ...filled, id: inner } as Node;
+      nodes[s.id] = { id: s.id, kind: "call", fn: k.x(givenArray(s.by)), args: [inner] } as Node;
+    }
   }
   Object.assign(nodes, k.code.nodes);
   return { code: { nodes, defs: [...code.defs, ...k.code.defs] }, names: { ...names, ...k.names }, made: sites.map((s) => s.id) };
