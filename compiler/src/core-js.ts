@@ -53,6 +53,7 @@ import * as I from "../../ters/src/lang/int.ts";
 import { gpuMaps } from "./gpu-maps.ts";
 import { gpuDraws, packsOf } from "./gpu-draws.ts";
 import { rangeArrays, rangeChoices } from "./range-choices.ts";
+import { originalOf, PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
 import { earlyAnd } from "./early-and.ts";
 import { ARRAY_RT, emptyArray, isArray, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, poolHeld, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import type { Type } from "../../ters/src/lang/types.ts";
@@ -854,12 +855,20 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
 
 // `array of` a written list: `array.ofItems`, its items handed as they
 // are, so no cons cell is made for each to be read back.
+// And `array of(append(items of a, items of b))` of two arrays of its
+// own kind: `array.concat`, the two copied into one, with no list between
+// (C324: bazaar's `concat arrays`, joining two rows at every match).
 function writtenArrays(ir: CoreIR): void {
+  const append = new Set(ir.funcs.flatMap((f, i) => (originalOf(f.def) === PRELUDE_DEFS.append ? [i] : [])));
   const go = (e: SExpr): SExpr => {
     const x = mapKids(e, go);
     const m = x.k === "rt" ? /^array\.of\.(a\d+)$/.exec(x.fn) : null;
-    if (!m || x.k !== "rt" || x.args.length !== 1 || x.args[0].k !== "list") return x;
-    return { ...x, fn: `array.ofItems.${m[1]}`, args: x.args[0].items };
+    if (!m || x.k !== "rt" || x.args.length !== 1) return x;
+    const l = x.args[0];
+    if (l.k === "list") return { ...x, fn: `array.ofItems.${m[1]}`, args: l.items };
+    const items = (y: SExpr) => (y.k === "rt" && y.fn === `array.items.${m[1]}` && y.args.length === 1 ? y.args[0] : null);
+    if (l.k === "call" && append.has(l.fn) && !l.cps && l.args.length === 2 && items(l.args[0]) && items(l.args[1])) return { ...x, fn: `array.concat.${m[1]}`, args: [items(l.args[0])!, items(l.args[1])!] };
+    return x;
   };
   for (const f of ir.funcs) f.body = go(f.body);
 }
