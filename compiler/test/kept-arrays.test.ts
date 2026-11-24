@@ -4,7 +4,7 @@
 // and its two positions and its count stepped with `+` and `-`. Where two
 // of its arrays are versions of one buffer, or a position or step is a
 // big Int, it goes on as written (`$s`). Where its first and last
-// positions are in the arrays (C303b), its reads aren't checked; else it
+// positions are in the arrays (C303c), its reads aren't checked; else it
 // runs checking them (`$c`). Every answer is the definition's.
 
 import { test } from "node:test";

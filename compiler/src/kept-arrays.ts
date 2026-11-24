@@ -208,7 +208,7 @@ export function countedInts(ir: CoreIR, fi: number): Counted | null {
   return { ints, steady: [...read].filter((s) => !ints.includes(s)).sort((a, b) => a - b), plain, step: new Map(ints.map((j) => [j, stepOf.get(j)!])), always };
 }
 
-// Reads that stay in their arrays (C303b): a loop that goes on only while
+// Reads that stay in their arrays (C303c): a loop that goes on only while
 // a count is at least 1, takes 1 from it in every next round, and reads
 // its kept arrays only on the way on, each at a counted position stepped
 // by a constant step, reads at the positions p, p + s, …, p + (c − 1)s

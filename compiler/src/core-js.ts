@@ -905,7 +905,7 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   if (!envSet("NO_CHOSEN_PARTS")) chosenParts(ir);
   // Small functions using the runtime's reads put in place in loops, so
   // a loop reads the arrays it keeps from their buffers and counts in
-  // numbers (inline-small.ts, kept-arrays.ts, C303a).
+  // numbers (inline-small.ts, kept-arrays.ts, C303b).
   if (!envSet("NO_INLINE")) inlineSmall(ir, true);
   // Ints known small worked out as numbers (int-ranges.ts, C267).
   if (!envSet("NO_INT_RANGES")) intRanges(ir, new Set(ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))));
