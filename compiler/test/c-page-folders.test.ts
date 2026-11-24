@@ -36,7 +36,7 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
 // A folder's time taken out, its row's and the side pane's: — in the
 // browser, its own on disk.
 const timeless = (html: string) => html
-  .replace(/(<div class="row(?: chosen)?"><div class="c name"><svg viewBox="0 0 16 16" class="icon folder small">(?:(?!<div class="row).)*?<div class="c modified">)[^<]*/gs, "$1")
+  .replace(/(<div class="row(?: chosen)?" reveal="(?:true|false)"><div class="c name"><svg viewBox="0 0 16 16" class="icon folder small">(?:(?!<div class="row).)*?<div class="c modified">)[^<]*/gs, "$1")
   .replace(/(<span class="k">Kind<\/span><span class="v">Folder<\/span><\/div>(?:(?!<\/div><\/div>).)*?<span class="k">Modified<\/span><span class="v">)[^<]*/gs, "$1");
 
 test("folders in C lists, sorts, filters, moves through and previews a folder, as the evaluator's page does (C299)", { skip }, async () => {
@@ -72,8 +72,8 @@ test("folders in C lists, sorts, filters, moves through and previews a folder, a
     }
     page.stop();
     assert.deepEqual(c.map(timeless), evaluator.map(timeless));
-    const rows = (h: string) => [...h.matchAll(/<div class="(row(?: chosen)?)"><div class="c name">(?:(?!<div class="row).)*?<span class="label">([^<]*)<\/span><\/div><div class="c size">([^<]*)<\/div><div class="c kind">([^<]*)<\/div><div class="c modified">([^<]*)<\/div>/gs)].map((m) => `${m[1]} ${m[2]} ${m[3]} ${m[4]} ${m[5]}`);
-    const chosen = (h: string) => /<div class="row chosen">(?:(?!<div class="row).)*?<span class="label">([^<]*)</s.exec(h)?.[1];
+    const rows = (h: string) => [...h.matchAll(/<div class="(row(?: chosen)?)" reveal="(?:true|false)"><div class="c name">(?:(?!<div class="row).)*?<span class="label">([^<]*)<\/span><\/div><div class="c size">([^<]*)<\/div><div class="c kind">([^<]*)<\/div><div class="c modified">([^<]*)<\/div>/gs)].map((m) => `${m[1]} ${m[2]} ${m[3]} ${m[4]} ${m[5]}`);
+    const chosen = (h: string) => /<div class="row chosen" reveal="true">(?:(?!<div class="row).)*?<span class="label">([^<]*)</s.exec(h)?.[1];
     const here = (h: string) => /<div class="crumb here">(?:<span class="sep">›<\/span>)?<button title="([^"]*)">/.exec(h)?.[1];
     // Opened: the folder first, then names in the language's order, kinds
     // by extension, times on Istanbul's clock.

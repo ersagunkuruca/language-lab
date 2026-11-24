@@ -317,6 +317,19 @@ static void u_clear(void *c, void *v) {
   a->nk = 0;
 }
 static void u_focus(void *c, void *v) { Node *a = V_(v); if (a) FOCUS_NEXT = a->num; }
+// A box marked reveal (C320b): the box round it that scrolls, or the
+// page, scrolled the least that shows top to bottom, its top when it
+// can't show both.
+static double least(double now, double top, double bottom, double h, double most) {
+  if (bottom - now > h) now = bottom - h;
+  if (top < now) now = top;
+  return fmax(0, fmin(now, fmax(0, most - h)));
+}
+static void u_reveal(void *c, void *v, double top, double bottom) {
+  Node *a = v ? V_(v) : 0;
+  if (a) a->scrolled = least(a->scrolled, top, bottom, a->h, a->inside);
+  else if (!v) SCROLLY = least(SCROLLY, top, bottom, CH, fmax(PH, CH));
+}
 // Gone: no longer the page's, though drawn while it's still in a box, as
 // on the Mac; freed once it's in none.
 static void u_gone(void *c, void *v) {
@@ -458,7 +471,7 @@ static int u_ask(void *c, const char *s, size_t n) {
   say("ask %.*s: Windows has no dialog for it\n", (int)n, s);
   return 0;
 }
-static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, 0, u_focus };
+static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, 0, u_focus, u_reveal };
 
 // The keys held now, told to the page before what comes with them (C312).
 static void held(void) {
