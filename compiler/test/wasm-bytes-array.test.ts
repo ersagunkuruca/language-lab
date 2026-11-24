@@ -56,3 +56,14 @@ test("WebAssembly keeps an array of bytes a byte a slot, the same array as the e
     assert.deepEqual(got, want, String(n));
   }
 });
+
+// A long array from a list (C305): its buffer keeps at most an eighth of
+// its items, or 2^20 slots, free on each side, not as many again, which
+// past ~45 million items V8 refuses ("requested new array is too large";
+// compiler/gaps/mnist's 47 MB of training images on WASI).
+test("WebAssembly keeps a long array's free room to an eighth of it on each side", () => {
+  const p = program(20);
+  const m = emitWasm(lowerScalar(p.code, p.info, p.names, [p.main], { data: true }));
+  const of = /\(func \$array\.of\.a\d+ [^]*?\n {2}\)/.exec(m.wat)?.[0] ?? "";
+  assert.match(of, /i32\.const 3\n\s*i32\.shr_u\n\s*i32\.const 1048576/);
+});

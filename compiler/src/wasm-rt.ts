@@ -7017,6 +7017,33 @@ const REPLACE_COPY = `
       i32.gt_u
       select
       local.set $room
+      ;; at most an eighth of the items, or 2^20 slots, on each side (C305):
+      ;; a long array with as many again free on both ends passed what V8 allows
+      local.get $room
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      i32.gt_u
+      select
+      local.get $room
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      i32.gt_u
+      select
+      i32.lt_u
+      select
+      local.set $room
       local.get $n
       local.get $room
       i32.const 1
@@ -7251,6 +7278,33 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       i32.gt_u
       select
       local.set $room
+      ;; at most an eighth of the items, or 2^20 slots, on each side (C305):
+      ;; a long array with as many again free on both ends passed what V8 allows
+      local.get $room
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      i32.gt_u
+      select
+      local.get $room
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      i32.gt_u
+      select
+      i32.lt_u
+      select
+      local.set $room
       local.get $n
       local.get $room
       i32.const 1
@@ -7322,6 +7376,33 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       local.get $n
       i32.const 4
       i32.gt_u
+      select
+      local.set $room
+      ;; at most an eighth of the items, or 2^20 slots, on each side (C305):
+      ;; a long array with as many again free on both ends passed what V8 allows
+      local.get $room
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      i32.gt_u
+      select
+      local.get $room
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      i32.gt_u
+      select
+      i32.lt_u
       select
       local.set $room
       local.get $n
@@ -7661,6 +7742,33 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       i32.gt_u
       select
       local.set $room
+      ;; at most an eighth of the items, or 2^20 slots, on each side (C305):
+      ;; a long array with as many again free on both ends passed what V8 allows
+      local.get $room
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      i32.gt_u
+      select
+      local.get $room
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      i32.gt_u
+      select
+      i32.lt_u
+      select
+      local.set $room
       local.get $n
       local.get $room
       i32.const 1
@@ -7752,6 +7860,33 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       local.get $n
       i32.const 4
       i32.gt_u
+      select
+      local.set $room
+      ;; at most an eighth of the items, or 2^20 slots, on each side (C305):
+      ;; a long array with as many again free on both ends passed what V8 allows
+      local.get $room
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      i32.gt_u
+      select
+      local.get $room
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      local.get $n
+      i32.const 3
+      i32.shr_u
+      i32.const 1048576
+      i32.gt_u
+      select
+      i32.lt_u
       select
       local.set $room
       local.get $n
