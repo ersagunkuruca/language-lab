@@ -376,6 +376,38 @@ the compiler lowers what the language means. C327 is a large change to
 the compiler's core; the lane starts it with C327a's measurement and
 reports before building.
 
+## C327a, measured by hand (2026-11-24, afternoon)
+
+Two hand edits to generated C, each one function, each printing the
+same as before (`compiler/gaps/allocations/c327a-*.c`). Times are the
+minimum and median of 15 runs, alternating, one thread unless said.
+
+| edit | cells it removes | before | after |
+|---|---|---|---|
+| flock: `merge sorted`'s array views passed by value (buffer, start, length; the buffer counted) | 16.1 M of 36.0 M views at 30 ticks | 2,959 ms min, 3,058 median | 2,330 min, 2,484 median: **21% faster** |
+| the same, on the pool's threads | | 1,333 min, 1,400 median | 1,208 min, 1,299 median: 7% to 9% |
+| bazaar: `append`'s fold frames in one growable stack (64 on the C stack, then malloc'd) | 138 k of 182 k frames (12% of all cells) at 10,000 | 621 min, 732 median | 624 min, 756 median: no change |
+
+So the two kinds of frame-local cell differ. A view is made in the
+innermost loop and read through a pointer each time; passing its three
+words instead saves a fifth of flock's run, from one function. A fold
+frame is made and taken apart in a tight loop whose cells the free list
+hands back warm; an array in its place saves its instructions but not
+measurable time. Closures were not measured: the hottest closures are
+too few (bazaar 4% of cells) or not in one function (mini).
+
+What this changes in C327:
+
+- **Views by value (C327c) first, and on its own.** A view never needs to
+  be a cell: it is three words, and only a view stored in data needs a
+  box. That is a representation change, not an inference, so it doesn't
+  wait for C327b's analysis. Every array program on C and WebAssembly
+  makes views (flock 98% of its cells, pack 14%, strings 4%, bazaar 6%).
+- **Fold frames (C327d) closed as measured.** Not worth a change.
+- **The analysis itself (C327b) waits** for a reader that pays: closures
+  measured on a program where they are hot, or WebAssembly's records,
+  where frame-local GC structs go through the collector (C327g).
+
 ## How this was measured
 
 On this container (4 cores), gcc 13 at `ters native`'s flags. Cells by
