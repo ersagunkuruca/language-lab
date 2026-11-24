@@ -430,6 +430,10 @@ export interface Runtime {
   // values it's called with (the editor seeds a definition's Run with them).
   // `copy`: the lambda entered, when it's a copy at another number type.
   entered?: (lambda: Id, args: Value[], copy: Id) => void;
+  // Told when a definition's value starts and stops being worked out, the
+  // first time it is asked for (a constant: mnist-page's digits, made from
+  // 74 KB of text once and kept).
+  valuing?: (def: Id, on: boolean) => void;
   // Check's handler when the program has none (`ters test`, tests.ts):
   // each expect, whether it held, and what it says.
   check?: (holds: boolean, what: string) => void;
@@ -2010,7 +2014,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (!defs.has(target)) {
           // Definition values are pure (the checker sees to it), so exactly
           // one result.
-          for (const v of run((m) => m.eval(t.body!, null))) { defs.set(target, v); if (typeof v === "function") defOf.set(v, target); break; }
+          rt.valuing?.(target, true);
+          try { for (const v of run((m) => m.eval(t.body!, null))) { defs.set(target, v); if (typeof v === "function") defOf.set(v, target); break; } } finally { rt.valuing?.(target, false); }
           // A library definition with a host way runs it (library/hosts.ts).
           const jet = rt.libraryHosts === false ? undefined : pureHosts[target], self = defs.get(target);
           if (jet && typeof self === "function") { const j = jet(self as Fn); defs.set(target, j); defOf.set(j, target); pureJets.add(j); }

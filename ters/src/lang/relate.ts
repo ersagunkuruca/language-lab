@@ -1373,8 +1373,20 @@ export function interpreter(given: Code, opts: Options = {}) {
       // search's budget (a step of the search does about as much work: the
       // ray marcher's trace enters 94,000 in half a second), so a call that
       // runs long (a march that never hits) stops where the search would.
-      let entries = 0;
-      try { prep.info ??= infer(code); prep.runner = makeRunner(code, prep.info, { print: () => {}, entered: () => { if (++entries % 100 === 0 && !prep.spend!()) throw new OutOfSteps(); } }); } catch { prep.runner = null; }
+      // A definition's value worked out the first time it is asked for
+      // isn't the call's work: the evaluator keeps it, and a call that ran
+      // out of steps making it made it again each time (mnist-page's pixel
+      // reads digits decoded from 74 KB of text, half a million entries).
+      // Only one known to end: one that may not is charged as the call is.
+      let entries = 0, valuing = 0;
+      try {
+        const info = (prep.info ??= infer(code));
+        prep.runner = makeRunner(code, info, {
+          print: () => {},
+          entered: () => { if (!valuing && ++entries % 100 === 0 && !prep.spend!()) throw new OutOfSteps(); },
+          valuing: (d, on) => { if (!info.divergent.has(d)) valuing += on ? 1 : -1; },
+        });
+      } catch { prep.runner = null; }
     }
     const r = prep.runner;
     if (!r || (!gradient && !performsOnlyChoice(c.lambda))) return null;

@@ -141,3 +141,19 @@ test("the agreement check covers the examples' functions", () => {
   const all = [...checkedIn.values()].flat();
   assert.ok(all.length >= 80, `${all.length} functions checked`);
 });
+
+test("a definition's value made once isn't charged to a call's steps (mnist-page's pixel)", () => {
+  // pixel reads digits decoded from 74 KB of text, about half a million
+  // functions entered: charged to the search's 5000 steps, each call ran
+  // out making them and made them again, so pixel(0, 1) = 0 found no answer.
+  const p = loadProgram(join(root, "examples", "mnist-page"));
+  const def = p.code.defs.find((d) => p.pres.names[d] === "pixel")!;
+  const [g, j] = get(p.code, get(p.code, def, "def").body!, "lambda").params;
+  let steps = 0;
+  const spend = () => ++steps < STEPS;
+  const out = take(relate(p.code, def, { [g]: 0n, [j]: 1n }, { spend }), 1).map((a) => a.values.out as Value);
+  assert.equal(out.length, 1);
+  steps = 0;
+  assert.equal(take(relate(p.code, def, { [g]: 0n, [j]: 1n, out: out[0] }, { spend }), 1).length, 1);
+  assert.ok(steps < 100, `${steps} steps`);
+});
