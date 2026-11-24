@@ -432,24 +432,35 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
   if (always && main && mod) pool ??= startPool();
   if (!pool || !main || stays) {
     const t0 = performance.now();
+    let first = 0;
     while (left > 0) {
       values[--left] = attempt(() => here(left));
+      if (left === n - 1) first = performance.now() - t0;
       // Started here, or by a job inside this unit (a map in a branch);
       // a quick site's units all stay here (C277: they went to the
       // workers from the second on once any had started).
       if (left > 0 && main && mod && !stays && (pool || ran + performance.now() - t0 > WORTH)) { pool ??= startPool(); break; }
     }
     if (main) ran += performance.now() - t0;
-    // With no workers yet, what its units take alone.
-    if (main && site && !idle && left < n && !alone.has(site)) alone.set(site, (performance.now() - t0) / (n - left));
+    // With no workers yet, what its units take alone: those after the
+    // first, which runs cold (below), where there are any.
+    if (main && site && !idle && left < n && !alone.has(site)) alone.set(site, n - left > 1 ? (performance.now() - t0 - first) / (n - left - 1) : first);
   }
-  // Met first with the workers started: its last unit here first, alone,
-  // for the time (C277), the rest shared.
+  // Met first with the workers started: its last units here first, alone,
+  // for the time (C277), the rest shared. The second's, where there are
+  // three or more: the first runs cold (wav-file's maps, 6.4 ms against
+  // 2.8 ms a unit after), and taken alone made every one of them look
+  // worth sharing, each then two to three times slower shared than here
+  // (L271c).
   if (left > 1 && main && pool?.length && site && !alone.has(site)) {
-    const t0 = performance.now();
-    values[left - 1] = attempt(() => here(left - 1));
-    left--;
-    alone.set(site, performance.now() - t0);
+    let took = 0;
+    for (let k = 0; k < (left > 2 ? 2 : 1); k++) {
+      const t0 = performance.now();
+      values[left - 1] = attempt(() => here(left - 1));
+      left--;
+      took = performance.now() - t0;
+    }
+    alone.set(site, took);
   }
   const sent = performance.now(), helpers = pool ?? [];
   const unit = site && !always ? alone.get(site) : undefined;
