@@ -6,7 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { skip } from "../../compiler/test/c-harness.ts";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Code, NodeOf } from "../src/model.ts";
@@ -64,4 +65,41 @@ test("ters run prints the same when it lowers and when it reads the kept program
   assert.equal(first.status, 0, first.stderr);
   assert.equal(second.stdout, first.stdout);
   assert.equal(second.status, first.status);
+});
+
+// Stage 4 of the compiler redesign at its simplest: what `ters compile`,
+// `ters wasi` and `ters native` made is kept too, and a rerun with
+// nothing changed writes the same files from it. Held decisions are part
+// of its key: holding one makes the output again.
+test("ters compile, wasi and native write the same output from what they kept, and a held decision makes it again", () => {
+  const prog = join(dir, "wc-out");
+  cpSync(wc, prog, { recursive: true });
+  const ters = (env: Record<string, string>, ...args: string[]) => {
+    const r = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/ters.ts"), ...args], { cwd: dir, encoding: "utf8", env: { ...process.env, ...env } });
+    assert.equal(r.status, 0, r.stderr);
+  };
+  const read = (f: string) => readFileSync(join(dir, f));
+  for (const [cmd, out, also] of [["compile", "w.mjs", ".map.json"], ["wasi", "w.wasm", ""], ["native", "w", ".c"]] as const) {
+    if (cmd === "native" && skip) continue;
+    ters({ TERS_NO_KEPT_OUTPUT: "1" }, cmd, prog, "-o", `fresh-${out}`);
+    ters({}, cmd, prog, "-o", out);
+    const made = read(out), madeAlso = also ? read(out + also) : null;
+    ters({}, cmd, prog, "-o", out);
+    assert.deepEqual(read(out), made, `${cmd} again`);
+    if (also) assert.deepEqual(read(out + also), madeAlso, `${cmd} again, ${also}`);
+    // As made with nothing kept: the module's last line names its file.
+    if (cmd !== "native") assert.equal(read(`fresh-${out}`).toString("latin1").replaceAll(`fresh-${out}`, out), made.toString("latin1"), `${cmd} as made fresh`);
+    if (cmd === "native") assert.deepEqual(read(`fresh-${out}.c`), read(`${out}.c`), "the same C");
+  }
+  // A held decision changes what is compiled: its key isn't the kept one's.
+  ters({}, "decisions", prog);
+  const lines = readFileSync(`${prog}.decisions`, "utf8").split("\n");
+  const at = lines.findIndex((l) => / place: .*: worker threads when slow; among main thread, worker threads; .*target JavaScript$/.test(l));
+  if (at >= 0) {
+    lines[at] = `held ${lines[at].replace("worker threads when slow", "main thread")}`;
+    writeFileSync(`${prog}.decisions`, lines.join("\n"));
+    ters({}, "compile", prog, "-o", "w.mjs");
+    ters({ TERS_NO_KEPT_OUTPUT: "1" }, "compile", prog, "-o", "fresh-w.mjs");
+    assert.equal(read("fresh-w.mjs").toString().replaceAll("fresh-w.mjs", "w.mjs"), read("w.mjs").toString(), "held, as made fresh");
+  } else assert.fail("wc has a placement to hold");
 });

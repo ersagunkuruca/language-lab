@@ -37,7 +37,7 @@ import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
 import { HELD, choiceLines, choicesPath, oldChoicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, measuredIn, measuredOf, measuring, nearLines, placeLines, scheduleLines, threadLines } from "./choices.ts";
-import { keepRun, keptRun, runKey } from "./run-store.ts";
+import { keepOutput, keepRun, keptOutput, keptRun, outputKey, runKey, type KeptOutput } from "./run-store.ts";
 import { keepDecisionsIn, storedRows, type DecidedStore } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
 import { bundle } from "../src/io.ts";
@@ -691,8 +691,22 @@ const main = command === "run" || command === "compile" || command === "decision
 // lowering is most of a run, and the same program lowers the same way.
 const runKeyed = command === "run" && main && defined < 0 && !heldHere.size && !holdsPlaces && !staticPage && evalAt < 0 && !hosts && !valueMain(loaded.info, main) ? runKey(loaded.code, loaded.names, loaded.options, main) : "";
 const kept = runKeyed ? keptRun(runKeyed) : undefined;
+// And what `ters compile`, `ters native` or `ters wasi` made of it, kept
+// (run-store.ts KeptOutput): a rerun with nothing changed skips choosing
+// and lowering. Its key holds what else the output is a function of: the
+// command and its flags but the file written, the decisions, the hosts,
+// the C compiler's settings, whether esbuild bundles, the TERS_ switches
+// the passes read (TERS_WASM_NAMES, TERS_RECHECK).
+const outputKeyed = (command === "compile" || command === "native" || command === "wasi") && main && defined < 0 && !process.env.TERS_NO_KEPT_OUTPUT ? (() => {
+  const o = rest.indexOf("-o"), flags = rest.filter((_, i) => o < 0 || (i !== o && i !== o + 1));
+  const dir = existsSync(path) && statSync(path).isDirectory() ? path : "";
+  const host = (f: string) => (f && existsSync(f) ? readFileSync(f, "utf8") : null);
+  const esbuildHere = command === "compile" ? existsSync(resolve(import.meta.dirname, "../node_modules/esbuild")) : null;
+  return outputKey(runKey(loaded.code, loaded.names, loaded.options, main), [command, flags, writtenChoices, staticPage, hostFile ? host(hostFile) : null, dir ? host(join(dir, "hosts", "c.c")) : null, process.env.CC ?? null, esbuildHere, Object.keys(process.env).filter((k) => k.startsWith("TERS_")).sort().map((k) => [k, process.env[k]])]);
+})() : "";
+const keptOut: KeptOutput | undefined = outputKeyed ? keptOutput(outputKeyed) : undefined;
 const representedHere = () => represented(loaded, main, command !== "native" && command !== "wasi" && command !== "build-native-app", command === "native" || command === "wasi" || command === "build-native-app", false, command === "native" || command === "wasi" || command === "build-native-app");
-const p = main && defined < 0 && !kept ? representedHere() : loaded;
+const p = main && defined < 0 && !kept && !keptOut ? representedHere() : loaded;
 // A page or app bundles the same file into its script (L69a3).
 const pageHost = hostFile && existsSync(hostFile) ? resolve(hostFile) : undefined;
 // The program's page, for `ters build-web` and `ters build-app`, printed
@@ -782,6 +796,12 @@ switch (command) {
     const esbuild = await import("esbuild").catch(() => null);
     // Printed from the core IR (C137c5), which WebAssembly and C print too.
     const source = (inCheckout: boolean): string => {
+      if (keptOut?.text !== undefined) { map = keptOut.map ?? null; return keptOut.text; }
+      const text = made(inCheckout);
+      if (outputKeyed) keepOutput(outputKeyed, { text, map });
+      return text;
+    };
+    const made = (inCheckout: boolean): string => {
       // Only what main reaches (C168): a definition nothing calls isn't
       // compiled, so an unreached solve doesn't bring in the node table.
       // A main that is a value (a Text, say) is printed, as `ters run`,
@@ -824,9 +844,13 @@ switch (command) {
     // Its own effects' operations nothing handles, from hosts/c.c (L69b1).
     const cHost = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", "c.c") : "";
     const hosts = { ops: hostOpsOf(p.code, p.names), c: cHost && existsSync(cHost) ? readFileSync(cHost, "utf8") : undefined };
-    const { lowered, root } = nativeLowered(main);
     let c: string;
-    try { c = emitC(lowered, { main: root, hosts }).c; } catch (e) { fail((e as Error).message); }
+    if (keptOut?.text !== undefined) c = keptOut.text;
+    else {
+      const { lowered, root } = nativeLowered(main);
+      try { c = emitC(lowered, { main: root, hosts }).c; } catch (e) { fail((e as Error).message); }
+      if (outputKeyed) keepOutput(outputKeyed, { text: c });
+    }
     writeFileSync(`${out}.c`, c);
     // On Windows (C296) MinGW-w64's gcc or llvm-mingw's: one .exe with
     // nothing beside it (-static), threads that reserve a large stack as
@@ -845,11 +869,17 @@ switch (command) {
     // ters native lowers it.
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${basename(resolve(path)).replace(/\.json$/, "")}.wasm`;
-    const { lowered, root } = nativeLowered(main, true);
-    if (!lowered.funcs.some((f) => f.def === root && !f.inner)) fail(`main isn't in WebAssembly: ${lowered.refused.get(root as never) ?? "it isn't lowered"}`);
-    let m: ReturnType<typeof emitWasm>;
-    try { m = emitWasm(lowered, { wasi: true, main: root }); } catch (e) { fail((e as Error).message); }
-    writeFileSync(out, m.bytes);
+    let bytes: Uint8Array;
+    if (keptOut?.bytes) bytes = keptOut.bytes;
+    else {
+      const { lowered, root } = nativeLowered(main, true);
+      if (!lowered.funcs.some((f) => f.def === root && !f.inner)) fail(`main isn't in WebAssembly: ${lowered.refused.get(root as never) ?? "it isn't lowered"}`);
+      let m: ReturnType<typeof emitWasm>;
+      try { m = emitWasm(lowered, { wasi: true, main: root }); } catch (e) { fail((e as Error).message); }
+      bytes = m.bytes;
+      if (outputKeyed) keepOutput(outputKeyed, { bytes });
+    }
+    writeFileSync(out, bytes);
     process.stderr.write(`ters: wrote ${out}; run it with: wasmtime -W gc=y,function-references=y,tail-call=y --dir . ${out} [arguments…]\n`);
     break;
   }
