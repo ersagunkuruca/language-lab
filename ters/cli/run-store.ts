@@ -77,3 +77,31 @@ export function keepRun(key: string, run: KeptRun): void {
     for (const { f } of kept.slice(KEEP)) rmSync(join(DIR, f), { force: true });
   } catch { /* lowered again next time */ }
 }
+
+// What `ters compile`, `ters native` and `ters wasi` made of a program,
+// kept the same way (COMPILER REDESIGN stage 4, at its simplest): the
+// printed module and its map, the C, or the WebAssembly. Found by the
+// run's key and what else the output is a function of (cli/main.ts
+// outputKey): the command, the program's decisions, its hosts, the flags.
+// The step after it (esbuild's bundle, the C compiler) runs each time.
+export interface KeptOutput { text?: string; map?: object | null; bytes?: Uint8Array }
+const OUT_DIR = join(keptDir, "outputs");
+const outFile = (key: string) => join(OUT_DIR, `${key}.v8`);
+export function outputKey(run: string, parts: readonly unknown[]): string {
+  return createHash("sha1").update(run).update(JSON.stringify(parts)).digest("hex").slice(0, 24);
+}
+export function keptOutput(key: string): KeptOutput | undefined {
+  if (off()) return undefined;
+  try { return deserialize(readFileSync(outFile(key))) as KeptOutput; } catch { return undefined; }
+}
+export function keepOutput(key: string, out: KeptOutput): void {
+  if (off()) return;
+  try {
+    mkdirSync(OUT_DIR, { recursive: true });
+    const file = outFile(key), tmp = `${file}.${process.pid}.tmp`;
+    writeFileSync(tmp, serialize(out));
+    renameSync(tmp, file);
+    const kept = readdirSync(OUT_DIR).filter((f) => f.endsWith(".v8")).map((f) => ({ f, t: statSync(join(OUT_DIR, f)).mtimeMs })).sort((a, b) => b.t - a.t);
+    for (const { f } of kept.slice(KEEP)) rmSync(join(OUT_DIR, f), { force: true });
+  } catch { /* made again next time */ }
+}
