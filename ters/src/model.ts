@@ -679,23 +679,38 @@ export function dependencies(code: Code, root: Id): Id[] {
 export function dependenciesOfAll(code: Code, roots: Id[], into?: Set<Id>): Set<Id> {
   const seen = into ?? new Set<Id>();
   const owner = ownerOfTypeParts(code);
+  // Depth first, each found added before what it reaches, as callers
+  // read the order.
   const visit = (id: Id) => {
-    for (const n of subtree(code, id)) {
-      const node = code.nodes[n];
-      const target = node.kind === "ref" ? node.target : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
-      for (let t of [target, ...(node.kind === "tfun" ? node.effects ?? [] : []), ...(node.kind === "typedef" ? node.row ?? [] : [])]) {
-        if (t && owner.has(t)) t = owner.get(t)!;
-        if (!t || seen.has(t)) continue;
-        const d = code.nodes[t];
-        if (d.kind === "def" || d.kind === "builtin") {
-          seen.add(t);
-          visit(t);
-        }
-      }
+    for (let t of targetsUnder(code, id)) {
+      t = owner.get(t) ?? t;
+      if (seen.has(t)) continue;
+      const d = code.nodes[t];
+      if (d.kind === "def" || d.kind === "builtin") { seen.add(t); visit(t); }
     }
   };
   for (const r of roots) visit(r);
   return seen;
+}
+// What the nodes under `root` refer to (a ref's or tref's target, an arm's
+// variant, a function type's effects, a type's row), each once, before
+// owners: kept by the subtree's walk, so a definition no edit touched is
+// read again by none (stage 4, per-definition summaries).
+const targetsKept = new WeakMap<readonly Id[], readonly Id[]>();
+export function targetsUnder(code: Code, root: Id): readonly Id[] {
+  const ids = subtreeKept(code, root);
+  let out = targetsKept.get(ids);
+  if (out) return out;
+  const found = new Set<Id>();
+  for (const n of ids) {
+    const node = code.nodes[n];
+    const target = node.kind === "ref" ? node.target : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
+    if (target) found.add(target);
+    if (node.kind === "tfun") for (const e of node.effects ?? []) found.add(e);
+    else if (node.kind === "typedef") for (const r of node.row ?? []) found.add(r);
+  }
+  targetsKept.set(ids, (out = [...found]));
+  return out;
 }
 
 // Variants and fields are referred to directly (constructors, projections);
