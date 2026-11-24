@@ -65,6 +65,7 @@ import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, ABORT, ABORT_OP, CH
 import { tupleType } from "../../ters/src/lang/std-values.ts";
 import { shownImplementations, implementationsOf } from "../../ters/src/lang/std-values.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
+import { withFilledArrays } from "./fill-arrays.ts";
 import { fieldShapes } from "../../ters/src/lang/nested.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
@@ -738,6 +739,9 @@ function prepared(code: Code, info: Info, names: Names, roots: Id[], host: boole
   // The generic + resolved to each type's own operation first
   // (ters/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));
+  // An array made from a mapped range is filled where it is made, with no
+  // list between (fill-arrays.ts, L271c).
+  ({ code, info, names } = withFilledArrays(code, info, names));
   // A function named by a let (the editor's "Make it a function": `part =
   // (a, b) ↦ …; part(x, y)`) is a definition of its own, given what it
   // uses from around it, since there are no closures here (lift-lets.ts,
