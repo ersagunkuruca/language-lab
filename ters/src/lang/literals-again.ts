@@ -97,6 +97,13 @@ function differing(a: Record<Id, Node>, b: Record<Id, Node>): Id[] {
   return out;
 }
 
+// Whether two programs differ only in some literals' values.
+export function onlyLiteralValues(a: Code, b: Code): boolean {
+  if (a === b) return true;
+  if (a.defs.length !== b.defs.length || a.defs.some((d, i) => d !== b.defs[i])) return false;
+  return differing(a.nodes, b.nodes).every((id) => { const x = a.nodes[id], y = b.nodes[id]; return x?.kind === "lit" && y?.kind === "lit" && sameValue({ ...x, value: y.value }, y); });
+}
+
 // The literals the step made: copies of the program's (model.ts
 // litOrigin), by the one copied, and the values of the rest, any of which
 // may be a copy.
