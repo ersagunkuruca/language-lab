@@ -848,7 +848,10 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   const given = info;
   // An edit of a number takes the last answer with the new value put in
   // (literals-again.ts): these steps read numbers only through the check.
-  const f = overLiterals(`lowering's front ${roots.join(" ")}`, { code, info, names }, () => front(code, info, names, roots));
+  // The ownership passes below read the program as these leave it, before
+  // its handlers are put in.
+  ({ code, info, names } = overLiterals(`lowering's front ${roots.join(" ")}`, { code, info, names }, () => front(code, info, names, roots)));
+  const f = overLiterals(`handlers put in ${roots.join(" ")}`, { code, info, names }, () => fusedProgram(code, info, names));
   let ir = lowerScalar(f.code, endsAsBefore(given, f.info), f.names, roots, { data: true, host: true, printed: (c, id) => planOf(c, `solve:${id}`) !== null });
   // A linear function of a linear function, one matrix (linear-calls.ts, L44).
   if (!envSet("NO_LINEAR")) linearCalls(ir);
@@ -936,8 +939,7 @@ function front(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): 
   ({ code, info, names } = withOperationLambdas(code, info, names));
   // A map over a text's characters, a fold over them (character-maps.ts,
   // C239): one walk over the text, no list of one-character texts.
-  ({ code, info, names } = withCharacterMaps(code, info, names));
-  return fusedProgram(code, info, names);
+  return withCharacterMaps(code, info, names);
 }
 
 // `array of` a written list: `array.ofItems`, its items handed as they

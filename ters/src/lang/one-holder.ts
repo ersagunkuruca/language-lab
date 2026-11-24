@@ -36,6 +36,7 @@
 import type { Code, Id, NodeOf } from "../model.ts";
 import { subtree, isCall, type Call, isUse, isBound, bindsOf, nodesOfKind } from "../model.ts";
 import { blindText } from "./def-keys.ts";
+import { onlyLiteralValues } from "./literals-again.ts";
 import { LIBRARY } from "./library.ts";
 import { keptMap } from "../kept.ts";
 import type { Info } from "./infer.ts";
@@ -123,6 +124,11 @@ function programKey(code: Code, info: Info, entry: Id) {
   let byEntry = byCode.get(code);
   if (!byEntry) byCode.set(code, (byEntry = new Map()));
   let r = byEntry.get(entry);
+  // The last program asked of, but for its literals' values, which the key
+  // leaves out, with the same types (lowering's first steps taken again
+  // for an edit of a number, literals-again.ts, hand on the same).
+  const lastKey = lastKeys.get(entry);
+  if (!r && lastKey && lastKey.entry === entry && lastKey.typeOf === info.typeOf && onlyLiteralValues(lastKey.code, code)) r = lastKey.r;
   if (!r) {
     const reached = [...reachedFrom(code, entry)];
     const typedefs = nodesOfKind(code, "typedef").map((t) => t.id);
@@ -131,10 +137,14 @@ function programKey(code: Code, info: Info, entry: Id) {
     const place = new Map(made.map((id, k) => [id, `\u0000${k}\u0000`]));
     let program = keyNumbers.get(text);
     if (program === undefined) { if (keyNumbers.size >= 16) keyNumbers.clear(); keyNumbers.set(text, (program = nextKey++)); }
-    byEntry.set(entry, (r = { reached, made, place, program }));
+    r = { reached, made, place, program };
   }
+  byEntry.set(entry, r);
+  if (lastKeys.size >= 8) lastKeys.clear();
+  lastKeys.set(entry, { code, typeOf: info.typeOf, entry, r });
   return r;
 }
+const lastKeys = keptMap<Id, { code: Code; typeOf: Info["typeOf"]; entry: Id; r: { reached: Id[]; made: Id[]; place: Map<Id, string>; program: number } }>();
 let nextKey = 0;
 const answers = keptMap<string, { ok: boolean; problems: string[]; rebuilt: string[] }>();
 export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, jobs: Set<Id>, changes: Map<Id, number>, names: Record<Id, string> = {}, item?: Id, rebuilds = false, rebuilt?: Set<Id>, fresh = false): OneHolder {
