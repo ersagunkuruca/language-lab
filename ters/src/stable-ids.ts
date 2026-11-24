@@ -18,7 +18,7 @@
 // same text; each definition's other new nodes by its text with those
 // names in, then their place in it.
 
-import { mapIds, subtree, type Code, type Id, type Node, nodeIds } from "./model.ts";
+import { mapIds, subtree, type Code, type Id, type Node, nodeIds, renamedOver } from "./model.ts";
 import { base32, sha256 } from "./sha256.ts";
 
 const DIGITS = "0123456789abcdefghijklmnopqrstuv";
@@ -67,6 +67,8 @@ export function stableIds(code: Code, made: ReadonlySet<Id>, within: Iterable<Id
   // In the order they were: what walks every node meets them so.
   const mapped = new Map<Id, Node>();
   for (const ids of holding.values()) for (const id of ids) mapped.set(id, mapIds(code.nodes[id], f));
+  const over = renamedOver(code.nodes, rename, mapped);
+  if (over) return { code: { ...code, nodes: over, defs: code.defs.map(f) }, rename };
   const nodes: Record<Id, Node> = {};
   for (const id of nodeIds(code.nodes)) { const n = mapped.get(id); nodes[n ? n.id : id] = n ?? code.nodes[id]; }
   return { code: { ...code, nodes, defs: code.defs.map(f) }, rename };
