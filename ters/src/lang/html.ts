@@ -317,6 +317,10 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
               const why = unsafeAttribute(name, value);
               if (why) { e.removeAttribute?.(name); console.warn(`a page's attribute was left off: ${why}`); }
               else e.setAttribute(name, value);
+              // A box marked reveal is scrolled into view, the least
+              // that shows it (a list's chosen row moved by the keys,
+              // C320b), once it's on the page.
+              if (name === "reveal" && value !== "false") queueMicrotask(() => (e as El & { scrollIntoView?: (o: object) => void }).scrollIntoView?.({ block: "nearest" }));
             }
           });
         } else if (a.tag === HTML_V.on) {

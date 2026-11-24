@@ -851,3 +851,30 @@ test("calc(), a set height's flex line and a grid's rows stretched to a set heig
   const [a, b] = ["a", "b"].map((t) => box(page.find((s) => s.includes(`"${t}"`))!));
   assert.deepEqual([a[1] - divs[2][1], b[1] - divs[2][1]], [13.75, 63.75], all);
 });
+
+// A box marked reveal (C320b) is scrolled into the box round it that
+// scrolls, the least that shows it, as a browser's scrollIntoView with
+// block nearest; with no such box, the page in its window.
+test("a box marked reveal in C is scrolled into view in the box round it that scrolls, or the page (C320b)", { skip }, () => {
+  const k = new Lang();
+  const el = (tag: string, attrs: [string, string][], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs.map(([n, v]) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v))))), k.list(...kids));
+  const rows = (n: number, chosen: number) => Array.from({ length: n }, (_, i) => el("div", [["style", "height: 30px"], ["reveal", i === chosen ? "true" : "false"]], []));
+  const run = (chosen: Id) => {
+    const main = k.def("main" + Math.random().toString(36).slice(2, 6));
+    k.define(main, k.thunk(() => chosen));
+    const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+    const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+    assert.deepEqual([...l.refused.values()], []);
+    const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:400", "height:600"]);
+    assert.equal(r.status, 0, r.stderr.toString());
+    return r.stdout.toString().split("\x1e\n")[0].split("\n").map((s) => s.trim()).filter(Boolean);
+  };
+  // Row 10 is 300 to 330 down a list 100 high: scrolled 230, so it is its last row.
+  const list = run(el("main", [], [el("div", [["style", "height: 100px; overflow: auto"]], rows(20, 10))]));
+  assert.ok(list.find((s) => s.startsWith("div ") && s.includes(" scroll 600"))?.endsWith(" scrolled 230"), list.join("\n"));
+  assert.ok(!list[0].includes("scrolled"), list[0]);
+  // No box scrolls: the page does, in its window 600 high; row 30 is 900
+  // to 930 down main, which is 16 down the page (the base sheet's margin).
+  const page = run(el("main", [], rows(40, 30)));
+  assert.match(page[0], / scrolled 346$/, page.join("\n"));
+});

@@ -67,6 +67,11 @@ typedef struct ters_ui {
   // The focus to box v (an input with autofocus, as a browser gives it
   // one once it is on the page: C298). May be null.
   void (*focus)(void *ctx, void *v);
+  // Scrolling box v (null: the page) the least that shows top to bottom,
+  // in v's own points from its top as if not scrolled: a box whose
+  // attribute reveal was set, as a browser's scrollIntoView with block
+  // nearest (C320b). May be null.
+  void (*reveal)(void *ctx, void *v, double top, double bottom);
 } ters_ui;
 
 // A table's parts (C319): the table, a group of rows (thead, tbody,
@@ -209,6 +214,8 @@ static void *tl_element(void *c, const char *tag, size_t n) {
   e->view = tl_pic(e) ? tl_ui->box(tl_ui->ctx, "svg", 3) : tl_ui->box(tl_ui->ctx, tag, n);
   return e;
 }
+// The box whose reveal was set last, scrolled to once laid out (C320b).
+static tl_n *tl_revealing;
 static void *tl_text(void *c, const char *s, size_t n) {
   (void)c;
   tl_n *e = calloc(1, sizeof *e);
@@ -221,6 +228,7 @@ static void tl_set_attribute(void *c, void *x, const char *k, size_t kn, const c
   (void)c; tl_n *e = x;
   tl_dirty(e, TL_DIRTY);
   if (kn == 9 && !memcmp(k, "autofocus", 9) && tl_ui->focus) tl_ui->focus(tl_ui->ctx, e->view);
+  if (kn == 6 && !memcmp(k, "reveal", 6) && !(vn == 5 && !memcmp(v, "false", 5))) tl_revealing = e;
   char **at = kn == 2 && !memcmp(k, "id", 2) ? &e->id : kn == 5 && !memcmp(k, "class", 5) ? &e->cls : kn == 5 && !memcmp(k, "style", 5) ? &e->style : 0;
   if (at) { free(*at); *at = tl_dup(v, vn); }
   else if (kn == 5 && !memcmp(k, "value", 5)) tl_ui->set_value(tl_ui->ctx, e->view, v, vn);
@@ -264,6 +272,7 @@ static void tl_listen(void *c, void *x, const char *ev, size_t n, int h) {
 }
 static void tl_gone(void *c, void *x) {
   (void)c; tl_n *e = x;
+  if (tl_revealing == e) tl_revealing = 0;
   tl_ui->gone(tl_ui->ctx, e->view);
   for (int j = 0; j < e->na; j++) { free(e->ak[j]); free(e->av[j]); }
   for (int j = 0; j < e->np; j++) free(e->pev[j]);
@@ -1662,6 +1671,26 @@ static void tl_show(tl_n *e, double dx, double dy, int shown) {
   if (tl_pic(e)) { for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); if (me) tl_picture(e); return; }
   if (!kept) for (int j = 0; j < e->nk; j++) tl_show(e->kids[j], 0, 0, me);
 }
+// The box whose reveal was set, shown in the nearest box round it that
+// scrolls, or the page: its top and bottom there, a display: contents
+// box adding nothing, as it is placed at its parent's top left. Nothing
+// when it, or a box round it, isn't shown.
+static void tl_reveal(void) {
+  tl_n *e = tl_revealing, *p;
+  tl_revealing = 0;
+  if (!e || !tl_ui->reveal) return;
+  double y = 0;
+  for (p = e; p; p = p->parent) {
+    if (p->c.display == TL_NONE) return;
+    if (p != e && p->c.clip == 2) break;
+    if (p->c.display != TL_CONTENTS) y += p->y;
+    if (p == tl_root) break;
+  }
+  if (!p) return;
+  tl_n *box = p != tl_root || (p != e && p->c.clip == 2) ? p : 0;
+  for (; p != tl_root; p = p->parent) if (!p || p->c.display == TL_NONE) return;
+  tl_ui->reveal(tl_ui->ctx, box ? box->view : 0, y, y + e->h);
+}
 // The style sheets: the texts of the page's style elements.
 static void tl_sheets(tl_n *e, char **out, size_t *n) {
   if (!e->tag) return;
@@ -1721,6 +1750,7 @@ static void tl_layout(void) {
   tl_show(tl_root, 0, 0, 1);
   uint32_t bg = body.c.bg ? body.c.bg : html.c.bg ? html.c.bg : (tl_dark ? 0xFF121212u : 0xFFFFFFFFu);
   tl_ui->page(tl_ui->ctx, tl_width, tl_root->y + tl_root->h + tl_root->c.mar[2] + body.c.mar[2] + body.c.pad[2], bg);
+  tl_reveal();
 }
 // ---- Pointers in pictures (C199f): the shape under a point, as a
 // browser finds it (pointer-events: a painted fill or stroke by default,
@@ -1959,7 +1989,7 @@ void ters_ui_resize(double width, double height, int dark) { ters_page_lock(); t
 // The first arguments may be width:N (360 by default), height:N (none by
 // default, so 100vh is 640) and dark.
 export const UI_HEADLESS_C = String.raw`
-typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold, clip, nout; double inside, side[4], out[24]; uint32_t sidec; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
+typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold, clip, nout; double inside, scrolled, side[4], out[24]; uint32_t sidec; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
 static uv *u_new(const char *tag, size_t tn, const char *s, size_t n) { uv *v = calloc(1, sizeof *v); if (tag) v->tag = tl_dup(tag, tn); if (s) v->s = tl_dup(s, n); return v; }
 static void *u_box(void *c, const char *t, size_t n) { (void)c; return u_new(t, n, 0, 0); }
 static void *u_text(void *c, const char *s, size_t n) { (void)c; return u_new(0, 0, s, n); }
@@ -2002,6 +2032,20 @@ static void u_measure(void *c, const char *s, size_t n, double size, int bold, d
 static double u_pw, u_ph; static uint32_t u_pbg;
 static void u_focus(void *c, void *v) { (void)c; u_focused = v; }
 static void u_page(void *c, double w, double h, uint32_t bg) { (void)c; u_pw = w; u_ph = h; u_pbg = bg; }
+// What a screen does with reveal (C320b): the box, or the page in a
+// window u_wh high (none given: no scrolling), scrolled the least that
+// shows top to bottom, the top when it can't show both.
+static double u_wh, u_scrolled;
+static double u_least(double now, double top, double bottom, double h, double most) {
+  if (bottom - now > h) now = bottom - h;
+  if (top < now) now = top;
+  return fmax(0, fmin(now, fmax(0, most - h)));
+}
+static void u_reveal(void *c, void *x, double top, double bottom) {
+  (void)c; uv *v = x;
+  if (v) v->scrolled = u_least(v->scrolled, top, bottom, v->h, v->inside);
+  else if (u_wh) u_scrolled = u_least(u_scrolled, top, bottom, u_wh, u_ph);
+}
 // Each box and text shown, at its place on the page.
 static void u_print(uv *v, double dx, double dy, int depth) {
   if (!v->shown) return;
@@ -2012,6 +2056,7 @@ static void u_print(uv *v, double dx, double dy, int depth) {
   if (v->tag && v->border) printf(" border %g", v->border);
   if (v->tag && v->clip) printf(" clip");
   if (v->tag && v->clip == 2) printf(" scroll %g", v->inside);
+  if (v->tag && v->clip == 2 && v->scrolled) printf(" scrolled %g", v->scrolled);
   if (v->tag && (v->side[0] || v->side[1] || v->side[2] || v->side[3])) printf(" sides %g %g %g %g %08X", v->side[0], v->side[1], v->side[2], v->side[3], v->sidec);
   if (v->tag && v->nout) { printf(" outline"); for (int i = 0; i < v->nout; i++) printf(" %g,%g", v->out[2 * i], v->out[2 * i + 1]); }
   if (!v->tag) printf(" %g%s %08X \"%s\"", v->size, v->bold ? " bold" : "", (unsigned)v->color, v->s);
@@ -2065,7 +2110,7 @@ static void u_frame(uv *v, double s) {
   for (int j = 0; j < ne; j++) if (!strcmp(v->ev[j], "frame")) ters_page_event(v->eh[j], "", 0, "", 0, 0, 0, s);
   for (int j = 0; j < nk && j < v->nk; j++) u_frame(v->kids[j], s);
 }
-static void u_show(uv *root) { printf("page %g %g bg %08X\n", u_pw, u_ph, (unsigned)u_pbg); u_print(root, 0, 0, 0); fputs("\x1e\n", stdout); }
+static void u_show(uv *root) { printf("page %g %g bg %08X%s", u_pw, u_ph, (unsigned)u_pbg, u_scrolled ? "" : "\n"); if (u_scrolled) printf(" scrolled %g\n", u_scrolled); u_print(root, 0, 0, 0); fputs("\x1e\n", stdout); }
 // The person is asked (L236b), and answers later with permission:yes.
 static int u_ask(void *c, const char *what, size_t n) { (void)c; printf("ask %.*s\n", (int)n, what); return -1; }
 #ifdef TERS_BLOCK
@@ -2104,7 +2149,7 @@ int main(int argc, char **argv) {
 #else
     0,
 #endif
-    u_focus
+    u_focus, u_reveal
   };
   double width = 360, height = 0; int dark = 0, a = 1;
   for (; a < argc; a++) {
@@ -2115,6 +2160,7 @@ int main(int argc, char **argv) {
   }
   // The clock animations run on is the test's: frames:N:MS moves it.
   tl_fake = 0;
+  u_wh = height;
   uv *root = ters_ui_start(&ui, width, height, dark);
   if (!root) return 1;
   u_show(root);
