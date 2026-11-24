@@ -146,10 +146,19 @@ export function countedInts(ir: CoreIR, fi: number): Counted | null {
   const stepped = new Map<number, number>();
   let rounds = 0;
   const alias = (e: SExpr) => (e.k === "local" ? of.get(e.i) : undefined);
-  // A constant or an input: its key, and the input it reads.
+  // Arrays whose lengths are compared with: handed on unchanged too.
+  const lengths = new Set<number>();
+  // A constant, an input, or the length of an input array: its key, and
+  // the Int input it reads.
   const steady = (e: SExpr): [string, number | undefined] | null => {
     const v = e.k === "int" ? e.v : e.k === "local" ? lits.get(e.i) : undefined;
     if (v !== undefined) return v < SMALL && v > -SMALL ? [`${v}`, undefined] : null;
+    if (e.k === "rt" && /^array\.length\.a\d+$/.test(e.fn) && e.args.length === 1) {
+      const a = alias(e.args[0]);
+      if (a === undefined) return null;
+      lengths.add(a);
+      return [`n${a}`, undefined];
+    }
     const s = alias(e);
     return s === undefined ? null : [`l${s}`, s];
   };
@@ -200,7 +209,7 @@ export function countedInts(ir: CoreIR, fi: number): Counted | null {
   };
   walk(f.body);
   const ints = [...steps.keys()].filter((j) => f.locals[j] === "int" && !dropped.has(j) && steps.get(j)!.size === 1 && [...reads.get(j) ?? []].every((s) => s !== j && inPlace.has(s) && f.locals[s] === "int")).sort((a, b) => a - b);
-  if (!ints.length) return null;
+  if (!ints.length || ![...lengths].every((a) => inPlace.has(a))) return null;
   const plain = new WeakSet<SExpr>();
   for (const [a, j] of stepNodes) if (ints.includes(j)) plain.add(a);
   const read = new Set(ints.flatMap((j) => [...reads.get(j) ?? []]));
