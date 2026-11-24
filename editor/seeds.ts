@@ -123,13 +123,21 @@ export function seeds(host: SeedHost) {
     // any run, short or long (I136: the long run made + New definition a
     // second slower; I157: the short one, a new main's run, 0.35 s more).
     if (!calledDefs(doc().code).has(def)) return undefined;
-    // Before the program's arithmetic is resolved (the page reopened on a
-    // large definition), the resolving goes in a task of its own and the
-    // definition draws again after it (E319k: 450 ms of rapidity
-    // picture's first drawing was this).
-    if (!mainRuns.has(doc().code) && !warming.has(doc().code) && !resolvedKnown(doc().code, info)) {
+    // Main's short run not made yet (the page reopened on a large
+    // definition, or one opened before the warm-up): it's made in pieces
+    // (warmCalls), the program's arithmetic resolved first in a task of
+    // its own, and the definition draws again once it has a value
+    // (E319k: 450 ms of rapidity picture's first drawing was the
+    // resolving, 300 more the run).
+    const main = defNamed("main"), mainBody = main ? defBody(main) : undefined;
+    if (entry === main && !(mainBody?.kind === "lambda" && mainBody.params.length) && !mainRuns.has(doc().code)) {
       const was = doc().code, open = ui.def;
-      setTimeout(() => { if (doc().code !== was) return; resolvedFor(was, info, pres().names); if (ui.def === open) { seeds.get(was)?.m.delete(def); render(); } }, 0);
+      afterWarm(was, () => {
+        if (doc().code !== was || ui.def !== open) return;
+        // Found: drawn again. Not found: the long run, as below.
+        if (mainRuns.get(was)?.has(body.id)) { seeds.get(was)?.m.delete(def); render(); } else firstCall(info, def);
+      });
+      setTimeout(() => { if (doc().code === was) warmCalls(info); }, 0);
       return undefined;
     }
     const short = mainCalls(info, entry).get(body.id);
@@ -350,6 +358,7 @@ export function seeds(host: SeedHost) {
       }
       runs.set(doc().code, (calls = got));
     }
+    if (!long && waiting.has(doc().code)) warmed(doc().code, calls);
     return calls;
   }
   // The short run, started once the page has opened and given back to it
@@ -357,6 +366,15 @@ export function seeds(host: SeedHost) {
   // once, 0.32 of its 0.64 s task). A page's main, which takes nothing;
   // a picture's runs at its pixels when a function is opened.
   const warming = new WeakMap<Code, { got: Map<Id, Value[]>; rest: Generator<void> }>();
+  // What waits on a code's short run: called once it's made.
+  const waiting = new WeakMap<Code, (() => void)[]>();
+  function afterWarm(code: Code, f: () => void) { const fs = waiting.get(code) ?? []; fs.push(f); waiting.set(code, fs); }
+  function warmed(code: Code, got: Map<Id, Value[]>) {
+    mainRuns.set(code, got);
+    const fs = waiting.get(code);
+    waiting.delete(code);
+    for (const f of fs ?? []) setTimeout(f, 0);
+  }
   const libSeeded = new WeakSet<T.Info>();
   function warmCalls(info: T.Info): void {
     const code = doc().code, main = defNamed("main"), body = main ? defBody(main) : undefined;
@@ -374,13 +392,13 @@ export function seeds(host: SeedHost) {
     mainCopies.set(code, copies);
     const args = mainArgs(info, main, []);
     const rest = args && runFrom(info, main, args, [MAIN_STEPS, MAIN_MS, HANDLERS_MS], got, copies);
-    if (!rest) { mainRuns.set(code, got); return; }
+    if (!rest) { warmed(code, got); return; }
     warming.set(code, { got, rest });
     const piece = () => {
       const w = warming.get(code);
       if (!w) return;
       if (doc().code !== code) { rest.return(undefined); warming.delete(code); return; }
-      if (rest.next().done) { warming.delete(code); mainRuns.set(code, got); } else setTimeout(piece, 0);
+      if (rest.next().done) { warming.delete(code); warmed(code, got); } else setTimeout(piece, 0);
     };
     setTimeout(piece, 0);
   }
