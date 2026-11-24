@@ -6,9 +6,7 @@
 import { discharge } from "./ledger.ts";
 import { PART_NAMES, tupleType } from "./std-values.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { isCall, toTodaysShape } from "../model.ts";
-import { readSaved } from "../saved.ts";
-import moved0 from "../../library/moved.json" with { type: "json" };
+import { isCall } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
 import { MASK_TYPES, NAMED_ROWS, ROW_CARRIER, ARRAY, TABLE, HASH_SET, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, Subst, type Row, type Type } from "./types.ts";
@@ -53,9 +51,8 @@ export const LIST = typedef("std.list", "List", ["a"], [
   ["cons", [["head", ([a]) => tref(a)], ["tail", ([a], self) => tref(self, tref(a))]]],
 ]);
 // Two values together is a Tuple2 (below; BACKLOG L139): std once had its
-// own Pair beside it, and a saved program's ids for it read as Tuple2's
-// (RENAMED_IDS). Its two trefs' numbers are kept, so the ones after them
-// don't move.
+// own Pair beside it. Its two trefs' numbers are kept, so the ones after
+// them don't move.
 export const PAIR = "std.tuple2";
 tn += 2;
 
@@ -1488,38 +1485,6 @@ export const SLOPES = typedef("std.slopes", "Slopes", [], [
   ["both slopes", [["left", () => slTref("left", "std.slopes")], ["right", () => slTref("right", "std.slopes")]]],
 ]);
 export const SLOPES_V = { none: "std.slopes.no slopes", one: "std.slopes.slope", both: "std.slopes.both slopes" } as const;
-// Ids that were renamed, as a saved program may still use them: std's Pair
-// is Tuple2 (L139).
-export const RENAMED_IDS: Record<Id, Id> = {
-  "std.pair": "std.tuple2", "std.pair.type": "std.tuple2.type", "std.pair.a": "std.tuple2.a", "std.pair.b": "std.tuple2.b",
-  "std.pair.pair": "std.tuple2.tuple", "std.pair.pair.fst": "std.tuple2.tuple.first", "std.pair.pair.snd": "std.tuple2.tuple.second",
-};
-// Library definitions whose content changed, old id to today's (L184,
-// written by library/build.ts). A part of one (`@def:3`) moves with it.
-const MOVED = moved0 as Record<Id, Id>;
-const todaysId = (id: string): string => {
-  const renamed = RENAMED_IDS[id] ?? MOVED[id];
-  if (renamed) return renamed;
-  const at = id.startsWith("@") ? id.indexOf(":") : -1;
-  return at > 0 && MOVED[id.slice(0, at)] ? MOVED[id.slice(0, at)] + id.slice(at) : id;
-};
-// A saved value (a program's code, names, comments) read as today's: each
-// renamed or moved id in it, as a key or a string, and its nodes moved
-// through every change of shape since the one it was saved at (`shape`,
-// model.ts SHAPE_STEPS; all of them when it has none), its number
-// literals' digits read as values (saved.ts, I237).
-export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.shape): T {
-  const shape = typeof from === "number" ? from : 0;
-  if (typeof x === "string") return todaysId(x) as T;
-  if (Array.isArray(x)) return x.map((v) => onTodaysIds(v, shape)) as T;
-  if (x && typeof x === "object") {
-    const o = Object.fromEntries(Object.entries(x).map(([k, v]) => [todaysId(k), onTodaysIds(v, shape)]));
-    if (o.nodes && typeof o.nodes === "object" && !Array.isArray(o.nodes)) { readSaved({ nodes: o.nodes }); toTodaysShape(o.nodes as Record<Id, unknown>, shape); }
-    return o as T;
-  }
-  return x;
-}
-
 export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY, MARK, MESH, PLACED, TARGET, DRAW, PASS, FRAME, TEXEL, FILE_KIND, FILE_INFO, SLOPES] };
 // What the signatures say that a run needs, as data (C251), so the
 // evaluator and a page don't carry the signatures: each builtin's number

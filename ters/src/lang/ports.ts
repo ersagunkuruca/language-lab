@@ -193,8 +193,8 @@ export function fillOnce(lib: Code): Code {
 export function fillLater(lib: Code): () => Code { toFill = lib; base = null; return () => baseNow()!.filled; }
 
 
-// A saved use that binds its ports and has a body, moved to today's shape
-// (L211g, model.ts SHAPE_STEPS): the use gives its produced ports with no
+// A use that binds its ports and has a body, moved to today's shape
+// (L211g; dsl.ts makes them so): the use gives its produced ports with no
 // body, and its old body becomes a let of that, in the use's place. A read
 // of a port's old binder becomes a part read of the let's variable
 // (`value.second` for the second produced port), or the variable itself

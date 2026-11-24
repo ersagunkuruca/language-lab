@@ -768,15 +768,6 @@ export const REAL_V: typeof Std.REAL_V = "std.real.real";
 export const RECEIVE: typeof Std.RECEIVE = "std.receive";
 export const RELEASE: typeof Std.RELEASE = "std.release";
 export const RELEASE_V: typeof Std.RELEASE_V = "std.release.release";
-export const RENAMED_IDS: typeof Std.RENAMED_IDS = {
-  "std.pair": "std.tuple2",
-  "std.pair.type": "std.tuple2.type",
-  "std.pair.a": "std.tuple2.a",
-  "std.pair.b": "std.tuple2.b",
-  "std.pair.pair": "std.tuple2.tuple",
-  "std.pair.pair.fst": "std.tuple2.tuple.first",
-  "std.pair.pair.snd": "std.tuple2.tuple.second"
-};
 export const REPRESENTATION: typeof Std.REPRESENTATION = "std.representation";
 export const REPRESENTATION_V: typeof Std.REPRESENTATION_V = "std.representation.representation";
 export const REQUEST: typeof Std.REQUEST = "std.request";

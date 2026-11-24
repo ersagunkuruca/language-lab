@@ -10,14 +10,13 @@ import { STYLES } from "../styles.ts";
 import type { Options } from "./infer.ts";
 import type { Pins } from "./signatures.ts";
 import { LIBRARY, NUMBERS, PRELUDE, TREES } from "./library.ts";
-import { onTodaysIds } from "./std.ts";
-import { parseSaved, readJsonFile } from "../saved.ts";
+import { parseSaved, readJsonFile, readSaved } from "../saved.ts";
 import { verify, type Module } from "./modules.ts";
 // The library's check kept on disk between processes (I193).
 import "./library-store.ts";
 
-// A saved file, with ids since renamed read as today's (std.ts RENAMED_IDS).
-const read = <T>(path: string, fallback: T): T => (existsSync(path) ? onTodaysIds(readJsonFile<T>(path, readFileSync(path, "utf8"))) : fallback);
+// A saved file, its number literals' digits read as values (saved.ts).
+const read = <T>(path: string, fallback: T): T => (existsSync(path) ? readSaved(readJsonFile<T>(path, readFileSync(path, "utf8"))) : fallback);
 
 // The library as a program's layer, its names and the checker's options:
 // in base.ts, which the browser reaches too (carried-reps.ts).

@@ -12,7 +12,9 @@ import { base, baseNames } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
 import { SHOW_ANY } from "../src/lang/std.ts";
 import { tuplePart } from "../src/lang/std-values.ts";
-import { SHAPE_STEPS, nodeValues } from "../src/model.ts";
+import { nodeValues } from "../src/model.ts";
+import { usesGiveTheirPorts } from "../src/lang/ports.ts";
+import { LIBRARY } from "../src/lang/library.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
@@ -124,7 +126,7 @@ test("a use with no body reads as a call naming its given ports (L211f), in bloc
   assert.match(renderSexpr(code, pres, main), /\(solve add \(\(\S+ 2\) \(out 5\)\)\)/);
 });
 
-// A saved use with binds and a body moves to today's shape (L211g): no
+// A use with binds and a body moves to today's shape (L211g): no
 // body, the old body a let of its value, a binder's read a part of that.
 test("a saved use moves to the bodyless shape and runs the same: its body a let, binder reads parts (L211g)", async () => {
   const k = new Lang();
@@ -137,7 +139,7 @@ test("a saved use moves to the bodyless shape and runs the same: its body a let,
   const single = k.solve(B.add, { 0: k.lit(2), out: k.lit(5) }, { 1: "b" }, (b) => b[1]);
   k.define(one, k.thunk(() => k.call(SHOW_ANY, single)));
   const saved = JSON.parse(JSON.stringify(k.code.nodes)) as Record<Id, unknown>;
-  SHAPE_STEPS[2].step(saved);
+  usesGiveTheirPorts(saved, LIBRARY.code.nodes);
   const moved = saved[use] as NodeOf<"call">, bare = saved[`${use}.use`] as NodeOf<"call">;
   assert.equal(moved.fn, `${use}.let`);
   assert.equal(bare.body, undefined);
@@ -168,7 +170,7 @@ test("a saved use whose port's binder carries a unit moves too, the binder a let
   const saved = JSON.parse(JSON.stringify(k.code.nodes)) as Record<Id, unknown>;
   // Saved with x declared in metres.
   (saved[bx] as { unit?: object }).unit = { m: 1 };
-  SHAPE_STEPS[2].step(saved);
+  usesGiveTheirPorts(saved, LIBRARY.code.nodes);
   const moved = saved[use] as NodeOf<"call">, bare = saved[`${use}.use`] as NodeOf<"call">;
   assert.equal(moved.fn, `${use}.let`);
   assert.equal(bare.binds, undefined);

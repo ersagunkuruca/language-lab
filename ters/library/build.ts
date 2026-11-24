@@ -54,23 +54,15 @@ if (check) {
   process.exit(0);
 }
 
-// Definitions whose content changed: old id to new, by name.
+// Definitions whose content changed: old id to new, by name. The saved
+// programs in this repository are moved onto the new ids below; nothing
+// reads an old id after (L184's moved.json was retired 2026-11-24).
 const newIds: Record<string, string> = {};
 for (const mod of [m, v, h, st, cs, nu, sg, tu, so]) for (const d of mod.code.defs) newIds[mod.names[d] ?? d] = d;
 // One still built is kept: two may share a name (as float64 is Rational's,
 // Fixed's and Float32's), and a new one of that name moves nothing.
 const still = new Set([m, v, h, st, cs, nu, sg, tu, so].flatMap((mod) => mod.code.defs));
 const moved = Object.entries(oldIds).flatMap(([name, old]) => (newIds[name] && newIds[name] !== old && !still.has(old) ? [[old, newIds[name]] as const] : []));
-// A saved program refers to library definitions by id, so one whose content
-// changed keeps opening: its old id is read as the new one (moved.json, read
-// by std.ts onTodaysIds; L184). Every move is kept, the older ones pointed
-// on at today's id.
-const movedPath = join(here, "moved.json");
-const kept: Record<string, string> = existsSync(movedPath) ? JSON.parse(readFileSync(movedPath, "utf8")) : {};
-for (const [a, b] of moved) kept[a] = b;
-const today = (id: string) => { for (const seen = new Set<string>(); kept[id] && !seen.has(id);) { seen.add(id); id = kept[id]; } return id; };
-save(movedPath, Object.fromEntries(Object.keys(kept).sort().map((a) => [a, today(a)] as const).filter(([a, b]) => a !== b)));
-
 // Every version each std definition has had (SHARING.md §3, L109): a
 // change to a declaration adds one and keeps the old.
 const versionsPath = join(here, "std-versions.json");

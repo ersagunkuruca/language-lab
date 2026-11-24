@@ -275,7 +275,7 @@ test("a page carries no model, loader, checker or evaluator code", async () => {
     const html = await webCorePage(example, p.code, info, p.pres.names, p.named("main"), undefined, modules);
     assert.ok(modules.some((m) => m.endsWith("core-page.ts")), modules.join(" "));
     assert.deepEqual(modules.filter((m) => NOT_IN_A_PAGE.test(m)), [], example);
-    // The upgrades a saved file is read through (model.ts SHAPE_STEPS).
+    // The upgrades a saved file was once read through (L184, retired).
     assert.doesNotMatch(html, /\(L130d\)|usesGiveTheirPorts/, example);
   }
 });

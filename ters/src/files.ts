@@ -24,8 +24,7 @@ import { isPublished, merge, SHAPE, type Code, type Id, type Node, nodeEntries, 
 import type { Comments, Names } from "./presentation.ts";
 import { LIBRARY } from "./lang/library.ts";
 import { addToStore, MODULE_FORMAT, needs, pointsAt, upgradeNames, upgradeOwn, verify, type Module, type Moved } from "./lang/modules.ts";
-import { onTodaysIds } from "./lang/std.ts";
-import { conflictMarkersAt, printSaved } from "./saved.ts";
+import { conflictMarkersAt, printSaved, readSaved } from "./saved.ts";
 import type { Pins } from "./lang/signatures.ts";
 import type { Saved } from "./lang/tests.ts";
 import type { Drafts } from "../../editor/drafts.ts";
@@ -35,9 +34,8 @@ export const FORMAT = "projectional-program";
 export interface ProgramFile {
   format: typeof FORMAT;
   version: 1 | 2;
-  // The shape of its nodes (model.ts SHAPE): a file saved before a change
-  // of shape has the steps since run when it opens (L184). Absent before
-  // shapes were numbered.
+  // The shape of its nodes (model.ts SHAPE): a file at another is
+  // refused. Absent before shapes were numbered.
   shape?: number;
   title: string;
   typed: boolean;
@@ -83,11 +81,11 @@ const strings = (x: unknown): x is Record<string, string> => isObj(x) && Object.
 // the reason it can't be opened instead of throwing.
 export function fromFile(text: string, baseFor: (typed: boolean) => Code): { file: ProgramFile; code: Code } | { error: string } {
   let x: unknown;
-  // Ids since renamed read as today's (std.ts RENAMED_IDS).
   const marked = conflictMarkersAt(text);
   if (marked !== null) return { error: `it has git conflict markers (the first at line ${marked}): resolve them, or merge again by id with the program driver (\`ters git-setup\` sets it up, DIFF.md)` };
-  try { x = onTodaysIds(JSON.parse(text)); } catch { return { error: "it isn't JSON" }; }
+  try { x = readSaved(JSON.parse(text)); } catch { return { error: "it isn't JSON" }; }
   if (!isObj(x) || x.format !== FORMAT) return { error: "it isn't a program saved by this editor" };
+  if (x.shape !== SHAPE) return { error: "it was saved by an older version, whose programs this one no longer reads" };
   if (x.version !== 1 && x.version !== 2) return { error: `it was saved by a newer version (${String(x.version)})` };
   const c = x.code;
   if (!isObj(c) || !isObj(c.nodes) || !Array.isArray(c.defs)) return { error: "it has no code" };
