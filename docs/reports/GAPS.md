@@ -5407,3 +5407,13 @@ refusals.
 
 No gap is the language's this round. BG1 and BG2 go to the Compiler
 lane as C323 and C324.
+
+### After the round (2026-11-24)
+
+C323 (#3257, #3258): what a job sends to the workers is counted, and its
+writing stops once it couldn't pay; bothPure's cheap calls make nothing.
+`ters compile`'s module at 200,000 orders went from 20.2 s with workers
+to 1.6 s (1.5 s without). C324a (#3259): two arrays joined in one step,
+so the core IR went from 1.75 s to 1.40 s. The rest of C324 is closed as
+measured (DONE): hash tables for the data keys were no faster, and no
+other single pass buys 10%. The round stops here.
