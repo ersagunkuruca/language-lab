@@ -13,7 +13,8 @@ import type { Info } from "./infer.ts";
 import { browserWorld, type PickedFolder, type Store } from "./browser.ts";
 import { carried, Cells, handOver, nodeOf } from "./cells.ts";
 const cellGone = (c: Value): boolean => nodeOf(c)?.disposed ?? true;
-import { evaluatorCall, mountHtml, replayEvent, type Doc, type Node_ } from "./html.ts";
+import { evaluatorCall, mountHtml, replayEvent, useRender, type Doc, type Node_ } from "./html.ts";
+import { renderFrame } from "./frame-render.ts";
 import { equal, OutOfSteps, pageProblem, runMain, type Measure, type Value, type World } from "./run.ts";
 import { corePageScript, coreSoundScript, lowerCore, scriptSolves } from "../../../compiler/src/core-js.ts";
 import type { CoreIR } from "../../../compiler/src/scalar.ts";
@@ -338,6 +339,9 @@ export function pageShell(title: string, ...scripts: string[]): string {
 export { PAGE_BASE } from "./page-base.ts";
 import { PAGE_BASE } from "./page-base.ts";
 import { nodesOfKindIn, nodeValues } from "../model.ts";
+
+// An interpreted page renders frames (html.ts useRender).
+useRender(renderFrame);
 
 // The same document with `body` already drawn in it: `ters run` on a page
 // gives this with no scripts, the page as static HTML.

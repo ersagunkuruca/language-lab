@@ -38,7 +38,7 @@ import { ownedPushes } from "./owned-pushes.ts";
 import { ownedRecords } from "./owned-records.ts";
 import { ownedTables } from "./owned-tables.ts";
 import { envSet, zeroParts } from "./zero-parts.ts";
-import { ARITH, ARRAY_OPS, BYTES_V, FALSE, FIRST, PAIR_V, S, SECOND, TRUE } from "../../ters/src/lang/std.ts";
+import { ARITH, ARRAY_OPS, BYTES_V, FALSE, FIRST, HTML_V, PAIR_V, S, SECOND, TRUE } from "../../ters/src/lang/std.ts";
 import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std-impl.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
@@ -1537,6 +1537,8 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
     ...builtinsFor(js, page),
     ...branchesFor(js, worlds, page),
     // What plays its sound, where it has one (C251c).
+    // What renders its frames, where it renders one.
+    ...(page.startsWith("$") || !js.includes(JSON.stringify(HTML_V.render)) ? [] : [using("useRender", page), `import { renderFrame as $renderFrame } from ${JSON.stringify(page.replace(/[^/]*$/, "../../ters/src/lang/frame-render.ts"))};`, "useRender($renderFrame);"]),
     ...(worklet === undefined || page.startsWith("$") ? [] : [`import { useSound as $useSound } from ${JSON.stringify(page)};`, `import { recordingWorld as $recordingWorld, soundPlayer as $soundPlayer } from ${JSON.stringify(page.replace(/[^/]*$/, "../../ters/src/lang/audio-page.ts"))};`, "$useSound({ recordingWorld: $recordingWorld, soundPlayer: $soundPlayer });"]),
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     `startCorePage(${JSON.stringify(tableSpecs(ir))}, ${JSON.stringify(worlds)}, (R) => {`,

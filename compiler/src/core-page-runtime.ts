@@ -17,6 +17,10 @@ useBranches(branches);
 import { useSound } from "./core-page.ts";
 import { recordingWorld, soundPlayer } from "../../ters/src/lang/audio-page.ts";
 useSound({ recordingWorld, soundPlayer });
+// And what renders a frame.
+import { useRender } from "./core-page.ts";
+import { renderFrame } from "../../ters/src/lang/frame-render.ts";
+useRender(renderFrame);
 export { plans } from "./plan-rt.js";
 export { floats } from "./core-floats.ts";
 export { solver } from "./core-solve.ts";
