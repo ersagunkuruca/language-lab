@@ -279,3 +279,19 @@ test("a page carries no model, loader, checker or evaluator code", async () => {
     assert.doesNotMatch(html, /\(L130d\)|usesGiveTheirPorts/, example);
   }
 });
+
+// A page that renders no frame carries nothing that renders one (raster.ts,
+// gpu-frame.ts); one that does carries both (html.ts useRender).
+test("only a page that renders a frame carries what renders it", async () => {
+  const { webCorePage } = await import("../cli/web.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { infer } = await import("../src/lang/infer.ts");
+  const RENDERS = /src\/lang\/(raster|gpu-frame|frame-render)\.ts$/;
+  for (const [example, renders] of [["dice", false], ["flock-frame-page", true]] as const) {
+    const p = loadProgram(join(import.meta.dirname, "../examples", example));
+    const info = infer(p.code, p.pres.names, undefined, p.options);
+    const modules: string[] = [];
+    await webCorePage(example, p.code, info, p.pres.names, p.named("main"), undefined, modules);
+    assert.equal(modules.filter((m) => RENDERS.test(m)).length, renders ? 3 : 0, `${example}: ${modules.join(" ")}`);
+  }
+});

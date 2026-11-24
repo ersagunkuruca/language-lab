@@ -20,6 +20,8 @@ type Defs = Record<string, (...xs: unknown[]) => unknown>;
 let SOUND: { recordingWorld: typeof recordingWorld; soundPlayer: typeof soundPlayer } | undefined;
 // The GPU sites of a page's draws (G9c, gpu-draws.ts), for gpu-frame.ts.
 export { pageDraws } from "../../ters/src/lang/gpu-frame.ts";
+// What renders a frame (frame-render.ts), given by a page that renders one.
+export { useRender } from "../../ters/src/lang/html.ts";
 export const useSound = (s: NonNullable<typeof SOUND>) => { SOUND = s; };
 
 // `defs` makes the printed functions from the runtime; `main` is the
