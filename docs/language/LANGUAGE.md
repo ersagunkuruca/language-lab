@@ -699,7 +699,9 @@ A count is a measure too (L46). A function that calls itself with an
 that compares it with a bound the call keeps (`steps < 120`, or the
 otherwise of `120 < steps`; a literal, or an input passed on as it is),
 ends: the distance to the bound shrinks with every call and can't go
-below 0. Counting down towards a lower bound is the same, and running
+below 0. The test may be written with `≤`, `>` or `≥` too (`if n ≤ 0
+then acc else dot(…, n − 1, …)`), each the `<` it is (C303a). Counting
+down towards a lower bound is the same, and running
 forward in modes.ts takes it the same way. A `Float64` count isn't accepted: `2⁵³ + 1` is `2⁵³`, and `NaN`
 compares false with everything, so such a count can stop moving.
 

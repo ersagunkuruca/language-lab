@@ -34,8 +34,9 @@ test("household: three appliance types in one home, evaluated and compiled", asy
   const check = node([lab, "check", household]).out;
   assert.match(check, /^appliance at fridge : Appliance Fridge$/m);
   assert.match(check, /^home : List Device$/m);
-  // Written once for any appliance, packed or not.
-  assert.match(check, /^energy : \(a, Int\) -\[Diverge\]-> Float64/m);
+  // Written once for any appliance, packed or not; its count of hours,
+  // guarded by ≤, surely ends (C303a).
+  assert.match(check, /^energy : \(a, Int\) -> Float64/m);
   // Written and read back through the MCP's text.
   const { call } = await import("../mcp/server.ts");
   call("open", { path: household });

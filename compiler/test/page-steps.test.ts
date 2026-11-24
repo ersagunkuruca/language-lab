@@ -12,7 +12,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { counted, makeRunner } from "../../ters/src/lang/run.ts";
-import { S } from "../../ters/src/lang/std.ts";
+import { ARITH, S } from "../../ters/src/lang/std.ts";
 import { merge } from "../../ters/src/model.ts";
 import { loadCoreJs, lowerCore } from "../src/core-js.ts";
 
@@ -45,4 +45,26 @@ test("countdown's search spends about the evaluator's page steps compiled, and n
   assert.equal(ev.n, 18120);
   const under = steps(() => fn("fueled")(0));
   assert.deepEqual(under, { v: ev.v, n: 0 });
+});
+
+// C303: a count down guarded by ≤ (`if n ≤ 0 then acc else …(n − 1)`)
+// surely ends where its count is an Int: the checker reads ≤, > and ≥ as
+// the < they are (counting.ts). Generic, the definition may not finish (a
+// Float64 count can stop moving); compiled where every call counts an
+// Int, it spends no page step. mnist-page's `dot` spent a page's million
+// steps a frame.
+test("a generic count down by ≤ compiled with an Int count spends no page steps (C303)", () => {
+  const k = new Lang(LIBRARY.code);
+  const cd = k.def("count down"), use = k.def("use");
+  k.define(cd, k.fn(["n", "acc"], (n, acc) => k.if(k.call(L("at most"), n, k.lit(0)), acc, k.call(cd, k.call(ARITH.sub, n, k.lit(1)), k.call(ARITH.add, acc, k.lit(2))))));
+  k.define(use, k.fn(["u"], () => k.call(cd, k.int(300000), k.int(0))));
+  const code = merge(k.code, LIBRARY.code), names = { ...LIBRARY.names, ...k.names };
+  const info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.ok(info.divergent.has(cd), "the checker can't see a generic count end");
+  const ir = lowerCore(code, info, names, [use]);
+  const fns = loadCoreJs(ir), fn = (n: string) => fns[ir.funcs.findIndex((f) => f.name === n && !f.inner)];
+  const used = { n: 0 };
+  assert.equal(Number(counted(1e9, () => fn("use")(0), used)), 600000);
+  assert.equal(used.n, 0);
 });
