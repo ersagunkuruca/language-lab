@@ -287,7 +287,7 @@ test("collatz's fold of a record of Ints runs on threads natively and prints the
   const dir = mkdtempSync(join(tmpdir(), "c-walks-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/collatz");
   const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "collatz")]);
   assert.equal(built.status, 0, built.stderr.toString());
-  assert.match(readFileSync(join(dir, "collatz.c"), "utf8"), /lab_par_map_\d+\(lab_cell \*xs, lab_cell \*f, Walks z, lab_cell \*jf\)/);
+  assert.match(readFileSync(join(dir, "collatz.c"), "utf8"), /lab_par_map_\d+\(Array_\d+ xs, lab_cell \*f, Walks z, lab_cell \*jf\)/);
   const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "3000", "100"]).stdout.toString();
   const runs = (args: string[], workers: string) => spawnSync(join(dir, "collatz"), args, { env: { ...process.env, TERS_WORKERS: workers, TERS_BRANCHES: "say" } });
   for (const workers of ["3", "0"]) assert.equal(runs(["3000", "100"], workers).stdout.toString(), evaluator, `${workers} workers`);
