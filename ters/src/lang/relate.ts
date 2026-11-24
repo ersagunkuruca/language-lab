@@ -1963,14 +1963,19 @@ export function interpreter(given: Code, opts: Options = {}) {
   // Is t fully known: no unknowns in it, and for a function, none in the
   // variables its body uses?
   const freeIn = new Map<Id, Id[]>();
+  // With a stack of its own, not a JS call a field: a long list (mnist-page's
+  // 74 KB of bytes, a cons a byte) overflowed it.
   function known(t: Term, s: State): boolean {
-    t = walk(t, s);
-    if (t instanceof LVar) return false;
-    if (isData(t)) return t.fields.every((f) => known(f, s));
-    if (typeof t === "object" && t.k === "closure") {
-      if (!freeIn.has(t.lambda)) freeIn.set(t.lambda, subtree(code, t.lambda).flatMap((x) => (nodes[x].kind === "ref" ? [(nodes[x] as NodeOf<"ref">).target] : [])));
-      const env = t.env;
-      return freeIn.get(t.lambda)!.every((b) => !env.has(b) || known(fromValue(env.get(b)), s));
+    const todo: Term[] = [t];
+    while (todo.length) {
+      const u = walk(todo.pop()!, s);
+      if (u instanceof LVar) return false;
+      if (isData(u)) { for (let i = u.fields.length - 1; i >= 0; i--) todo.push(u.fields[i]); continue; }
+      if (typeof u === "object" && u.k === "closure") {
+        if (!freeIn.has(u.lambda)) freeIn.set(u.lambda, subtree(code, u.lambda).flatMap((x) => (nodes[x].kind === "ref" ? [(nodes[x] as NodeOf<"ref">).target] : [])));
+        const env = u.env;
+        for (const b of freeIn.get(u.lambda)!) if (env.has(b)) todo.push(fromValue(env.get(b)));
+      }
     }
     return true;
   }
