@@ -16,7 +16,7 @@ import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Bound, Code, Id, Kind, Node, NodeOf, Use } from "../model.ts";
 import { nodesOfKindIn, directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call, bindsOf, bodyOf, copyNodes, nodeIds, nodeValues, changedOver, holdsAll } from "../model.ts";
-import { isPublished, conditionResults, dependencies, derived, layerOf, nodesWhere, nodesOfKind, forgetKinds, parentLookup, offLayer, ownerOfTypeParts, portsOf, scanOnce, scanningOnLayer, subtree } from "../model.ts";
+import { isPublished, conditionResults, dependencies, derived, layerOf, nodesWhere, nodesOfKind, forgetKinds, parentLookup, offLayer, ownerOfTypeParts, portsOf, scanOnce, scanningOnLayer, subtree, children } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
 import { constraints as unitConstraints, declaresUnit, pinUnitsBroken, unitProblems, UnitsBefore } from "../units.ts";
@@ -996,6 +996,44 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // not as that row, so a call inside a view (`part`, whose row is View)
   // doesn't make every other call of it do all View may.
   const letFns = new Set<Id>();
+  // A lambda's inputs, and the calls of one, each a row inside the row
+  // around it (I351): settled when the group's bodies
+  // are checked, so one called under first's Choice and outside it does
+  // what the outside call does, not Choice everywhere.
+  const lambdaParams = new Set<Id>();
+  // A let's names are a lambda's inputs too, `(name ↦ body)(value)`: not
+  // these, their value is there to type.
+  const letBinders = new Set<Id>();
+  // The calls of an input called both under a search (its first input:
+  // first's, all's) and outside one, in a definition of the group: only
+  // these are settled with the group, the rest as they are met.
+  const mixedCalls = new Set<Id>();
+  const markMixed = (d: Id) => {
+    const seen = new Map<Id, { calls: Id[]; under: boolean; outside: boolean }>();
+    const stack: [Id, boolean][] = [[d, false]];
+    while (stack.length) {
+      const [id, under] = stack.pop()!;
+      const n = code.nodes[id];
+      if (!n) continue;
+      if (isCall(n)) {
+        const f = code.nodes[n.fn];
+        if (f?.kind === "ref" && code.nodes[f.target]?.kind === "binder") {
+          const b = seen.get(f.target) ?? { calls: [], under: false, outside: false };
+          b.calls.push(id);
+          if (under) b.under = true; else b.outside = true;
+          seen.set(f.target, b);
+        }
+        if (f?.kind === "ref" && SEARCHES.has(f.target)) {
+          stack.push([n.fn, under]);
+          n.args.forEach((a, i) => stack.push([a, under || i === 0]));
+          continue;
+        }
+      }
+      for (const c of children(n)) stack.push([c, under]);
+    }
+    for (const b of seen.values()) if (b.under && b.outside) for (const c of b.calls) mixedCalls.add(c);
+  };
+  const insideCalls: { e: Row; around: Row; at: Id }[] = [];
   // Each binder given to a call, where (L29 closingUse).
   // Built from the group being checked, the only place its inputs are used
   // (a whole program's nodes on every check made the palette's rechecks of
@@ -1003,6 +1041,44 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   let passed: Map<Id, [Call, number][]> | null = null, passedFor: Id[] | null = null;
   let current: Id[] = [];
   const recursiveCalls: { call: Call; params: Type[]; args: Type[] }[] = [];
+  const settleInsideCalls = () => {
+    const unifyRowAt = (at: Id, a: Row, b: Row) => {
+      try { s.unifyRow(a, b); }
+      catch (e) {
+        if (e instanceof WorldError) err(at, worldMessage(callee(code.nodes[at] as Call), e));
+        else if (e instanceof EffectError) err(at, `${callee(code.nodes[at] as Call)} performs ${effName(e)}, which nothing here handles`);
+        else if (e instanceof TypeError) err(at, `${callee(code.nodes[at] as Call)}'s effects don't fit the ones around it: an effect is used at two types`);
+        else throw e;
+      }
+    };
+    // Rows a tail goes inside, through the rows one inside another.
+    const outward = (t: number): Set<number> => {
+      const out = new Set([t]);
+      for (let grew = true; grew;) {
+        grew = false;
+        for (const c of s.subs) { const f = s.resolveRow(c.from).tail, to = s.resolveRow(c.to).tail; if (f !== null && to !== null && out.has(f) && !out.has(to)) { out.add(to); grew = true; } }
+      }
+      return out;
+    };
+    const label = (x: Row["effs"][number]) => JSON.stringify(x);
+    const byTail = new Map<number, { e: Row; around: Row; at: Id }[]>();
+    for (const c of insideCalls.splice(0)) {
+      const e = s.resolveRow(c.e), around = s.resolveRow(c.around);
+      if (e.tail !== null && !e.effs.length) { byTail.set(e.tail, [...(byTail.get(e.tail) ?? []), c]); continue; }
+      // Fixed by something else: a search's own tail inside it is it.
+      if (e.tail !== null && around.tail !== null && e.tail !== around.tail && outward(around.tail).has(e.tail)) unifyRowAt(c.at, { effs: [], tail: around.tail }, e);
+      else unifyRowAt(c.at, c.e, c.around);
+    }
+    for (const calls of byTail.values()) {
+      const rows = calls.map((c) => s.resolveRow(c.around));
+      // The rows' shared labels, on the one of their tails that is or goes
+      // inside every other (first's inside the row around it).
+      const tail = rows.map((r) => r.tail).find((t) => { if (t === null) return false; const up = outward(t); return rows.every((r) => r.tail !== null && up.has(r.tail)); });
+      const shared = rows[0].effs.filter((x) => rows.every((r) => r.effs.some((y) => label(y) === label(x))));
+      if (tail !== undefined && tail !== null) unifyRowAt(calls[0].at, calls[0].e, { effs: shared, tail });
+      else for (const c of calls) unifyRowAt(c.at, c.e, c.around);
+    }
+  };
   const cached = (opts.cache ?? defaultCache)?.begin({ code, info, s, deps, layer, opts, valueDefs, typeDefs: code.defs.filter((d) => isTypeDef(d)) });
   for (const group of groups) {
     current = group;
@@ -1015,6 +1091,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       continue;
     }
     for (const d of group) mono.set(d, s.fresh());
+    for (const d of group) markMixed(d);
     for (const d of group) {
       const body = (code.nodes[d] as NodeOf<"def">).body;
       if (body === null) {
@@ -1034,6 +1111,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         else unifyAt(call.args[i], p, args[i]);
       }
     });
+    // The calls of lambdas' inputs (I351): an input's row is inside the
+    // rows of all its calls.
+    settleInsideCalls();
     // L159: why a group that might not finish can't take Diverge, when it
     // is a function stored in a constructor's field whose type has none
     // (a lazy stream's `next : () -> Stream`) that calls back into the
@@ -1416,6 +1496,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         break;
       case "lambda": {
         const inner = new Map(env);
+        for (const p of n.params) lambdaParams.add(p);
         const params = n.params.map((p) => { const pt = s.fresh(); inner.set(p, pt); info.typeOf.set(p, pt); return pt; });
         n.params.forEach((p, i) => { const c = closingUse(p); if (c) try { s.unify(params[i], c); } catch (e) { if (!(e instanceof TypeError)) throw e; } });
         const bodyRow = s.freshRow();
@@ -1476,6 +1557,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // function written there (ML's value restriction): it does nothing
         // until called, so each use may take it at a type of its own.
         const fnLam = code.nodes[n.fn];
+        if (fnLam?.kind === "lambda") for (const p of fnLam.params) letBinders.add(p);
         const pre = new Map<number, Type>();
         if (!early && !applied && fnLam?.kind === "lambda" && fnLam.params.length === n.args.length) n.args.forEach((a, i) => {
           if (code.nodes[a]?.kind !== "lambda") return;
@@ -1622,6 +1704,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           // search's does, so this code may do more beside the call (I153).
           let here = callRow;
           if (!search && ((fr.t === "fn" && s.resolveRow(fr.eff).tail === null) || (given?.kind === "ref" && letFns.has(given.target)))) { here = s.freshRow(); s.subs.push({ from: here, to: row, at: id }); }
+          // A call of a lambda's input called under a search and outside
+          // one, whose row nothing has fixed yet: settled with the group
+          // (insideCalls).
+          else if (!search && given?.kind === "ref" && mixedCalls.has(id) && lambdaParams.has(given.target) && !letBinders.has(given.target) && (fr.t === "var" || (fr.t === "fn" && (() => { const r = s.resolveRow(fr.eff); return r.tail !== null && !r.effs.length; })()))) { here = s.freshRow(); insideCalls.push({ e: here, around: callRow, at: id }); }
           try {
             try { s.unify(fr, { t: "fn", params, ret, eff: here }); }
             catch (e) { if (!(e instanceof TypeError) || e.constructor !== TypeError || back || fr.t !== "fn" || fr.params.length !== params.length || !liftLate(n, fr, params)) throw e; s.unify(fr, { t: "fn", params, ret, eff: here }); }

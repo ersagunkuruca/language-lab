@@ -384,6 +384,25 @@ test("a printer passed as a parameter isn't run under a Choice either", () => {
   assert.ok(p.errors.some((m) => /try all runs it under one/.test(m)), p.errors.join("\n"));
 });
 
+// I351: a function input called under first's Choice and outside it (the
+// default) does what the outside call does, so first's Choice stays
+// handled: mnist's squash, `first(lift(1) ÷ x, else lift(0))`.
+test("a function input called under first and outside it doesn't make callers handle first's Choice", () => {
+  const p = program((k) => {
+    const squash = k.def("squash");
+    k.define(squash, k.fn(["x", "lift"], (x, lift) => k.call(S.first, k.thunk(() => k.call(INT_OPS.quotient, k.call(lift, k.lit(1)), x)), k.thunk(() => k.call(lift, k.lit(0))))));
+    const use = k.def("use");
+    k.define(use, k.fn(["y"], (y) => k.call(squash, y, k.fn(["v"], (v) => v))));
+    const printing = k.def("printing");
+    k.define(printing, k.thunk(() => k.call(squash, k.lit(2), k.fn(["v"], (v) => k.seq(k.call(S.print, k.call(SHOW_ANY, v)), v)))));
+  });
+  const named = (n: string) => Object.keys(p.k.names).find((id) => p.k.names[id] === n)!;
+  assert.doesNotMatch(p.type(named("squash")), /Choice/);
+  assert.doesNotMatch(p.type(named("use")), /Choice/);
+  // A printer given is still run under first's Choice, and refused.
+  assert.ok(p.errors.some((m) => /while a Choice is open|runs it under one/.test(m)), p.errors.join("\n"));
+});
+
 // EFFECTS-REVIEW-2026-10-24 §2.1, BACKLOG L53: the rule comes from the
 // types. A search's function has a row of its own that can't hold the
 // world, inside the row of the call, so a printer reaches it however it is
