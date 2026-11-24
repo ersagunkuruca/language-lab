@@ -11,6 +11,8 @@
 // step is taken again; so it is when anything it made has a literal of the
 // old value, which may be its copy, or when a literal is gone, which may
 // have been worked into another.
+// A step that reads some values (bake.ts runs calls) says which nodes it
+// may have read (`reads`): a change to one of them makes it again.
 import { idsPlace, layerOf, moveIdsTo, nodeIds, nodesUnder, ownNodeIds, litOrigin, nodesOfKind, onLayer, sameValue, withNodes, type Code, type Id, type Node } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
@@ -21,13 +23,15 @@ type Stage = { code: Code; info: Info; names: Names };
 type Made = { copies: Map<Id, Id[]>; unknown: Set<string> };
 // `ids`: where the seeded ids were before the step and after it (model.ts
 // idsPlace); taken again only from where it began.
-type Kept = { given: Stage; out: Stage; made?: Made; ids: [number | null, number | null] };
+// `reads`: the nodes whose values the step read, where it reads some (a
+// change to one of them makes the step again).
+type Kept = { given: Stage; out: Stage; made?: Made; ids: [number | null, number | null]; reads?: ReadonlySet<Id> };
 const kept = keptMap<string, Kept>();
 // How many steps were made again so (the tests).
 export let stepsAgain = 0;
 
 // `place`: the step and what else it reads (its roots, its target).
-export function overLiterals<S extends Stage>(place: string, given: S, run: () => S): S {
+export function overLiterals<S extends Stage>(place: string, given: S, run: () => S & { reads?: ReadonlySet<Id> }): S {
   const was = kept.get(place), from = idsPlace();
   const again = was && was.ids[0] === from ? madeAgain(was, given) : null;
   if (again) {
@@ -36,10 +40,10 @@ export function overLiterals<S extends Stage>(place: string, given: S, run: () =
     kept.set(place, { ...was!, given, out: again });
     return handed(again) as S;
   }
-  const out = run();
+  const { reads, ...out } = run();
   if (kept.size >= 8 && !kept.has(place)) kept.clear();
-  kept.set(place, { given, out, ids: [from, idsPlace()] });
-  return handed(out);
+  kept.set(place, { given, out, ids: [from, idsPlace()], ...(reads ? { reads } : {}) });
+  return handed(out as unknown as S);
 }
 // What is handed on checks on over a trial of the substitution kept
 // (types.ts Subst.trial): the steps after bind variables of their own in
@@ -64,7 +68,7 @@ function madeAgain(was: Kept, q: Stage): Stage | null {
   for (const id of changed) {
     const a = p.code.nodes[id], b = q.code.nodes[id];
     if (a?.kind !== "lit" || b?.kind !== "lit" || !numeric(a.value) || !numeric(b.value) || classOf(a.value) !== classOf(b.value) || !sameValue({ ...a, value: b.value }, b)) return null;
-    if (made.unknown.has(litText(a.value))) return null;
+    if (made.unknown.has(litText(a.value)) || was.reads?.has(id)) return null;
     for (const at of [id, ...(made.copies.get(id) ?? [])]) {
       // One the step took out may have been worked into something else.
       const n = out.code.nodes[at];

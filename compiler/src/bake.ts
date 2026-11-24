@@ -23,7 +23,7 @@
 // case where every input is known.
 
 import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
-import { children, fieldWayOf, freshId, isCall, isUse, subtree, type Call, copyNodes, nodeIds } from "../../ters/src/model.ts";
+import { children, dependenciesOfAll, fieldWayOf, freshId, isCall, isUse, subtree, subtreeKept, type Call, copyNodes, nodeIds } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { evaluatorTicks, makeRunner, OutOfSteps, withSteps, type Data, type Value } from "../../ters/src/lang/run.ts";
@@ -43,7 +43,10 @@ const AGAIN = 16;
 // counted as a page's budget is (OutOfSteps).
 const BUDGET = 250_000, TOTAL = 1_000_000;
 
-export function bakeCalls(code: Code, info: Info, names: Names): { code: Code; baked: Id[] } {
+// `reads`: the nodes whose values the runs could read, each candidate's and
+// those of every definition it reaches (an edit of a number elsewhere
+// leaves what was baked as it was: literals-again.ts).
+export function bakeCalls(code: Code, info: Info, names: Names): { code: Code; baked: Id[]; reads: ReadonlySet<Id> } {
   const nodes = code.nodes;
   const ty = (id: Id): Type => info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
   const binders = new Set<Id>();
@@ -108,7 +111,10 @@ export function bakeCalls(code: Code, info: Info, names: Names): { code: Code; b
     const body = nodes[def.body];
     walk(def.body, body.kind === "lambda" && body.params.length > 0);
   }
-  if (!found.length) return { code, baked: [] };
+  if (!found.length) return { code, baked: [], reads: new Set() };
+  const reads = new Set<Id>();
+  for (const { id } of found) for (const x of subtree(code, id)) reads.add(x);
+  for (const d of dependenciesOfAll(code, found.map((f) => f.id))) if (nodes[d]?.kind === "def") for (const x of subtreeKept(code, d)) reads.add(x);
 
   let work = 0;
   const runner = makeRunner(code, info, { print: () => {}, names, entered: () => { if (++work > limit) throw new OutOfSteps(); } });
@@ -133,7 +139,7 @@ export function bakeCalls(code: Code, info: Info, names: Names): { code: Code; b
     out.nodes[id] = { ...made.root, id } as Node;
     baked.push(id);
   }
-  return { code: baked.length ? out : code, baked };
+  return { code: baked.length ? out : code, baked, reads };
 }
 
 // A value as nodes: a number or Int literal, a text, a case of data by its
