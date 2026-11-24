@@ -17,6 +17,8 @@ import { diffLines } from "../src/merge-files.ts";
 import { call } from "../mcp/server.ts";
 
 const INT = "type.int";
+// The numbers module's Fixed (library/numbers.json).
+const FIXED = "@bptskbf1o6r1dnqmcvnvptjmqr";
 const lit = (id: string, value: number | string, of?: string) => ({ id, kind: "lit" as const, value, ...(of ? { of } : {}) });
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
 // Every kind of literal a program has, as it is in memory.
@@ -26,7 +28,7 @@ const lits = {
   int: lit("int", 6, INT),
   big: lit("big", "12345678901234567891", INT),
   negative: lit("negative", "-98765432109876543210", INT),
-  fixed: lit("fixed", 2.5, "std.fixed"),
+  fixed: lit("fixed", 2.5, FIXED),
   // A 20-digit decimal at Float64 is the nearest double; at Rational it is
   // kept exactly, in the type's own spelling.
   float: lit("float", 0.12345678901234568, "type.number"),
@@ -41,7 +43,7 @@ test("a number literal is saved as its digits, a Text and a type's own spelling 
   assert.deepEqual(saved.untyped, { id: "untyped", kind: "lit", num: "0.1" });
   assert.deepEqual(saved.int, { id: "int", kind: "lit", of: INT, num: "6" });
   assert.deepEqual(saved.big, { id: "big", kind: "lit", of: INT, num: "12345678901234567891" });
-  assert.deepEqual(saved.fixed, { id: "fixed", kind: "lit", of: "std.fixed", num: "2.5" });
+  assert.deepEqual(saved.fixed, { id: "fixed", kind: "lit", of: FIXED, num: "2.5" });
   assert.equal(saved.float.num, "0.12345678901234568");
   assert.equal(saved.huge.num, "1e+21");
   assert.deepEqual(saved.rational, lits.rational);
@@ -90,7 +92,6 @@ test("a program folder and the editor's file read the same in either spelling", 
   assert.match(text, /"num": "12345678901234567891"/);
   const opened = fromFile(text, () => LIBRARY.code);
   assert.ok("code" in opened, "error" in opened ? opened.error : "");
-  // (Its `of` read as today's id, std.ts onTodaysIds.)
   for (const [id, n] of Object.entries(lits)) assert.deepEqual((opened.code.nodes[id] as { value: unknown }).value, n.value, id);
 });
 
@@ -159,9 +160,7 @@ test("a module and the editor's file hold their tables one entry per line, and r
     assert.equal(verify(back, LIBRARY.code), null, m.title);
     assert.ok(text.split("\n").length >= Object.keys(m.code.nodes).length, m.title);
   }
-  // (Not std.fixed, which reads as its id today.)
-  const { fixed: _, ...today } = lits;
-  const file = toFile({ title: "Numbers", typed: true, code: { nodes: { ...LIBRARY.code.nodes, ...today }, defs: LIBRARY.code.defs }, names: { big: "big" }, descriptive: {}, comments: {}, layout: { known: {} }, examples: {}, signatures: {} }, LIBRARY.code);
+  const file = toFile({ title: "Numbers", typed: true, code: { nodes: { ...LIBRARY.code.nodes, ...lits }, defs: LIBRARY.code.defs }, names: { big: "big" }, descriptive: {}, comments: {}, layout: { known: {} }, examples: {}, signatures: {} }, LIBRARY.code);
   assert.match(file, /\n"big": \{"kind": "lit", "num": "12345678901234567891", "of": "type.int"\},?\n/);
   assert.match(file, /"names": \{\n"big": "big"\n\}/);
   assert.equal(toFile(fromFileOk(file), LIBRARY.code), file);

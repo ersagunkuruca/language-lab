@@ -13,8 +13,8 @@ import signals0 from "../../library/signals.json" with { type: "json" };
 import tunings0 from "../../library/tunings.json" with { type: "json" };
 import sounds0 from "../../library/sounds.json" with { type: "json" };
 import { readSaved } from "../saved.ts";
-import { merge, shapeHooks, type Code, type Id, nodeEntries, nodeIds } from "../model.ts";
-import { fillLater, usesGiveTheirPorts } from "./ports.ts";
+import { merge, type Code, type Id, nodeEntries, nodeIds } from "../model.ts";
+import { fillLater } from "./ports.ts";
 import { WHOLE_LITERALS } from "./infer.ts";
 import { INT_CASES } from "./int-cases-ids.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
@@ -76,8 +76,6 @@ const lib = library(CORE, layer<Names>(preludeNames, stdNames), MODULES.filter((
 // The builtins' and std's plain notes (notes.ts) beside the modules' own.
 // reps: the trees' rows, then the modules' (Nat's, the numbers module's).
 export const LIBRARY = { ...lib, comments: { ...NOTES, ...lib.comments }, reps: [...(TREES.representations ?? []), ...lib.reps] };
-// Saved uses move to today's shape knowing the library's ports (L211g).
-shapeHooks.usesGiveTheirPorts = (nodes) => usesGiveTheirPorts(nodes, LIBRARY.code.nodes);
 // The library's host ways for its pure definitions, by id (L206).
 export const UNHOSTED = declarePureHosts(LIBRARY_HOSTS, LIBRARY.code.defs, LIBRARY.names);
 // Checked once, under every program that leaves it as it is (L216); and

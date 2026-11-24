@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import type { Code, Node } from "../src/model.ts";
 import { merge, nodeIds, nodeValues, withNodes } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { onTodaysIds } from "../src/lang/std.ts";
+import { readSaved } from "../src/saved.ts";
 import { infer as wholeCheck } from "../src/lang/infer.ts";
 import { exampleTables, type Manifest } from "../../editor/examplesPlugin.ts";
 import { infer, programOptions, setDisplayNames, setProgramPins } from "../../editor/typed.ts";
@@ -21,7 +21,7 @@ import { whereKeys } from "../../editor/whereRuns.ts";
 const manifest = JSON.parse(readFileSync(new URL("../../editor/examples.json", import.meta.url), "utf8")) as Manifest;
 function example(program: string) {
   const m = manifest.programs.find((p) => p.program === program)!;
-  const fs = (m.folders ?? []).map((f) => onTodaysIds(exampleTables(manifest, f) as { code: Code; names: Record<string, string> }));
+  const fs = (m.folders ?? []).map((f) => readSaved(exampleTables(manifest, f) as { code: Code; names: Record<string, string> }));
   const code = merge(LIBRARY.code, fs.map((f) => f.code).reduce((a, b) => merge(a, b)));
   const names = { ...LIBRARY.names, ...Object.assign({}, ...fs.map((f) => f.names ?? {})) };
   return { code, names, own: code.defs.filter((d) => !LIBRARY.code.nodes[d]) };

@@ -41,7 +41,7 @@ writeFileSync(out, `{"build":${JSON.stringify(build)},"kept":{${kept}}}`);
 // with them, so a first visit opens it with them as a later visit reads
 // them from IndexedDB. `<out dir>/example-checks.json` names each file.
 const { groupStore, hashOf, pack } = await import("./checkStore.ts");
-const { onTodaysIds } = await import("../ters/src/lang/std.ts");
+const { readSaved } = await import("../ters/src/saved.ts");
 const { exampleTables } = await import("./examplesPlugin.ts");
 const { createHash } = await import("node:crypto");
 const { mkdirSync, rmSync } = await import("node:fs");
@@ -55,7 +55,7 @@ groupStore.load = (k) => { const c = load(k); if (c) used.set(k, c); return c; }
 groupStore.save = (k, c) => { used.set(k, c); save(k, c); };
 const files: Record<string, string> = {};
 for (const m of manifest.programs.filter((p) => p.editor !== false && !p.built && p.folders?.length)) {
-  const fs = (m.folders ?? []).map((f) => onTodaysIds(exampleTables(manifest, f)) as { code?: unknown; names?: Record<string, string>; signatures?: Record<string, unknown> });
+  const fs = (m.folders ?? []).map((f) => readSaved(exampleTables(manifest, f)) as { code?: unknown; names?: Record<string, string>; signatures?: Record<string, unknown> });
   const code = merge(LIBRARY.code, fs.map((f) => f.code as import("../ters/src/model.ts").Code).reduce((a, b) => merge(a, b)));
   const names = { ...LIBRARY.names, ...Object.assign({}, ...fs.map((f) => f.names ?? {})) };
   used.clear();

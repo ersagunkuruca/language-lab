@@ -10,7 +10,7 @@ import type { Code } from "../ters/src/model.ts";
 import { merge } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
-import { onTodaysIds } from "../ters/src/lang/std.ts";
+import { readSaved } from "../ters/src/saved.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
 import { minifiedScripts } from "../ters/cli/web.ts";
 import { compilePageProgram } from "./pageCompile.ts";
@@ -30,7 +30,7 @@ export async function prebuild(manifest: Manifest, site: string): Promise<string
   const keys: string[] = [];
   const write = (key: string, made: unknown) => { writeFileSync(`${dir}${key}.json`, JSON.stringify(made)); keys.push(key); };
   for (const m of manifest.programs.filter((p) => p.editor !== false && !p.built && p.folders?.length)) {
-    const fs = (m.folders ?? []).map((f) => onTodaysIds(exampleTables(manifest, f) as Tables));
+    const fs = (m.folders ?? []).map((f) => readSaved(exampleTables(manifest, f) as Tables));
     const code = merge(LIBRARY.code, fs.map((f) => f.code as Code).reduce((a, b) => merge(a, b)));
     const short = Object.assign({}, ...fs.map((f) => f.names ?? {})) as Names;
     const names = { ...LIBRARY.names, ...short };

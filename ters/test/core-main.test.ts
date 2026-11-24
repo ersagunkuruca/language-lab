@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import type { Code } from "../src/model.ts";
 import { merge } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { onTodaysIds } from "../src/lang/std.ts";
+import { readSaved } from "../src/saved.ts";
 import { exampleTables, type Manifest } from "../../editor/examplesPlugin.ts";
 import type { CoreMain } from "../../editor/coreMain.ts";
 import { line, sendCode, words } from "../../editor/runCode.ts";
@@ -18,7 +18,7 @@ const manifest = JSON.parse(readFileSync(new URL("../../editor/examples.json", i
 // show, such as markov's text main since its page took its place (L261e).
 function example(program: string, folders?: string[]) {
   const m = folders ? { folders, run: undefined } : manifest.programs.find((p) => p.program === program)!;
-  const fs = (m.folders ?? []).map((f) => onTodaysIds(exampleTables(manifest, f) as { code: Code; names: Record<string, string> }));
+  const fs = (m.folders ?? []).map((f) => readSaved(exampleTables(manifest, f) as { code: Code; names: Record<string, string> }));
   const code = merge(LIBRARY.code, fs.map((f) => f.code).reduce((a, b) => merge(a, b)));
   const names = { ...LIBRARY.names, ...Object.assign({}, ...fs.map((f) => f.names ?? {})) };
   // The folders' pins (signatures.json), as the editor opens the example.

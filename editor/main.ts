@@ -23,7 +23,8 @@ import { renderLet } from "../ters/src/render/letseq.ts";
 import { renderNested } from "../ters/src/render/nested.ts";
 import { renderSexpr } from "../ters/src/render/sexpr.ts";
 import { Namer } from "../ters/src/render/namer.ts";
-import { BOOL, CHECK, CONS, onTodaysIds, SOME, TRUE } from "../ters/src/lang/std.ts";
+import { BOOL, CHECK, CONS, SOME, TRUE } from "../ters/src/lang/std.ts";
+import { readSaved } from "../ters/src/saved.ts";
 import { CHOICE, DIVERGE, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
 import { renderBlocks, type Shape } from "../ters/src/lang/render.ts";
 import { needsHandling, OutOfSteps, type Data, type Value } from "../ters/src/lang/run.ts";
@@ -256,9 +257,8 @@ const initialFor = (program: Program): Doc => {
 };
 // A program from its folders' tables, as the build or a git revision has them.
 function docOfTables(m: ReturnType<typeof manifestOf>, tables: ReturnType<typeof FILES>[]): Doc {
-  // With today's ids, as ters run reads a folder (load.ts): sheet still says
-  // std's Pair, which is Tuple2 now (L139), and pointed at nothing (E212).
-  const fs = tables.map((t) => onTodaysIds(t));
+  // Its number literals' digits read as values, as ters run reads a folder (load.ts).
+  const fs = tables.map((t) => readSaved(t));
   const all = <K extends keyof (typeof fs)[number]>(k: K) => fs.some((f) => f[k]) ? Object.assign({}, ...fs.map((f) => f[k])) : undefined;
   const d = typedDoc(m.program, fs.map((f) => f.code as Code).reduce((a, b) => merge(a, b)), all("names") ?? {}, all("comments") ?? {}, { layout: all("layout"), examples: all("examples") });
   // Its pins too (signatures.json, L173c), or what they give isn't known
@@ -334,9 +334,8 @@ function onToday(d: Doc): Doc {
   // Credits kept apart, as the editor once did, are the program's comment now.
   const { credits, ...rest } = d as Doc & { credits?: string[] };
   if (credits?.length) d = { ...rest, comments: { ...d.comments, [PROGRAM]: [d.comments[PROGRAM], ...credits].filter(Boolean).join("\n") } };
-  // Renamed library ids (std's Pair is Tuple2, L139) read as today's, as
-  // load.ts and files.ts do; else its own nodes would name ids that are gone.
-  d = { ...d, code: onTodaysIds(d.code), names: onTodaysIds(d.names) };
+  // Its number literals' digits read as values, as load.ts and files.ts do.
+  d = { ...d, code: readSaved(d.code) };
   const under = baseOf(d);
   return { ...d, code: {
     nodes: withNodes(under.nodes, { ...Object.fromEntries(nodeEntries(d.code.nodes).filter(([id]) => own(id))) }),

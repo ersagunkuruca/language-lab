@@ -27,7 +27,7 @@ export type Node =
   | { id: Id; kind: "call"; fn: Id; args?: undefined; given: Record<string, Id>; binds?: undefined; body?: undefined }
   // A use with the ports it solves for bound to binders in scope in `body`
   // (Bound below): only for the passes that read ports.ts `filled`, and a
-  // saved use whose ports aren't known (SHAPE_STEPS).
+  // use whose ports aren't known yet (dsl.ts).
   | { id: Id; kind: "call"; fn: Id; args?: undefined; given: Record<string, Id>; binds: Record<string, Id>; body: Id }
   // `results`: binders naming the function's result ports, when it gives
   // several (PORTS-2026-11-01.md, L128b): its body gives a tuple of that
@@ -139,8 +139,8 @@ export type Use = Extract<NodeOf<"call">, { given: Record<string, Id> }>;
 // it as it is, and the passes that work on binders read the copy ports.ts
 // `filled` makes, with each port bound and given back.
 // A use with its ports bound and a body (L211l): what ports.ts `filled`
-// makes for the passes whose slots are binders, and what a saved use whose
-// ports aren't known keeps (SHAPE_STEPS). A reader that takes either asks
+// makes for the passes whose slots are binders, and what a use whose ports
+// aren't known yet keeps (dsl.ts). A reader that takes either asks
 // isBound, so the model's use can drop the two fields (L211 l3).
 export type Bound = Extract<Use, { body: Id }>;
 export const isBound = (n: Node | undefined | null): n is Bound => isUse(n) && n.body !== undefined;
@@ -173,17 +173,6 @@ export function portsOf(nodes: Record<Id, Node>, id: Id): Ports | null {
 // A definition's results when its body is a condition over its ports
 // (RESULTS.md): polar's x and y. undefined for any other definition.
 export const conditionResults = (nodes: Record<Id, Node>, id: Id): Id[] | undefined => { const p = portsOf(nodes, id); return p?.condition ? p.results : undefined; };
-// Saved before L225d: a definition's results on the definition. They move
-// to its lambda, which keeps them among its parameters.
-function resultsOnTheLambda(nodes: Record<Id, unknown>): void {
-  for (const x of Object.values(nodes)) {
-    const d = x as { kind?: string; results?: Id[]; body?: Id | null };
-    if (d?.kind !== "def" || !d.results) continue;
-    const lam = d.body ? (nodes[d.body] as { kind?: string; results?: Id[] } | undefined) : undefined;
-    if (lam?.kind === "lambda") lam.results = d.results;
-    delete d.results;
-  }
-}
 export const isUse = (n: Node | undefined | null): n is Use => n?.kind === "call" && n.given !== undefined;
 export const useOf = (n: Node | undefined | null): Use | null => (isUse(n) ? n : null);
 // A call that gives every input by position.
@@ -210,68 +199,6 @@ export const portNames = (nodes: Record<Id, Node>, f: NodeOf<"field">): string[]
   const t = nodes[f.type];
   return t?.kind === "tfun" ? t.ports : undefined;
 };
-// A saved program's nodes as today's (L130d): a use was its own kind,
-// `solve`, naming its relation directly; it is a call whose `fn` is a ref.
-// The ref's id comes from the use's, so loading the same file twice gives
-// the same nodes.
-function upgradeUses(nodes: Record<Id, unknown>): void {
-  for (const [id, n] of Object.entries(nodes)) {
-    const o = n as { kind?: string; fn?: Id };
-    if (o?.kind !== "solve" || typeof o.fn !== "string") continue;
-    const ref = `${id}.fn`;
-    nodes[ref] = { id: ref, kind: "ref", target: o.fn };
-    nodes[id] = { ...o, kind: "call", fn: ref };
-  }
-}
-
-// Every change to the shape of saved nodes, in order (L184). A program
-// saved at shape n has the steps after the nth run on its nodes when it
-// opens; one saved before shapes were numbered has them all run, so each
-// step leaves nodes already in its shape alone. A change to the shape adds
-// a step at the end; an old step is never edited.
-// Trig's unpolar was a predicate over (length, angle, x, y); it is the
-// function (x, y) → length, angle now, its ports numbered in that order.
-function unpolarInOrder(nodes: Record<Id, unknown>): void {
-  const swap: Record<string, string> = { 0: "2", 1: "3", 2: "0", 3: "1" };
-  const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [swap[k] ?? k, v]));
-  for (const [id, x] of Object.entries(nodes)) {
-    const n = x as { kind?: string; fn?: Id; given?: Record<string, Id>; binds?: Record<string, Id> };
-    const f = n.fn !== undefined ? (nodes[n.fn] as { kind?: string; target?: Id } | undefined) : undefined;
-    if (n.kind === "call" && n.given && n.binds && f?.kind === "ref" && f.target === "std.trig.trig.unpolar") nodes[id] = { ...n, given: re(n.given), binds: re(n.binds) };
-  }
-}
-// A field's port names are its function type's (L182c3).
-// An Event's arm saved before it had ctrl, shift, alt and meta (C312):
-// those four bound too, to binders nothing reads.
-function eventsHoldKeys(nodes: Record<Id, unknown>): void {
-  for (const [id, x] of Object.entries(nodes)) {
-    const n = x as { kind?: string; variant?: Id; binds?: Id[]; results?: unknown[] };
-    if (n.kind !== "arm" || n.variant !== "std.event.event" || n.binds?.length !== 5) continue;
-    // Named after the arm, so two reads of one file agree on them; with
-    // its id, as readSaved gives every node one.
-    const more = [0, 1, 2, 3].map((k) => { let b = `${id.slice(0, -2)}h${k}`; if (nodes[b]) b = freshId(); nodes[b] = { id: b, kind: "binder" }; return b; });
-    nodes[id] = { ...n, binds: [...n.binds, ...more], ...(n.results ? { results: [...n.results, null, null, null, null] } : {}) };
-  }
-}
-function portsOnTheType(nodes: Record<Id, unknown>): void {
-  for (const [id, x] of Object.entries(nodes)) {
-    const n = x as { kind?: string; type?: Id; ports?: string[] };
-    if (n.kind !== "field" || !n.ports) continue;
-    const { ports, ...rest } = n;
-    nodes[id] = rest;
-    const t = nodes[n.type!] as { kind?: string } | undefined;
-    if (t?.kind === "tfun") nodes[n.type!] = { ...t, ports };
-  }
-}
-// A definition that was a `direction` of a relation is a way of it now.
-function directionsAsWays(nodes: Record<Id, unknown>): void {
-  for (const [id, x] of Object.entries(nodes)) {
-    const n = x as { kind?: string; direction?: Id };
-    if (n.kind !== "def" || !n.direction) continue;
-    const { direction, ...rest } = n;
-    nodes[id] = { ...rest, way: direction };
-  }
-}
 // The relation a definition is a direction of (a way whose target is a
 // definition), or the field it is a way of (any other target).
 export const directionOf = (nodes: Record<Id, Node>, d: Id): Id | undefined => {
@@ -282,21 +209,11 @@ export const fieldWayOf = (nodes: Record<Id, Node>, d: Id): Id | undefined => {
   const n = nodes[d];
   return n?.kind === "def" && n.way && nodes[n.way]?.kind !== "def" ? n.way : undefined;
 };
-// A step that needs to know the library's definitions (a use's ports) is
-// given them here by src/lang/library.ts once the library is built; until
-// then it leaves the nodes as they are, which is a shape it still reads.
-export const shapeHooks: { usesGiveTheirPorts?: (nodes: Record<Id, unknown>) => void } = {};
-export const SHAPE_STEPS: { what: string; step: (nodes: Record<Id, unknown>) => void }[] = [
-  { what: "a use is a call whose fn is a ref (L130d)", step: upgradeUses },
-  { what: "unpolar's ports in the order of its function, (x, y) → length, angle (L128d3)", step: unpolarInOrder },
-  { what: "a use gives its produced ports, its body a let of them (L211g)", step: (nodes) => shapeHooks.usesGiveTheirPorts?.(nodes) },
-  { what: "a definition's results are its lambda's, among its parameters (L225d)", step: resultsOnTheLambda },
-  { what: "a direction of a relation is a way of it (L182c2)", step: directionsAsWays },
-  { what: "a field's port names are its function type's (L182c3)", step: portsOnTheType },
-  { what: "an event taken apart binds the keys held with it too (C312)", step: eventsHoldKeys },
-];
-export const SHAPE = SHAPE_STEPS.length;
-export const toTodaysShape = (nodes: Record<Id, unknown>, from = 0): void => { for (const s of SHAPE_STEPS.slice(from)) s.step(nodes); };
+// The shape of a saved program's nodes. A file saved at another (before
+// L184's steps were retired, 2026-11-24) is refused (files.ts fromFile):
+// every saved program in the repositories was brought to this one, and a
+// change of shape from here rewrites them rather than adding a step.
+export const SHAPE = 7;
 
 // What gets stored on disk as code.json. `defs` is the list of top-level
 // definitions; there are no modules, imports or files, just reachable defs.
