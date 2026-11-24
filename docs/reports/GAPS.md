@@ -5322,3 +5322,88 @@ DG2 first (Tensor on one array, `contracted` as loops), with the program
 moved onto tensors, then DG4 (what any array loop pays), then DG3 with
 the language lane, DG1 once Ersagun has answered the Float32 question,
 then DG5, DG6 and DG7's small rows, and DG8 last.
+
+## Round 23: bazaar, a small database whose questions are data (2026-11-24)
+
+The coordinator asked for a round in an area the rounds hadn't covered:
+not a parser and interpreter again (round 21), not numbers (round 22).
+`compiler/gaps/bazaar` is a small relational database: a bazaar's
+customers, products and orders, made up from a seed, and five questions
+asked of them. A question is a `Query`, a tree written as data (scan,
+filter, match on a key, match nothing, group with aggregates, compute a
+column, order, pick columns, first rows), so there is no query text to
+parse. The planner pushes each test as low as it goes (into the side of
+a join it reads, under an anti join, below a computed column it doesn't
+read) and turns the query into a `Plan` whose columns are known by their
+place, each join a hash join filing the side it guesses smaller. Each
+question prints its plan and its answer as a table.
+
+Written through the MCP (driver in project files gaps-round23/): 75
+definitions, 7 of them types. The ideal is `bazaar.ideal.js`: the same engine by
+hand, rows as arrays, filing by a JavaScript Map keyed by a cell's text,
+groups sorted at the end. Every way prints the same, plans included
+(test/bazaar.test.ts holds the evaluator, the core IR, `ters compile`,
+`ters wasi` and `ters native` to the ideal).
+
+Times on this container (4 cores), `node compiler/gaps/bench-bazaar.ts
+10000 200000`: the ideal and the core IR in one process, the rest as
+processes with their start-up.
+
+| bazaar | 10,000 orders | 200,000 orders |
+|---|---|---|
+| ideal JS | 23 ms | 579 ms |
+| core IR | 101 ms (4.4x) | 2.90 s (5.0x) |
+| evaluator | 1.83 s (80x) | 41.8 s (72x) |
+| `ters compile`, its module as a process | 1.24 s (54x) | 20.2 s (35x) |
+| the same, every placement held on the main thread | | 3.12 s (5.4x) |
+| `ters native` | 72 ms (3.1x) | 1.30 s (2.2x) |
+| `ters wasi` | 168 ms (7.3x) | 1.74 s (3.0x) |
+
+### The gaps, ranked
+
+**BG1. Compiled JavaScript shares a cheap evaluator out to worker
+threads, and is 6.5 times slower for it.** `ters compile`'s module takes
+20.2 s at 200,000 orders; with the decisions holding every placement on
+the main thread it takes 3.12 s. The profile of the 20.2 s run is 13 s in
+`shared` and 3 s in the garbage collector, with `encode` and `byShape`
+(the values sent to the workers) next. The placements are the
+per-row maps and keeps of `rows of`, `joined rows` and `grouped rows`,
+and `evaluated`'s two calls of itself (`both`, `added`), halved
+(`bothPure`): an expression of three or four nodes a row, its rows'
+filed index in what each call closes over. The cost model calls them
+slow from the item count alone. A placement whose items close over a big
+value should count what each worker is sent, and a halving of a function
+whose calls are this small shouldn't be asked at every call (in the core
+IR's run, `bothPure` and its checks are still 10% of the time). C323.
+
+**BG2. The core IR is 5x the ideal.** A quarter of its time is the
+garbage collector. Each cell is a case object and each row an array of
+them, as in the ideal, but each step also builds lists where the ideal
+pushes into arrays: `index rows` and `group rows` cons each row onto its
+key's list in a Map (a tree, as the program says; the ideal's is a hash
+map) and reverse it after, `joined rows` is a flat map of maps, and
+`sum values` walks a list built by a map. The maps are a known case
+(C63, a map with one holder stored as a hash table): here the Map's keys
+are cells and lists of cells, data keys, which the JavaScript tables
+don't take yet. C324.
+
+**Not gaps: two readings the driver chose wrong.** The MCP asks when a
+field or a function more than one type has is read on a value of no type
+yet (`Give as ("Table" or "Planned" or "Matrix")`), and the driver,
+round 22's, answers with the first reading offered. Twice that was the
+wrong one: `plan join` read `pl.columns` and got Table where the rest of
+it needed Planned, and `widest` read `length(t)` and got List's where it
+needed Text's. Both were then refused a step or a definition later. They
+were worked around in the driver (Planned's field named `heads`; widest
+given `as "Text"`), and round 24's driver should answer with the reading
+the definition's later steps need.
+
+What went well: native code is 2.2x the hand-written JavaScript at
+200,000 orders, and WebAssembly 3.0x. The planner itself (matches over
+seven types, lists of tests filtered and put back) was written with no
+refusals.
+
+### Next
+
+No gap is the language's this round. BG1 and BG2 go to the Compiler
+lane as C323 and C324.
