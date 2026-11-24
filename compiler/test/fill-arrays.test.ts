@@ -16,7 +16,7 @@ import { makeRunner, type Value } from "../../ters/src/lang/run.ts";
 import { PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
 import { ARRAY_OPS, INT_OPS } from "../../ters/src/lang/std.ts";
 import { kids, lowerScalar, type SExpr } from "../src/scalar.ts";
-import { loadCoreJs, lowerCore } from "../src/core-js.ts";
+import { coreMain, loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
 import { emitC } from "../src/c.ts";
 import { build, skip as noC } from "./c-harness.ts";
@@ -66,4 +66,34 @@ test("an array of a mapped range is filled with no list, and gives what the eval
     const got = build(lowered)([[lowered.funcs.indexOf(fq), [300]], [lowered.funcs.indexOf(fj), [300]]]);
     assert.deepEqual(got.map((g) => g.value), [ev(p.squares, 300), ev(p.joined, 300)]);
   }
+});
+
+// examples/wav-file (L271c part 2): its Bytes stored as a byte array
+// beside its lists as arrays (the chooser looks at Bytes before lists,
+// and a pin on Bytes is the meaning's after), and the WAV file's bytes,
+// `bytes of(append(header, map(range(size), byte)))`, filled by position
+// into the array `byte array bytes of` is given; it prints what the
+// evaluator does.
+test("wav-file's Bytes are a byte array filled by position (L271c)", async () => {
+  const { loadProgram } = await import("../../ters/src/lang/load.ts");
+  const { representationsIn } = await import("../../ters/src/lang/represent.ts");
+  const { represented } = await import("../../ters/cli/represented.ts");
+  const { runMain } = await import("../../ters/src/lang/run.ts");
+  const p = loadProgram(new URL("../../ters/examples/wav-file", import.meta.url).pathname);
+  const main = p.named("main"), names = p.pres.names;
+  const info = infer(p.code, names, undefined, p.options);
+  const r = represented({ title: "wav-file", code: p.code, own: p.own.defs, names, info, reps: representationsIn(p.code, info, names, p.own.defs), options: p.options }, main, true, false, false, false);
+  const picks = (r.picks ?? []).map((x) => `${x.of} ${x.rep}`);
+  assert.ok(picks.includes("std.bytes byte array of Bytes") && picks.includes("std.list array of List"), picks.join(", "));
+  const core = lowerCore(r.code, r.info!, r.names, [main]);
+  assert.ok(core.funcs.some((f) => f.name === "byte array bytes of given the array"), "the bytes filled into the array bytes of is given");
+  // Both write chord.wav and read it back, in memory.
+  const world = (files: Record<string, Uint8Array>) => ({ writeBytes: (f: string, b: Uint8Array) => { files[f] = b; }, readBytes: (f: string) => files[f], fileExists: (f: string) => f in files });
+  const evaluated: string[] = [], compiled: string[] = [];
+  const ef: Record<string, Uint8Array> = {}, cf: Record<string, Uint8Array> = {};
+  runMain(p.code, info, main, { print: (x) => evaluated.push(x), names, world: world(ef) as never });
+  coreMain(core, "main", { print: (x: string) => compiled.push(x), world: world(cf) as never })([]);
+  assert.ok(evaluated.length, "wav-file prints");
+  assert.deepEqual(compiled, evaluated);
+  assert.deepEqual(cf["chord.wav"], ef["chord.wav"]);
 });
