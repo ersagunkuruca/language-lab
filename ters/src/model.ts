@@ -1011,7 +1011,19 @@ const baseNodes = new WeakMap<object, Node[]>();
 // or builtins reads those, not the ~50,000 nodes again (machine's compile
 // walked every node some 30 times, a few ms a walk). Like every scan kept
 // for a version, it holds while the nodes aren't changed in place.
-type KindIndex = { kinds: Map<string, Node[]>; at: Map<string, number[]> };
+// `of`: a kind's nodes and their places, undefined for a kind none is.
+type KindIndex = { of(kind: string): { ns: Node[]; at: number[] } | undefined };
+// An index made whole by one walk.
+const walkedIndex = (each: (see: (n: Node, i: number) => void) => void): KindIndex => {
+  const m = new Map<string, { ns: Node[]; at: number[] }>();
+  each((n, i) => {
+    let e = m.get(n.kind);
+    if (!e) m.set(n.kind, (e = { ns: [], at: [] }));
+    e.ns.push(n);
+    e.at.push(i);
+  });
+  return { of: (kind) => m.get(kind) };
+};
 const kindsKept = new WeakMap<object, KindIndex>();
 function kindIndex(nodes: Record<Id, Node>): KindIndex {
   let k = kindsKept.get(nodes);
@@ -1019,15 +1031,7 @@ function kindIndex(nodes: Record<Id, Node>): KindIndex {
   // Not kept: read from its own nodes each time, it holds after a change in place.
   if (under) return kindsOver(nodes, under);
   if (!k) {
-    k = { kinds: new Map(), at: new Map() };
-    let i = 0;
-    for (const id of nodeIds(nodes)) {
-      const n = nodes[id];
-      let ns = k.kinds.get(n.kind);
-      if (!ns) { k.kinds.set(n.kind, (ns = [])); k.at.set(n.kind, []); }
-      ns.push(n);
-      k.at.get(n.kind)!.push(i++);
-    }
+    k = walkedIndex((see) => { let i = 0; for (const id of nodeIds(nodes)) see(nodes[id], i++); });
     kindsKept.set(nodes, k);
   }
   return k;
@@ -1038,14 +1042,7 @@ const underKindsKept = new WeakMap<object, KindIndex>();
 function underKinds(under: Record<Id, Node>, u: ReturnType<typeof underOf>): KindIndex {
   let k = underKindsKept.get(under);
   if (!k) {
-    k = { kinds: new Map(), at: new Map() };
-    for (let i = 0; i < u.values.length; i++) {
-      const n = u.values[i];
-      let ns = k.kinds.get(n.kind);
-      if (!ns) { k.kinds.set(n.kind, (ns = [])); k.at.set(n.kind, []); }
-      ns.push(n);
-      k.at.get(n.kind)!.push(i);
-    }
+    k = walkedIndex((see) => { for (let i = 0; i < u.values.length; i++) see(u.values[i], i); });
     underKindsKept.set(under, k);
   }
   return k;
@@ -1057,6 +1054,10 @@ function underKinds(under: Record<Id, Node>, u: ReturnType<typeof underOf>): Kin
 // Kept by the version with what it held of its own, and found again while
 // it holds the same (a version changed in place holds others): the passes
 // before arithmetic each ask the same version for its refs or calls.
+// Each kind it changes is merged when first asked for: a pass asks a
+// version for one or two kinds, and merging every kind its own nodes are
+// copied most of the index under (49 versions a recompile of machine's,
+// 75 ms).
 type OwnSeen = { first: Id[] | undefined; firstNodes: Node[]; changed: [number, Node | undefined][]; added: Id[]; addedNodes: Node[] };
 const overKindsKept = new WeakMap<object, OwnSeen & { k: KindIndex }>();
 const sameOwn = (w: OwnSeen, raw: Record<Id, Node>, first: Id[] | undefined, changed: [number, Node | undefined][], added: Id[]) =>
@@ -1068,45 +1069,68 @@ function kindsOver(nodes: Record<Id, Node>, under: Record<Id, Node>): KindIndex 
   if (!changed.length && !added.length && !first?.length) return uk;
   const was = overKindsKept.get(raw);
   if (was && sameOwn(was, raw, first, changed, added)) return was.k;
-  const k = kindsOverIn(raw, first, u, changed, added, uk);
-  overKindsKept.set(raw, { first: first?.slice(), firstNodes: (first ?? []).map((id) => raw[id]), changed: changed.slice(), added: added.slice(), addedNodes: added.map((id) => raw[id]), k });
+  // What it held when asked, copied: the merges made later read these,
+  // not the version, which may be changed in place after.
+  const firstNodes = (first ?? []).map((id) => raw[id]), addedNodes = added.map((id) => raw[id]);
+  const k = kindsOverIn(first?.slice(), firstNodes, u, changed.slice(), addedNodes, uk);
+  overKindsKept.set(raw, { first: first?.slice(), firstNodes, changed: changed.slice(), added: added.slice(), addedNodes, k });
   return k;
 }
-function kindsOverIn(raw: Record<Id, Node>, first: Id[] | undefined, u: ReturnType<typeof underOf>, changed: [number, Node | undefined][], added: Id[], uk: KindIndex): KindIndex {
+function kindsOverIn(first: Id[] | undefined, firstNodes: Node[], u: ReturnType<typeof underOf>, changed: [number, Node | undefined][], addedNodes: Node[], uk: KindIndex): KindIndex {
   const touched = new Set<string>();
   for (const [i, n] of changed) { touched.add(u.values[i].kind); if (n) touched.add(n.kind); }
-  for (const id of first ?? []) touched.add(raw[id].kind);
-  for (const id of added) touched.add(raw[id].kind);
-  const k = { kinds: new Map(uk.kinds), at: new Map(uk.at) }, gone = new Set(changed.map((c) => c[0]));
+  for (const n of firstNodes) touched.add(n.kind);
+  for (const n of addedNodes) touched.add(n.kind);
   const F = first?.length ?? 0, U = u.ids.length;
-  for (const kind of touched) {
+  const merged = new Map<string, { ns: Node[]; at: number[] } | undefined>();
+  // The under nodes' runs between the changes copied whole: a kind's
+  // nodes are thousands (refs, calls), its changes a few.
+  const merge = (kind: string) => {
     const ns: Node[] = [], at: number[] = [];
-    first?.forEach((id, j) => { if (raw[id].kind === kind) { ns.push(raw[id]); at.push(j); } });
-    const into = changed.filter(([, n]) => n?.kind === kind).sort((a, b) => a[0] - b[0]);
-    const uns = uk.kinds.get(kind) ?? none, uat = uk.at.get(kind) ?? [];
-    let j = 0;
-    for (let x = 0; x < uns.length; x++) {
-      const p = uat[x];
-      for (; j < into.length && into[j][0] < p; j++) { ns.push(into[j][1]!); at.push(F + into[j][0]); }
-      if (!gone.has(p)) { ns.push(uns[x]); at.push(F + p); }
+    firstNodes.forEach((n, j) => { if (n.kind === kind) { ns.push(n); at.push(j); } });
+    const e = uk.of(kind), uns = e?.ns ?? none, uat = e?.at ?? [];
+    // At each place changed: the under node there dropped when of the
+    // kind, the node now there put in when of the kind.
+    const steps = changed.filter(([i, n]) => n?.kind === kind || u.values[i].kind === kind).sort((a, b) => a[0] - b[0]);
+    const run = (from: number, to: number) => {
+      if (from >= to) return;
+      for (let x = from; x < to; x++) ns.push(uns[x]);
+      if (F) for (let x = from; x < to; x++) at.push(F + uat[x]);
+      else for (let x = from; x < to; x++) at.push(uat[x]);
+    };
+    // The first place in uat at or after p.
+    const seek = (p: number, lo: number) => { let hi = uat.length; while (lo < hi) { const m = (lo + hi) >> 1; if (uat[m] < p) lo = m + 1; else hi = m; } return lo; };
+    let x = 0;
+    for (const [p, n] of steps) {
+      const y = seek(p, x);
+      run(x, y);
+      x = y;
+      if (x < uat.length && uat[x] === p) x++;
+      if (n?.kind === kind) { ns.push(n); at.push(F + p); }
     }
-    for (; j < into.length; j++) { ns.push(into[j][1]!); at.push(F + into[j][0]); }
-    added.forEach((id, i) => { if (raw[id].kind === kind) { ns.push(raw[id]); at.push(F + U + i); } });
-    if (ns.length) { k.kinds.set(kind, ns); k.at.set(kind, at); } else { k.kinds.delete(kind); k.at.delete(kind); }
-  }
-  return k;
+    run(x, uns.length);
+    addedNodes.forEach((n, i) => { if (n.kind === kind) { ns.push(n); at.push(F + U + i); } });
+    return ns.length ? { ns, at } : undefined;
+  };
+  return {
+    of: (kind) => {
+      if (!touched.has(kind)) return uk.of(kind);
+      if (!merged.has(kind)) merged.set(kind, merge(kind));
+      return merged.get(kind);
+    },
+  };
 }
 const none: Node[] = [];
 export function nodesOfKind<K extends Kind>(code: Code, kind: K): readonly NodeOf<K>[] {
-  return (kindIndex(code.nodes).kinds.get(kind) ?? none) as NodeOf<K>[];
+  return (kindIndex(code.nodes).of(kind)?.ns ?? none) as NodeOf<K>[];
 }
 // The same, of a version of the nodes.
-export const nodesOfKindIn = (nodes: Record<Id, Node>, kind: Kind): readonly Node[] => kindIndex(nodes).kinds.get(kind) ?? none;
+export const nodesOfKindIn = (nodes: Record<Id, Node>, kind: Kind): readonly Node[] => kindIndex(nodes).of(kind)?.ns ?? none;
 // The nodes of any of `kinds`, in their order in the nodes.
 function nodesOfKinds(code: Code, kinds: readonly string[]): Node[] {
-  if (kinds.length === 1) return (kindIndex(code.nodes).kinds.get(kinds[0]) ?? none).slice();
+  if (kinds.length === 1) return (kindIndex(code.nodes).of(kinds[0])?.ns ?? none).slice();
   const k = kindIndex(code.nodes), all: [number, Node][] = [];
-  for (const kind of kinds) { const ns = k.kinds.get(kind), at = k.at.get(kind); if (ns) for (let j = 0; j < ns.length; j++) all.push([at![j], ns[j]]); }
+  for (const kind of kinds) { const e = k.of(kind); if (e) for (let j = 0; j < e.ns.length; j++) all.push([e.at[j], e.ns[j]]); }
   return all.sort((a, b) => a[0] - b[0]).map((x) => x[1]);
 }
 export const forgetKinds = (nodes: object) => void kindsKept.delete(nodes);
