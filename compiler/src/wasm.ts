@@ -111,8 +111,14 @@ const INT32_RT: Op[] = ["iadd", "isub", "imul", "ineg", "iabs", "iquot", "irem",
 // Where a shader's flag is set or read.
 // A program's own handlers (L213c8): their runtime names, and the stack's
 // frames, each an effect's number and up to FRAME - 1 cases.
-const STACK = /^(hpush|hpop|handler):([^:]+)(?::(\d+))?$/;
+const STACK = /^(hpush|hpop|handler|hhas|htake|hgive):([^:]+)(?::(\d+))?$/;
 const FRAME = 17, FRAMES = 4096;
+// A frame whose case runs while it may perform its own operation (pig's
+// `recorded into`, C325) is busy: its effect's number + BUSY, so `hhas`
+// and `htake` look past it. The frames taken, last on top, past the
+// frames in the same array: their count at TAKEN, then each frame's
+// number.
+const BUSY = 0x10000, TAKEN = FRAME * FRAMES, SLOTS = TAKEN + 1 + FRAMES;
 const flagged = (e: SExpr): boolean => e.k === "attempt" || (e.k === "rt" && /^array\.at32\./.test(e.fn)) || (e.k === "zero" && !!e.none) || (e.k === "op" && ["iquot", "irem", "ipow", "iwhole"].includes(e.op)) || kids(e).some(flagged);
 
 // `floats`: the exports whose answer is a Float64, which instantiate
@@ -218,6 +224,36 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     const [, kind, eff, op] = STACK.exec(name)!;
     let n = effectNums.get(eff);
     if (n === undefined) effectNums.set(eff, (n = effectNums.size));
+    // The frame nearest the top of effect n that isn't busy, into $k (else -1).
+    const free = ["global.get $hn", "local.set $k", "block void", "loop void",
+      "local.get $k", "i32.eqz", "if void", "i32.const -1", "local.set $k", "br 2", "end",
+      "global.get $hs", "local.get $k", "i32.const 1", "i32.sub", "local.tee $k", `i32.const ${FRAME}`, "i32.mul", "array.get $hstack",
+      "ref.cast i31", "i31.get_s", `i32.const ${n}`, "i32.ne", "br_if 0", "end", "end"];
+    const taken = (at: string[]) => ["global.get $hs", `i32.const ${TAKEN}`, ...at];
+    // How many are taken (0 before the first).
+    const count = [...taken(["array.get $hstack", "ref.test i31"]), "if i32", ...taken(["array.get $hstack", "ref.cast i31", "i31.get_s"]), "else", "i32.const 0", "end"];
+    if (kind === "hhas") return { name, params: [], result: "i32", locals: [["k", "i32"]], uses: [], native: true, body: [...free, "local.get $k", "i32.const 0", "i32.ge_s"].join("\n") };
+    if (kind === "htake") return {
+      name, params: [], result: "int", locals: [["k", "i32"], ["t", "i32"]], uses: [], native: true,
+      body: [
+        ...free, "local.get $k", "i32.const 0", "i32.lt_s", "if void", "unreachable", "end",
+        "global.get $hs", "local.get $k", `i32.const ${FRAME}`, "i32.mul", `i32.const ${n + BUSY}`, "ref.i31", "array.set $hstack",
+        ...count, "local.set $t",
+        "global.get $hs", `i32.const ${TAKEN + 1}`, "local.get $t", "i32.add", "local.get $k", "ref.i31", "array.set $hstack",
+        ...taken(["local.get $t", "i32.const 1", "i32.add", "ref.i31", "array.set $hstack"]),
+        "global.get $hs", "local.get $k", `i32.const ${FRAME}`, "i32.mul", `i32.const ${Number(op) + 1}`, "i32.add", "array.get $hstack",
+      ].join("\n"),
+    };
+    if (kind === "hgive") return {
+      name, params: [], result: "i32", locals: [["k", "i32"], ["t", "i32"]], uses: [], native: true,
+      body: [
+        ...count, "i32.const 1", "i32.sub", "local.tee $t", "i32.const 0", "i32.lt_s", "if void", "unreachable", "end",
+        ...taken(["local.get $t", "ref.i31", "array.set $hstack"]),
+        "global.get $hs", `i32.const ${TAKEN + 1}`, "local.get $t", "i32.add", "array.get $hstack", "ref.cast i31", "i31.get_s", "local.set $k",
+        "global.get $hs", "local.get $k", `i32.const ${FRAME}`, "i32.mul", `i32.const ${n}`, "ref.i31", "array.set $hstack",
+        "i32.const 0",
+      ].join("\n"),
+    };
     if (kind === "hpop") return { name, params: [], result: "i32", locals: [], uses: [], native: true, body: "global.get $hn\ni32.const 1\ni32.sub\nglobal.set $hn\ni32.const 0" };
     if (kind === "hpush") {
       const a = stackArity.get(name) ?? 0;
@@ -240,7 +276,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         "loop void",
         "local.get $k", "i32.eqz", "if void", "unreachable", "end",
         "global.get $hs", "local.get $k", "i32.const 1", "i32.sub", "local.tee $k", `i32.const ${FRAME}`, "i32.mul", "array.get $hstack",
-        "ref.cast i31", "i31.get_s", `i32.const ${n}`, "i32.ne", "br_if 0",
+        "ref.cast i31", "i31.get_s", `i32.const ${BUSY - 1}`, "i32.and", `i32.const ${n}`, "i32.ne", "br_if 0",
         "end",
         "global.get $hs", "local.get $k", `i32.const ${FRAME}`, "i32.mul", `i32.const ${Number(op) + 1}`, "i32.add", "array.get $hstack",
       ].join("\n"),
@@ -822,7 +858,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...(flags ? [[0x7f, 0x01, 0x41, 0x00, 0x0b]] : []),
     ...(rand ? [0, 1, 2, 3].map(() => [0x7f, 0x01, 0x41, 0x00, 0x0b]) : []),
     ...[...kept.keys()].map((i) => { const t = funcs[i].result as MType; return [...typeOf(t), 0x01, 0xd0, ...s(t === "text" ? textIndex : refIndex(t as RType)), 0x0b]; }),
-    ...(stack ? [[0x64, ...s(hstackIndex), 0x00, 0x41, ...s(FRAME * FRAMES), 0xfb, 0x07, ...u(hstackIndex), 0x0b], [0x7f, 0x01, 0x41, 0x00, 0x0b]] : []),
+    ...(stack ? [[0x64, ...s(hstackIndex), 0x00, 0x41, ...s(SLOTS), 0xfb, 0x07, ...u(hstackIndex), 0x0b], [0x7f, 0x01, 0x41, 0x00, 0x0b]] : []),
   ]);
   const zero = (t: MType) => (t === "text" ? [0xd0, ...s(textIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" ? [0xd0, 0x6d] : t === "mag" ? [0xd0, ...s(u32sIndex)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
@@ -927,7 +963,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         const put = inPlace(e, String);
         if (put) return put.code;
       }
-      return [...e.args.flatMap(code1), 0x10, ...u(resolve.func(e.fn)), ...(/^handler:/.test(e.fn) ? [0xfb, 0x16, ...s(cloIndex.get((e.host!.t as FType).key)!)] : []), ...(runtime(e.fn).partial ? check(d, fl) : [])];
+      return [...e.args.flatMap(code1), 0x10, ...u(resolve.func(e.fn)), ...(/^(handler|htake):/.test(e.fn) ? [0xfb, 0x16, ...s(cloIndex.get((e.host!.t as FType).key)!)] : []), ...(runtime(e.fn).partial ? check(d, fl) : [])];
       case "bool": return [0x41, ...s(e.v ? 1 : 0)];
       case "local": return [0x20, ...u(e.i)];
       case "let":
@@ -1129,7 +1165,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         const put = inPlace(e, (i) => local(f, i));
         if (put) return put.wat.map((x) => `${d}${x}`).join("\n");
       }
-      return [...e.args.map(w), `${d}call $${e.fn}`, ...(/^handler:/.test(e.fn) ? [`${d}ref.cast (ref ${sname(cloIndex.get((e.host!.t as FType).key)!)})`] : []), ...(runtime(e.fn).partial ? check(ld) : [])].join("\n");
+      return [...e.args.map(w), `${d}call $${e.fn}`, ...(/^(handler|htake):/.test(e.fn) ? [`${d}ref.cast (ref ${sname(cloIndex.get((e.host!.t as FType).key)!)})`] : []), ...(runtime(e.fn).partial ? check(ld) : [])].join("\n");
       case "bool": return `${d}i32.const ${e.v ? 1 : 0}`;
       case "local": return `${d}local.get ${local(f, e.i)}`;
       case "let":
@@ -1255,7 +1291,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...(flags ? ["  (global $none (mut i32) (i32.const 0))"] : []),
     ...(rand ? [0, 1, 2, 3].map((k) => `  (global $r${k} (mut i32) (i32.const 0))`) : []),
     ...[...kept.keys()].map((i) => `  (global $kept${i} (mut ${ty(funcs[i].result as MType)}) (${zeroText(funcs[i].result as MType)}))`),
-    ...(stack ? [`  (global $hs (ref $hstack) (array.new_default $hstack (i32.const ${FRAME * FRAMES})))`, "  (global $hn (mut i32) (i32.const 0))"] : []),
+    ...(stack ? [`  (global $hs (ref $hstack) (array.new_default $hstack (i32.const ${SLOTS})))`, "  (global $hn (mut i32) (i32.const 0))"] : []),
     ...(declared.length ? [`  (elem declare func${declared.map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");
