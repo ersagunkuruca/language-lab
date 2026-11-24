@@ -478,6 +478,24 @@ function joinedOver(parts: Record<Id, Node>[], clashes?: Id[]): Record<Id, Node>
   if (first.length) firstIds.set(mine, [...new Set(first)]);
   return checked(out);
 }
+// A version with some ids it holds itself renamed (stable-ids.ts), over
+// the same nodes: its own listed in the order they were, so it reads as
+// a plain copy renamed in place would, and what sits over it finds the
+// nodes under kept (a plain copy was a new 58,000 nodes under each pass
+// after machine's choice, every index of them made again a recompile).
+// `mapped`: the nodes put in, by the id they had. Null when it's over
+// none or a renamed id is in the nodes under, whose place is the old id's.
+export function renamedOver(nodes: Record<Id, Node>, rename: ReadonlyMap<Id, Id>, mapped: ReadonlyMap<Id, Node>): Record<Id, Node> | null {
+  const under = nodesUnder(nodes);
+  if (!under) return null;
+  for (const [a, b] of rename) if (a in under || b in under) return null;
+  const raw = rawNodes(nodes), out: Record<Id, Node> = Object.create(under);
+  for (const id of Object.keys(raw)) { const n = mapped.get(id); out[n ? n.id : id] = n ?? raw[id]; }
+  for (const [id, n] of mapped) if (!Object.hasOwn(raw, id) && n !== under[id]) out[n.id] = n;
+  const first = firstIds.get(raw);
+  if (first) firstIds.set(out, first.map((id) => rename.get(id) ?? id));
+  return checked(out);
+}
 // Takes a node out.
 export const dropNode = (nodes: Record<Id, Node>, id: Id): void => {
   const under = nodesUnder(nodes);
