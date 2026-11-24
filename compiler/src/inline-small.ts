@@ -13,6 +13,7 @@
 
 import { kids, mapKids, mapLocals, tidied, type CoreIR, type SExpr } from "./scalar.ts";
 import { PURE_OPS, pureFuncs, pureTree, SAFE_RT } from "./share-calls.ts";
+import { COLUMN_READ } from "./kept-arrays.ts";
 
 const SMALL = 40;
 const size = (e: SExpr): number => 1 + kids(e).reduce((n, k) => n + size(k), 0);
@@ -28,14 +29,17 @@ const plainBody = (e: SExpr, pure: Set<number>): boolean =>
 // numbers (kept-arrays.ts), which it can do only for what the loop's own
 // body does. Lets, branches and attempts of pure expressions and the
 // runtime's functions that only read and compute.
-const readTree = (e: SExpr, pure: Set<number>): boolean => {
+const readTree = (e: SExpr, pure: Set<number>, tried = false): boolean => {
   switch (e.k) {
-    case "rt": return !e.host && SAFE_RT(e.fn) && e.args.every((a) => readTree(a, pure));
-    case "attempt": return !e.spent && !e.resumes && kids(e).every((a) => readTree(a, pure));
-    case "let": return !e.check && !e.seeded && readTree(e.value, pure) && readTree(e.body, pure);
-    case "if": return kids(e).every((a) => readTree(a, pure));
-    case "call": return !e.cps && !e.tail && pure.has(e.fn) && e.args.every((a) => readTree(a, pure));
-    case "op": return PURE_OPS.has(e.op) && e.args.every((a) => readTree(a, pure));
+    case "rt": return !e.host && (SAFE_RT(e.fn) || COLUMN_READ.test(e.fn)) && e.args.every((a) => readTree(a, pure, tried));
+    // An attempt's body may have no answer (columns' `item at`, C304c).
+    case "attempt": return !e.spent && !e.resumes && readTree(e.body, pure, true) && kids(e).every((a) => a === e.body || readTree(a, pure, tried));
+    case "fail": return tried;
+    case "let": return !e.check && !e.seeded && readTree(e.value, pure, tried) && readTree(e.body, pure, tried);
+    case "if": return kids(e).every((a) => readTree(a, pure, tried));
+    case "call": return !e.cps && !e.tail && pure.has(e.fn) && e.args.every((a) => readTree(a, pure, tried));
+    case "op": return PURE_OPS.has(e.op) && e.args.every((a) => readTree(a, pure, tried));
+    case "make": case "new": return e.args.every((a) => readTree(a, pure, tried));
     default: return pureTree(e, pure);
   }
 };
@@ -48,7 +52,7 @@ const stops = (e: SExpr): boolean => (e.k === "call" && !!e.cps) || e.k === "han
 export function inlineSmall(ir: CoreIR, inLoops = false): number {
   const pure = pureFuncs(ir);
   const small = ir.funcs.map((g, i) => !inLoops && pure.has(i) && !g.inner && size(g.body) <= SMALL && plainBody(g.body, pure) && !calls(g.body, i));
-  const reader = ir.funcs.map((g, i) => inLoops && pure.has(i) && !g.inner && size(g.body) <= SMALL && readTree(g.body, pure) && !calls(g.body, i));
+  const reader = ir.funcs.map((g, i) => inLoops && !g.inner && size(g.body) <= SMALL && readTree(g.body, pure) && !calls(g.body, i));
   let changed = 0;
   ir.funcs.forEach((f, fi) => {
     // Not into a function that may stop and go on later (a call that keeps
