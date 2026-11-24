@@ -1,0 +1,415 @@
+# How Ters allocates, and whether to change it (2026-11-24)
+
+Ersagun asked, after a talk in the project chat about closures on the
+stack and the heap, async callbacks, tail calls as frame reuse and
+Perceus: where does Ters stand on all of this, what should improve, and
+is there a paradigm switch, even a big one, that would change how Ters
+handles allocations in general?
+
+This is an analysis. Nothing is built here. The rows it proposes are
+C325 to C328 in BACKLOG.md. The measuring tools are in
+`compiler/gaps/allocations/`.
+
+## The answer in short
+
+- **Ters already stands where the research has ended up on most of
+  these axes.** Native code is Perceus: owned values, a dup or a drop at
+  each use, drop specialisation, a matched cell's memory reused by the
+  arm's new cell, borrowed parameters, free lists per size. JavaScript
+  and WebAssembly get in-place changes where the program can't tell
+  (one-holder.ts, owned-arrays.ts, owned-records.ts, owned-tables.ts)
+  and versions otherwise (Baker's rerooting). A call made last is a
+  loop, and a cons onto a call made last is too (TRMC) in the
+  interpreter and the compiler. Handlers are fused away where they can
+  be, a stack of cases where every case resumes in place, and the rest
+  goes through continuation passing (JavaScript) or fibers (C).
+- **Regions per action or frame would not pay.** Natively, freeing is
+  12% to 34% of the instructions, but a run that never frees anything is
+  at most 2% faster and up to 40% slower (fresh memory misses the
+  cache). Freeing is not the cost. On JavaScript and WebAssembly a
+  program can't free memory at all.
+- **The cost is the cells themselves.** 44% to 67% of all cells a
+  native run makes are freed before the function that made them
+  returns. Every closure in six benchmarks is, and every fold's frame.
+  They never needed the heap. On flock, 98% of the 36.6 million cells
+  are array views (a slice's buffer, start and length) that could have
+  been three words in registers.
+- **The paradigm switch worth making** is one inferred analysis of
+  ownership and lifetime, per value, on the core IR, which every target
+  reads (C327). It is "second-class by inference": a value that never
+  leaves its frame lives in the frame (C: a stack slot; WebAssembly:
+  locals, not a GC struct), and a value with one holder is changed in
+  place, decided per value instead of per type. It would replace the
+  four owned-* passes and one-holder.ts's whole-program, per-type rule.
+  It is big (several PRs), it fits after the Language lane's stage 4
+  (per-definition lowering, whose summaries it needs), and its payoff in
+  time is not measured yet. So its first step is a measurement by hand
+  (C327a), and it is built only if that shows more than 10%.
+- **Effects need two fixes, not a new model.** WebAssembly refuses a
+  handler that answers later (tumble, pig) while it waits for stack
+  switching; the continuation passing JavaScript already uses would run
+  there today (C325). C's fibers take 6 to 7 µs to start, since each
+  mallocs a 64 MiB stack, and 330 ns a round trip, since glibc's
+  `swapcontext` changes the signal mask (two system calls) each time; a
+  kept stack and the switch c-rt.ts already has for Android and Apple
+  give 10 to 20 ns and 14 ns (C326). No benchmark uses fibers yet, so this is
+  P3.
+
+## 1. How each target allocates today
+
+| | interpreter | core IR → JavaScript | WebAssembly (`ters wasi`, pages) | C (`ters native`) |
+|---|---|---|---|---|
+| records, cases, lists | JS objects | JS objects; a list read in order as written, others as arrays (the chooser) | WasmGC structs | counted cells: a header (count, type, case, size class) and fields; free lists per 8-byte size up to 256 bytes, cut from 256 KB blocks |
+| freeing | V8's GC | V8's GC | the engine's GC | at the last drop; a dead cell's fields from a stack of cells, not by recursion |
+| reuse | none | in place where one-holder.ts says every value of a type has one holder; versions (Baker) for arrays and tables otherwise | the same, versions since C285 | Perceus: a matched cell with count 1 moves its fields out and its memory goes to the arm's new cell (Lean 4's reset and reuse); `rc == 1` checked at run time |
+| closures | JS closures | JS closures; applied at once, a direct call (known-closures.ts); given to a definition, a copy of it (closure-args.ts, known-records.ts) | a GC struct of the code's index and captures, `call_ref` | a counted cell of the code's address and captures |
+| array slices (a rest, a view) | JS objects | JS objects | GC structs | counted cells |
+| a fold that walks down and back up | JS stack | a list of frames on the heap (scalar.ts `framesOf`) | the same | the same, counted cells |
+| deep recursion | heap continuations past the JS stack | a generator copy past a depth (C137c18) | frames on the heap (deep-loops.ts, cons-loops.ts) | the same as WebAssembly, or a 1 GiB stack |
+| tail calls | a call made last runs in its caller's loop (L281a, L281b TRMC) | loops for calls to itself | `return_call` for every tail call | loops for calls to itself; others are C calls |
+| handlers whose cases answer in place | a stack of handlers | fused into the code (handlers.ts) or a stack of cases | fused or a stack of cases | fused or a stack of cases |
+| handlers that answer later | heap continuations | continuation passing (core-rt.ts `handleK:`) | refused: "no runtime function fhandle" (C187 waits for stack switching) | a fiber per handler: `ucontext`, a 64 MiB malloc'd stack |
+| Choice and search | heap continuations | success continuations | success continuations | success continuations, a status code for no answer |
+| page cells | cells.ts | cells.ts | cells.ts (the host's) | the C page runtime |
+
+The interpreter is the stackless kind: its machine keeps each
+continuation on the heap, and a function that only computes runs
+directly on the JavaScript stack (L118c). It is the reference the
+compiled code is checked against, and its speed is
+INTERPRETER-SPEED-2026-11-21's subject, so it is left out below.
+
+## 2. Measurements
+
+### Natively: what each run makes, and how long it lives
+
+Each benchmark's C (`ters native`) was compiled with
+`-finstrument-functions`, so each function the program defines keeps a
+frame number while it runs (the runtime's own functions don't count as
+frames, so a cell `lab_text_concat` makes belongs to the program
+function that asked for it). Each cell made records its kind and the
+frame that made it. When it is freed, or its memory reused, it is
+counted *in frame* if that frame is still running, *outlived* if not.
+One thread (`TERS_WORKERS=0`). `compiler/gaps/allocations/kinds.py`
+makes the instrumented file.
+
+| benchmark | cells made | freed in frame | closures | list cells | fold frames | views | others |
+|---|---|---|---|---|---|---|---|
+| bazaar 10,000 orders | 1.16 M | **54%** | 4% (100% in frame) | 56% (54%) | 16% (100%) | 6% (0%) | records 15% (29%), tree nodes 4% (0%) |
+| mini 2,000 | 5.26 M | **65%** | 17% (100%) | 29% (72%) | 1.5% (100%) | 1% (14%) | texts 33% (70%), records 13% (0%), boxes 2% (100%) |
+| pack 3,200 words | 0.47 M | **44%** | 5% (100%) | 31% (63%) | 11% (100%) | 14% (31%) | tree nodes 33% (0%) |
+| scan 800 | 19.7 M | **57%** | 15% (100%) | 55% (21%) | 12% (100%) | 0% | texts 18% (99%) |
+| strings 8 blocks | 69.8 M | **52%** | 2% (100%) | 80% (41%) | 14% (100%) | 4% (70%) | |
+| flock 5,000 birds, 30 ticks | 36.6 M | **67%** | 0.8% (100%) | 0.4% (100%) | 0% | **98%** (67%) | |
+
+Perceus's reuse is working: of the list cells, 128 k of bazaar's, 4.5 M
+of scan's and 24.3 M of strings' took the memory of the cell their arm
+took apart, without a free or a new.
+
+What the table says:
+
+- **No closure outlived the function that made it**, in any of the six.
+  They are all downward: made to be given to a fold, a map or a
+  helper, and dropped when that returns. Rust, Swift (a closure is
+  non-escaping unless marked) and Effekt (second-class functions) keep
+  such closures on the stack.
+- **Every fold frame is freed in frame.** A fold that walks a list down
+  and back up conses one frame per item onto a list of frames
+  (`tree as map.fold.down` in bazaar's C) and takes them apart on the
+  way up. That is a stack, written as list cells.
+- **flock's views are 98% of its cells**: 240 per bird per tick.
+  `array rest`, `push front` and `first` each make a counted cell of
+  three words. In Go or Rust a slice is those three words, passed by
+  value.
+- What outlives its frame is what the program keeps: tree nodes, the
+  table's arrays, records in the result.
+
+"Freed in frame" is measured on one run. A static analysis proves less
+than a run shows, so this is an upper bound on what an analysis could
+move off the heap.
+
+### Natively: what memory management costs
+
+Callgrind instruction counts, the same benchmarks (smaller sizes where
+noted), counting `lab_new` (making), `lab_drop`, `lab_dec`, `lab__dead`,
+`lab_fields`, `lab_free` (freeing) and malloc. The dups and drops
+inlined into the program's own functions are not counted, so this is a
+lower bound.
+
+| benchmark | memory management | making | freeing |
+|---|---|---|---|
+| bazaar 10,000 | 48.5% | 12.2% | 34.2% |
+| strings 2 | 47.6% | 16.0% | 31.6% |
+| mini 500 | 36.9% | 11.8% | 20.8% |
+| flock 5,000, 5 ticks | 30.7% | 7.9% | 21.5% |
+| pack 3,200 | 18.4% | 6.7% | 11.7% |
+| scan 200 | 17.2% | 5.2% | 12.0% |
+
+Instructions are not time. Two changes to the generated C, timed (best
+of five, one thread):
+
+| benchmark | as built | `lab_new` always inlined | never freed (leaks) |
+|---|---|---|---|
+| bazaar 200,000 | 595 ms | 623 ms | 582 ms |
+| strings 8 | 581 ms | 548 ms | 821 ms |
+| mini 8,000 | 303 ms | 295 ms | 408 ms |
+
+A run that never frees is at most 2% faster and up to 41% slower, as
+REGIONS.md found for swarm on 2026-11-10: the freeing's instructions
+overlap with the waits for memory, and reused cells are warm in the
+cache where fresh ones aren't. So the third of the instructions spent
+freeing buys back its cost in locality. What the table can't say is how
+much faster a run would be that never made the frame-local half of its
+cells at all. That needs a hand experiment (C327a).
+
+Also seen: bazaar natively at 200,000 orders takes 0.92 s on the pool's
+threads and 0.63 s on one. Sharing a value with the pool marks every
+cell it reaches as shared (`lab_share`), and shared counts are atomic.
+This is the native side of C323, which is about JavaScript's workers
+(C328).
+
+### JavaScript and WebAssembly: the collector
+
+From the rounds' profiles (GAPS.md), the collector's share of the core
+IR's time: bazaar 25%, strings 31%, depot 23%, fit 13%, rota 12%,
+greenhouse and moths 8% to 16%, routes 8%. WebAssembly's is higher where
+measured: pack in WASI is about half collection, and machine's primes
+13% after C285. V8's young generation makes a short-lived object for a
+few nanoseconds, and C62 (2026-10-31) found writing into an old node
+instead of making one saves nothing in JavaScript (the write barrier
+costs as much). So in JavaScript what pays is not making the value at
+all (fusion, scalar replacement, columns) or changing a big one in
+place (arrays and tables), never reusing a small cell's memory.
+
+### C's fibers
+
+`compiler/gaps/allocations/fibers.c` does what c-rt.ts's `fibers` does
+on Linux, a handler at a time (a fiber `calloc`'d, a 64 MiB stack
+`malloc`'d, `makecontext`, `swapcontext` in and out), then the same with
+c-rt.ts's own switch for Android and Apple (`sigsetjmp` without the
+signal mask, a jump onto the new stack):
+
+| | to start a handler | a perform and its resume |
+|---|---|---|
+| as built (ucontext, a fresh 64 MiB stack) | 6.0 to 7.4 µs | 330 ns |
+| ucontext, a 64 KiB stack | 0.5 µs | 330 ns |
+| c-rt's own switch, a fresh 64 MiB stack | 6.1 to 6.7 µs | 77 to 80 ns |
+| c-rt's own switch, a kept stack | 10 to 20 ns | 14 ns |
+
+A 64 MiB `malloc` is an `mmap` and its `free` an `munmap`, with page
+faults for every page the fiber touches. glibc's `swapcontext` saves and
+sets the signal mask, a system call each way. Also: glibc's
+`_FORTIFY_SOURCE` (on by default in Ubuntu's gcc at -O2) aborts a
+`siglongjmp` onto another stack ("longjmp causes uninitialized stack
+frame"), so the Android and Apple switch needs `-D_FORTIFY_SOURCE=0` if
+it is used on Linux.
+
+None of the benchmarks starts a fiber. A native page starts one per
+event handler, which at 7 µs is invisible. A program performing an
+effect answered later in a loop (a generator, a scheduler of many
+`together` branches) would feel it.
+
+## 3. The candidates
+
+### Regions or arenas per action, frame or tick (Tofte and Talpin; MLKit)
+
+The cells of a scope would come from a region freed at once when the
+scope ends. On JavaScript and WebAssembly a program can't free, so this
+is C only. On C, freeing is already at the last use, from free lists
+(Perceus is "garbage free"), and the leak test bounds what skipping the
+frees could buy at 2%. The MLKit later put a collector beside its
+regions (Hallenberg, Elsman and Tofte, PLDI 2002), since inferred
+regions alone kept too much alive on some programs; Cyclone made
+regions explicit, which Ersagun's rule (no annotations, 2026-10-29) rules
+out. **Not recommended.** REGIONS.md (C57) reaches the same decision; this
+round adds four more programs to its evidence.
+
+### Perceus-style counting with reuse, everywhere
+
+C has it (c.ts, since N5). JavaScript and WebAssembly can't count: the
+engine's collector owns memory, and counting every value on top would
+cost more than it saves (IN-PLACE.md step 4). What carries over is the
+static half: knowing a value has one holder, so a change can be made in
+place. That exists (one-holder.ts), but per type and for the whole
+program at once: an Array of Int is changed in place only if *every*
+Array of Int in the program has one holder. machine's primes lost a
+factor of 500 in WebAssembly to that rule until C285 made arrays
+versions (GAPS.md sweep). Versions catch what the rule misses, at a
+note per change. **Recommended as part of C327**: one holder decided per
+value, with versions or `rc == 1` as the fallback, as now.
+
+What C still lacks from Perceus and its successors, each small: borrow
+inference for every parameter (C94 lends a record or cell input the body only reads), reuse
+specialisation (writing only the changed fields into a reused cell), and
+FBIP's guarantee for a definition that keeps its shape (Lorenzen, Leijen
+and Swierstra's FP², ICFP 2023). None is a paradigm change.
+
+### Whole-program defunctionalisation (Reynolds 1972; MLton)
+
+A function value becomes a tag and its captures, and a call through it a
+switch. WGSL already does this (defunc.ts, C225). On C and WebAssembly
+the gain would be a direct call instead of an indirect one, and, more
+usefully, a closure that is a plain value instead of a cell, which can
+live in a register or a local. The measurements say closures are 1% to
+17% of cells, and C288 (known-closures.ts) already removed the ones fit
+made per point. **Not a goal of its own.** Inside C327 it is the means by
+which a frame-local closure on WebAssembly becomes locals instead of a
+GC struct.
+
+### Uniqueness or ownership types, written or shown (Clean, Linear Haskell, Rust)
+
+Ersagun's rule since 2026-10-29: the representation stays out of the
+language, so a copy the compiler can't avoid makes a program slower,
+never wrong. All of these put ownership in the types a person writes.
+**Not recommended**, and not needed: everything they would let a
+compiler do, an inferred analysis can do on a program that doesn't say
+it, with a fallback where it can't prove it. Hylo's mutable value
+semantics, which is closest in spirit (values, never shared references,
+mutated in place), also needs `inout` written.
+
+### Ownership and lifetime per value, inferred, on the core IR (recommended)
+
+One stage of the core IR, after lowering and before the printers, that
+gives each value made:
+
+- **its holders**: one (change it in place), shared, or unknown (decide
+  at run time: `rc == 1` on C, a version on JavaScript and WebAssembly);
+- **its lifetime**: dies in its frame (second-class), or may leave it
+  (returned, stored, captured by a value that leaves);
+- **each parameter's mode**: borrowed or consumed, and each result:
+  fresh or not. These are the per-definition summaries that let it run
+  one definition at a time, which is what the Language lane's stage 4
+  (per-definition lowering) gives.
+
+Each target then reads it:
+
+| | C | WebAssembly | JavaScript |
+|---|---|---|---|
+| one holder | in place, no `rc == 1` test | in place, no version | in place, no version |
+| dies in its frame | a stack slot, no count (a closure, a view, a fold's frame stack, a box) | locals and multiple values, no GC struct | left to V8 (its escape analysis does this for objects that don't leave a function) |
+| may leave | a counted cell, as now | a GC struct, as now | an object, as now |
+
+It replaces one-holder.ts's per-type rule and the four owned-* passes
+(owned-arrays.ts, owned-records.ts, owned-tables.ts, owned-pushes.ts),
+about 1,050 lines with one-holder.ts, each pass looking for one shape. It does not replace
+fusion (fuse-steps.ts, fuse-walks.ts), columns or loop-records.ts, which
+remove values rather than place them.
+
+Prior art for each part: Perceus and its borrow inference (Reinking,
+Xie, de Moura and Leijen, PLDI 2021); Lean 4's borrowed parameters and
+reset/reuse (Ullrich and de Moura, IFL 2019); escape analysis for stack
+allocation (Park and Goldberg 1992; Blanchet, POPL 1998; Choi et al.,
+OOPSLA 1999); second-class values (Osvald, Essertel, Wu, Alayón and
+Rompf, OOPSLA 2016) and Effekt's second-class functions (Brachthäuser,
+Schuster and Ostermann, OOPSLA 2020), here inferred rather than written;
+Swift's non-escaping closures and Rust's unboxed closures as the
+targets' shape; Go's slices for views as values.
+
+*Cost:* several PRs over weeks, on the core IR every printer reads.
+*Expected win:* on C, up to two thirds of the cells and the counting
+traffic they carry, which instruction counts put at 17% to 48% of a run
+but which isn't measured in time; on WebAssembly, the same cells out of
+the collector, which takes a third to half there; on JavaScript, less
+(V8 already does this for some objects), mostly in-place changes the
+per-type rule misses.
+*Risk:* an analysis wrong about a holder changes an answer. Each step is
+checked against the evaluator on every example and benchmark, as every
+target is today, and a value it can't prove keeps today's path.
+
+### Stackful or stackless effects, per target
+
+Ters's operations are one-shot: a case calls its rest at most once
+(ANSWERED-LATER.md), so no continuation is ever copied. That makes both
+fibers (OCaml 5's) and continuation passing (Koka's and Effekt's
+selective CPS) correct; the choice is cost, per target:
+
+- **JavaScript** has no way to switch stacks (generators are a frame
+  each on the heap, the same cost as `async`), so continuation passing,
+  only where a case keeps the rest, is right. Keep it.
+- **C** switches stacks cheaply if it is done well: a kept stack and its
+  own switch cost 10 to 20 ns to start and 14 ns a switch. Keep fibers, and make them that cheap
+  (C326): a pool of stacks reused, 64 MiB reserved with `mmap` and a
+  guard page rather than `malloc`'d per handler, and c-rt's own switch on
+  Linux too (or `swapcontext` replaced by a few lines of assembly per
+  processor, as Boost.Context does).
+- **WebAssembly** has stack switching only behind a flag (WasmFX,
+  Phipps-Costin et al., OOPSLA 2023; C187 checked Chromium 153), and
+  Node 22 not at all. Waiting leaves tumble and pig unbuilt. The
+  lowering JavaScript uses (scalar.ts's `handleK:` route) needs only
+  closures and tail calls, which WebAssembly has (C325). When stack
+  switching ships on by default, measure it against that.
+
+So: stackful where the target offers cheap stacks, stackless elsewhere,
+one meaning. That was PROGRAM-EFFECTS-2026-11-03's option (a) for
+JavaScript; this extends it to WebAssembly instead of waiting.
+
+### Tail calls and frame reuse
+
+In place: the interpreter (L281a, L281b), loops for calls to itself in
+JavaScript and C, `return_call` in WebAssembly, TRMC by cons-onto.ts.
+Left: a mutual tail call in JavaScript takes a frame, and in C relies on
+gcc's sibling calls at -O2. No program has shown either; not a row.
+
+## 4. Recommendation
+
+1. **C327, per-value ownership and lifetime, after stage 4.** Start
+   with C327a, a measurement by hand on two benchmarks' generated C:
+   flock's views passed as three words, and bazaar's fold frames as a
+   growable array with its closures on the stack. If neither is 10%
+   faster, stop and close the row as measured; regions and
+   defunctionalisation are then out too, since they would win less.
+   If they are, build the analysis (C327b) with per-definition
+   summaries, then its readers one at a time: views (C327c), fold frames
+   (C327d), closures (C327e), one holder per value in place of
+   one-holder.ts's per type (C327f), WebAssembly's locals (C327g).
+2. **C325, WebAssembly's handlers that answer later by continuation
+   passing**, now. It needs no decision and unblocks tumble and pig.
+3. **C326, cheap fibers on C**, when a program performs an effect
+   answered later in a loop. P3.
+4. **C328, the native pool's sharing cost** (bazaar 0.92 s on threads,
+   0.63 s on one), with C323.
+
+Not recommended: regions (§3, measured), a collector on C, ownership in
+the types a person writes, defunctionalisation for its own sake.
+
+No decision is needed from Ersagun for C325, C326 and C328: they are how
+the compiler lowers what the language means. C327 is a large change to
+the compiler's core; the lane starts it with C327a's measurement and
+reports before building.
+
+## How this was measured
+
+On this container (4 cores), gcc 13 at `ters native`'s flags. Cells by
+kind: `python3 compiler/gaps/allocations/kinds.py in.c out.c`, then
+`gcc -std=c99 -O2 -ffp-contract=off -fwrapv -pthread -finstrument-functions
+-o x out.c -lm` and `TERS_WORKERS=0 ./x args`; the report is on standard
+error. Instructions: `valgrind --tool=callgrind` on the same C built with
+`-g`. Fibers: `gcc -O2 -D_FORTIFY_SOURCE=0 -o fibers
+compiler/gaps/allocations/fibers.c` and `./fibers u|s handlers performs
+[stack bytes] [keep]`.
+
+## Credits
+
+Prior art and influences named above, all prior art or considered here
+(nothing is built): Tofte and Talpin, "Region-based memory management"
+(Information and Computation, 1997) and the MLKit; Grossman et al.,
+"Region-based memory management in Cyclone" (PLDI 2002); Hallenberg,
+Elsman and Tofte, "Combining region inference and garbage collection"
+(PLDI 2002); Reinking, Xie,
+de Moura and Leijen, "Perceus: garbage free reference counting with
+reuse" (PLDI 2021) and Koka; Ullrich and de Moura, "Counting immutable
+beans" (IFL 2019) and Lean 4; Lorenzen, Leijen and Swierstra, "FP²:
+fully in-place functional programming" (ICFP 2023); Reynolds,
+"Definitional interpreters for higher-order programming languages"
+(1972), and MLton's whole-program defunctionalisation (Cejtin,
+Jagannathan and Weeks, ESOP 2000); Baker's shallow binding for
+functional arrays (1991); Park and Goldberg (1992), Blanchet (POPL 1998)
+and Choi et al. (OOPSLA 1999) on escape analysis; Osvald et al. on
+second-class values (OOPSLA 2016) and Effekt (Brachthäuser, Schuster and
+Ostermann, OOPSLA 2020); Clean's uniqueness types, Linear Haskell and
+Rust's ownership (considered, rejected by Ersagun's rule); Hylo's mutable
+value semantics (Racordon et al., JOT 2022); Sivaramakrishnan et al.,
+"Retrofitting effect handlers onto OCaml" (PLDI 2021); Phipps-Costin et
+al., "Continuing WebAssembly with effect handlers" (OOPSLA 2023);
+Friedman and Wise on TRMC (1975); Go's slices; Swift's non-escaping
+closures; Boost.Context's stack switch. All listed in
+docs/language/CREDITS.md.

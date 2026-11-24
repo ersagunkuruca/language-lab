@@ -50,6 +50,7 @@ updated; their findings are rows in the backlog.
 | [RUN-INPUTS-2026-11-17](reports/RUN-INPUTS-2026-11-17.md) | What each command-line example takes (arguments, files, standard input), what Run lets you change, and why the simulations print text | kept as written |
 | [INSTRUMENT-APP-2026-11-17](reports/INSTRUMENT-APP-2026-11-17.md) | A tuner, metronome and looper in Ters: what works today, what is missing, and the plan in stages (L267 to L278, C260 to C262) | kept as written |
 | [INTERPRETER-SPEED-2026-11-21](reports/INTERPRETER-SPEED-2026-11-21.md) | Where the interpreter spends its time on each page example, and why (L281a to L281g) | kept as written |
+| [ALLOCATIONS-2026-11-24](reports/ALLOCATIONS-2026-11-24.md) | How each target allocates (closures, cells, views, frames, handlers), measured natively; regions don't pay, the cost is making frame-local cells; one inferred ownership-and-lifetime stage recommended after stage 4 (C325 to C328) | kept as written |
 | [GAME-READINESS-2026-11-17](reports/GAME-READINESS-2026-11-17.md) | How well Ters can carry a medium-sized game: CPU entity loops at hand-written C, the GPU only draws a function of the pixel, no game tools; staged rows G1 to G24 | kept as written |
 | [CREDITS.md](language/CREDITS.md) | Every influence, prior work and adaptation, feature by feature | current |
 | [invertible/README.md](../invertible/README.md) | The relation solver the language's arithmetic runs backwards with | current |
