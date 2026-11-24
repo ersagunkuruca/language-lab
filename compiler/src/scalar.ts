@@ -56,7 +56,8 @@ import { laterOps as laterOpsOf } from "../../ters/src/lang/later-ops.ts";
 import { answerKeys, givenInOrder } from "../../ters/src/lang/ports.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { overLiterals } from "../../ters/src/lang/literals-again.ts";
+import { onlyLiteralValues, overLiterals } from "../../ters/src/lang/literals-again.ts";
+import { keptMap } from "../../ters/src/kept.ts";
 import { nodesOfKindIn, steadied, dependencies, nodesOfKind, portsOf, subtree, isCall, type Call, isUse, useTarget, type Use, nodeValues, dropNode } from "../../ters/src/model.ts";
 import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
@@ -700,13 +701,27 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
 export let lastFused: { fused: number; carried: boolean } | null = null;
 export let lastVerdict: { checked: number; problems: number; rechecked: boolean } | null = null;
 export function vouched(code: Code, info: Info, names: Names): Info {
-  const v = verify(code, elaborate(code, info));
-  lastVerdict = { checked: v.checked, problems: v.problems.length, rechecked: false };
-  if (!v.problems.length) return info;
+  const v = verdictOf("vouched", code, info);
+  lastVerdict = { checked: v.checked, problems: v.problems, rechecked: false };
+  if (!v.problems) return info;
   const again = infer(code, names, undefined, info.options);
   if (again.errors.length > info.errors.length) return info;
   lastVerdict.rechecked = true;
   return again;
+}
+
+// What the verifier found in a program (verify.ts), kept: one that differs
+// from the last it found nothing in only in some literals' values (an
+// edit of a number, lowering's first steps taken again: literals-again.ts)
+// has the same types, which the verifier reads, not the values.
+const verdicts = keptMap<string, { code: Code; checked: number }>();
+function verdictOf(place: string, code: Code, info: Info): { checked: number; problems: number } {
+  const was = verdicts.get(place);
+  if (was && onlyLiteralValues(was.code, code)) { verdicts.set(place, { ...was, code }); return { checked: was.checked, problems: 0 }; }
+  const v = verify(code, elaborate(code, info));
+  if (v.problems.length) verdicts.delete(place);
+  else verdicts.set(place, { code, checked: v.checked });
+  return { checked: v.checked, problems: v.problems.length };
 }
 
 // The program as every lowering of these roots starts from (I315): the
@@ -811,13 +826,16 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   let st: { rounded: Id[] };
   if (front) ({ code, info, names, st } = { ...front, st: { rounded: [...front.rounded] } });
   else {
-    if (!opts.shader && opts.bake !== false && !envSet("NO_BAKE")) {
+    // An edit of a number none of its runs reads takes what it baked
+    // before (literals-again.ts).
+    if (!opts.shader && opts.bake !== false && !envSet("NO_BAKE")) ({ code, info, names } = overLiterals(`baked ${roots.join(" ")}`, { code, info, names }, () => {
       const b = bakeCalls(code, info, names);
       if (b.baked.length) {
         const checked = infer(b.code, names, undefined, recheck);
-        if (checked.errors.length <= info.errors.length) ({ code, info } = { code: reachedWithShows(b.code, roots, checked), info: checked });
+        if (checked.errors.length <= info.errors.length) return { code: reachedWithShows(b.code, roots, checked), info: checked, names, reads: b.reads };
       }
-    }
+      return { code, info, names, reads: b.reads };
+    }));
     // Calls given data written down (an algebra's signature and basis) are
     // worked out as far as that data goes (stage.ts, C65): what's left is
     // arithmetic, with no lists. Kept only if the program still checks.
@@ -886,9 +904,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (fusedSteps.types && !envSet("TERS_RECHECK")) {
       const typeOf = new OverMap(info.typeOf);
       for (const [id, t] of fusedSteps.types) typeOf.set(id, t);
-      const carried = { ...info, typeOf }, v = verify(code, elaborate(code, carried));
-      lastFused = { fused: fusedSteps.fused, carried: !v.problems.length };
-      info = v.problems.length ? infer(code, names, undefined, recheck) : carried;
+      const carried = { ...info, typeOf }, v = verdictOf("fused steps", code, carried);
+      lastFused = { fused: fusedSteps.fused, carried: !v.problems };
+      info = v.problems ? infer(code, names, undefined, recheck) : carried;
     } else info = infer(code, names, undefined, recheck);
   }
   // A fold's costly work on each item shared out as a map, where a target
