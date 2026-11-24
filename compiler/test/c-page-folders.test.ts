@@ -33,8 +33,11 @@ const picked = (dir: string): PickedFolder => {
   };
 };
 const settle = () => new Promise((r) => setTimeout(r, 20));
-// A folder's row without its time: — in the browser, its own on disk.
-const timeless = (html: string) => html.replace(/(<tr class="(?:chosen )?dir"><td>[^<]*<\/td><td>—<\/td><td>)[^<]*/g, "$1");
+// A folder's time taken out, its row's and the side pane's: — in the
+// browser, its own on disk.
+const timeless = (html: string) => html
+  .replace(/(<div class="row(?: chosen)?"><div class="c name"><svg viewBox="0 0 16 16" class="icon folder small">(?:(?!<div class="row).)*?<div class="c modified">)[^<]*/gs, "$1")
+  .replace(/(<span class="k">Kind<\/span><span class="v">Folder<\/span><\/div>(?:(?!<\/div><\/div>).)*?<span class="k">Modified<\/span><span class="v">)[^<]*/gs, "$1");
 
 test("folders in C lists, sorts, filters, moves through and previews a folder, as the evaluator's page does (C299)", { skip }, async () => {
   const dir = mkdtempSync(join(tmpdir(), "folders-"));
@@ -69,23 +72,30 @@ test("folders in C lists, sorts, filters, moves through and previews a folder, a
     }
     page.stop();
     assert.deepEqual(c.map(timeless), evaluator.map(timeless));
-    const rows = (h: string) => [...h.matchAll(/<tr class="([^"]*)"><td>([^<]*)<\/td><td>([^<]*)<\/td><td>([^<]*)<\/td>/g)].map((m) => `${m[1]} ${m[2]} ${m[3]} ${m[4]}`);
-    // Opened: the folder first, then names in the language's order, times
-    // on Istanbul's clock.
-    assert.deepEqual(rows(c[1]), ["dir notes/ — " + rows(c[1])[0].split(" — ")[1], "file data.bin 4 B 2025-11-22 11:26", "file readme.txt 25 B 2025-11-23 15:13", "file Zeytin.txt 1 B 2023-11-15 01:13"]);
-    // Three down: readme.txt chosen, its first lines beside the list.
-    assert.match(c[4], /<tr class="chosen file"><td>readme.txt<\/td>/);
-    assert.match(c[4], /<pre class="preview">first\nsecond\nÇok güzel\n<\/pre>/);
+    const rows = (h: string) => [...h.matchAll(/<div class="(row(?: chosen)?)"><div class="c name">(?:(?!<div class="row).)*?<span class="label">([^<]*)<\/span><\/div><div class="c size">([^<]*)<\/div><div class="c kind">([^<]*)<\/div><div class="c modified">([^<]*)<\/div>/gs)].map((m) => `${m[1]} ${m[2]} ${m[3]} ${m[4]} ${m[5]}`);
+    const chosen = (h: string) => /<div class="row chosen">(?:(?!<div class="row).)*?<span class="label">([^<]*)</s.exec(h)?.[1];
+    const here = (h: string) => /<div class="crumb here">(?:<span class="sep">›<\/span>)?<button title="([^"]*)">/.exec(h)?.[1];
+    // Opened: the folder first, then names in the language's order, kinds
+    // by extension, times on Istanbul's clock.
+    assert.deepEqual(rows(c[1]), ["row notes — Folder " + rows(c[1])[0].split(" Folder ")[1], "row data.bin 4 B File 2025-11-22 11:26", "row readme.txt 25 B Text 2025-11-23 15:13", "row Zeytin.txt 1 B Text 2023-11-15 01:13"]);
+    assert.match(c[1], /<div class="status"><span class="count">4 items<\/span><\/div>/);
+    // Three down: readme.txt chosen, its facts and first lines beside the list.
+    assert.equal(chosen(c[4]), "readme.txt");
+    assert.match(c[4], /<h2>readme.txt<\/h2>.*<span class="v">25 B<\/span>.*<pre>first\nsecond\nÇok güzel\n<\/pre>/s);
     // "TXT" keeps the names with txt in them, case aside; down chooses the
     // one below.
-    assert.deepEqual(rows(c[5]).map((x) => x.replace(/^(chosen )?file /, "").split(" ")[0]), ["readme.txt", "Zeytin.txt"]);
-    assert.match(c[6], /<tr class="chosen file"><td>Zeytin.txt/);
+    assert.deepEqual(rows(c[5]).map((x) => x.replace(/^row (chosen )?/, "").split(" ")[0]), ["readme.txt", "Zeytin.txt"]);
+    assert.match(c[5], /<span class="count">2 of 4<\/span>/);
+    assert.equal(chosen(c[6]), "Zeytin.txt");
     // Escape clears the filter, Home goes to notes, Enter opens it, down
-    // chooses plan.md, and Backspace with nothing typed goes back up.
+    // chooses plan.md, and Backspace with nothing typed goes back up, notes
+    // chosen there.
     assert.equal(rows(c[7]).length, 4);
-    assert.match(c[9], /value="notes"/);
-    assert.match(c[10], /<tr class="chosen file"><td>plan.md<\/td>.*<pre class="preview"># Plan\nlist it\n<\/pre>/s);
-    assert.match(c[11], /class="where" aria-label="Folder" value="."/);
+    assert.equal(here(c[9]), "notes");
+    assert.equal(chosen(c[10]), "plan.md");
+    assert.match(c[10], /<pre># Plan\nlist it\n<\/pre>/);
+    assert.equal(here(c[11]), ".");
+    assert.equal(chosen(c[11]), "notes");
   } finally { if (was === undefined) delete process.env.TZ; else process.env.TZ = was; }
 });
 

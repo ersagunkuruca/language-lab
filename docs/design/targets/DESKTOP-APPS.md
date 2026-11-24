@@ -100,13 +100,19 @@ browser and in an app.
 
 ## The file browser
 
-**Example: `folders`**, an original page program. Two panes: on the left
-the folders above the current one and those inside it; on the right its
-files with name, size and modified time, sorted by a click on a column's
-head, filtered by typing, moved through with the arrow keys. Enter or a
-double click opens a folder, or a file in its own app. A text file shows
-its first lines beside the list. Writes (rename, move to the bin) are a
-later step, each asked before it's done.
+**Example: `folders`**, an original page program, laid out as desktop file
+managers usually are (C320): a toolbar with Back, Up, the folder's path as
+clickable crumbs (a click after them types a path) and a filter; a folders
+pane on the left (the folders above the one shown, each a step further in,
+then those inside it); the entries in columns (icon, name, size, kind,
+modified) sorted by a click on a column's head, filtered by typing, moved
+through with the keys (arrows, Page Up and Down, Home, End, Enter, Escape,
+Backspace, Alt+Up, Alt+Left); the chosen entry's facts and a text file's
+first lines on the right; and a status bar. Icons are drawn from shapes.
+Enter or a double click opens a folder, or a file in its own app. The panes
+are as high as the window and scroll on their own; the side panes go when
+the window is narrow. Writes (rename, move to the bin) are a later step,
+each asked before it's done.
 Built in C299; its handlers needed the person's time zone and locale
 and open outside in C (C315). In an app it starts in the app's own
 folder; Up and a typed path go anywhere.
