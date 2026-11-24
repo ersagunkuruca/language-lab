@@ -24,7 +24,7 @@
 // keeps in a global ("the current listener") is the dynamic scope of that
 // handler, which is what a deep handler is.
 
-import type { Value } from "./run.ts";
+import type { Value } from "./run-values.ts";
 
 const CLEAN = 0, CHECK = 1, DIRTY = 2;
 

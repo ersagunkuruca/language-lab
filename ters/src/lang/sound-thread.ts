@@ -11,7 +11,7 @@
 import { listens } from "./audio.ts";
 import type { Cells, Step } from "./cells.ts";
 import { seededGenerator } from "./random.ts";
-import { fromList, LIST_SHAPE, OutOfSteps, PAGE_STEPS, toList, withSteps, type Data, type Value } from "./run.ts";
+import { fromList, LIST_SHAPE, OutOfSteps, PAGE_STEPS, toList, withSteps, type Data, type Value } from "./run-values.ts";
 import { HTML_V, PAIR_V } from "./std-ids.ts";
 
 // What an AudioWorkletGlobalScope has (Web Audio API).

@@ -15,8 +15,7 @@
 // 4-byte word (f32, i32, or a Bool as 1 or 0), found by its path of field
 // indices; drawIndexed by the mesh's triangles and the instances' count.
 
-import type { Data, Value } from "./run.ts";
-import { fromList } from "./run.ts";
+import { fromList, type Data, type Value } from "./run-values.ts";
 import { FRAME_V, TRUE } from "./std-ids.ts";
 import { cssColour } from "./raster.ts";
 

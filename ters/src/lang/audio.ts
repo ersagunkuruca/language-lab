@@ -6,8 +6,7 @@
 import type { Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
-import type { Data, Value } from "./run.ts";
-import { fromList } from "./run.ts";
+import { fromList, type Data, type Value } from "./run-values.ts";
 import { AUDIO_BLOCK, AUDIO_MAKER, HTML_V, LIST, PAIR } from "./std-ids.ts";
 import { NUMBER, type Type } from "./types.ts";
 

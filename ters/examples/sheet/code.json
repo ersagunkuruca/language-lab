@@ -803,7 +803,7 @@
 "9r52t7j5qtcj9buo1a3md9bu4o": {"kind": "ref", "target": "6e1jt66ta246viiv0c740g6fal"},
 "9r8f23698306ft5rl6cnht9ks4": {"kind": "def", "body": "jkiabjphfvs09l54nc5ba690o3"},
 "9r9eo23sgbtgmk40btcms09926": {"kind": "ref", "target": "reumciia3l9e5tbu39ai0ghv4p"},
-"9rcaqb2avvf1vmg5367ql0k3q2": {"kind": "ref", "target": "std.pair.pair"},
+"9rcaqb2avvf1vmg5367ql0k3q2": {"kind": "ref", "target": "std.tuple2.tuple"},
 "9rl7por5c2id56e7t5qfrkqns3": {"kind": "binder"},
 "9rqf1vaam379v4hmhj15d07cpc": {"kind": "lit", "num": "0", "of": "type.int"},
 "9rvn6haen6t7agpsd8eb9durgn": {"kind": "call", "args": ["72me5bado7dcvimehg11qku6oa"], "fn": "bvat4dau6orr8d6pk73l13ukb9"},

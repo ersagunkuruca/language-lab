@@ -1,10 +1,10 @@
 // A program with each type it uses stored as the chooser picks (lab.ts's
 // `ters compile`, `ters run`, and a sound's `ters render`, C137 s1).
 
-import { dependencies, idsSeeded, steadied, subtree, type Code, type Id } from "../src/model.ts";
+import { changedOver, dependencies, idsSeeded, layerOf, litOrigin, nodesOfKind, onLayer, sameValue, steadied, subtree, withNodes, type Code, type Id, type Node } from "../src/model.ts";
 import type { Pins } from "../src/lang/signatures.ts";
 import type { Names } from "../src/presentation.ts";
-import { checksKept, infer, type Info } from "../src/lang/infer.ts";
+import { checksKept, infer, inferEdited, type Info } from "../src/lang/infer.ts";
 import { choose, jobProblem, represent, type Measured, type Representation } from "../src/lang/represent.ts";
 import { choosingFor, endedAsWritten, storedRows, withLibraryRepresentations, type Pick } from "../src/lang/library-reps.ts";
 import { classKey, optionsText } from "../src/lang/class-key.ts";
@@ -15,6 +15,8 @@ import { shareFoldItems } from "../../compiler/src/fold-items.ts";
 import { fuseWalks } from "../../compiler/src/fuse-walks.ts";
 import { intCases, usesIntCases } from "../src/lang/int-cases.ts";
 import { expandArrayGradients, gradientOverArray } from "../src/lang/pullback.ts";
+import { TREES } from "../src/lang/library.ts";
+import { keptMap } from "../src/kept.ts";
 
 // `held`: the rows a person held in the program's choices (L280c), by the
 // type's id.
@@ -40,7 +42,79 @@ export function represented<P extends Program>(p00: P, main: Id, hostMaps: boole
   const go = () => { const r = representedIn(p00, main, hostMaps, tables, sound, dataKeys); const code = steadied(r.code); return code === r.code ? r : { ...r, code }; };
   if (!checksKept(p00.info.options)) return go();
   const key = classKey(p00.code, [optionsText(p00.info.options), main, p00.own, p00.reps, hostMaps, tables, sound, dataKeys, [...(p00.held ?? [])].sort(), [...(p00.measured ?? [])].map(([t, m]) => [t, m.size, [...m.calls].sort()])]);
-  return idsSeeded(`representing ${main}`, () => keepingWhole(() => choosingFor(key, go)));
+  const again = butLiterals(key, p00);
+  if (again) return again;
+  const out = idsSeeded(`representing ${main}`, () => keepingWhole(() => choosingFor(key, go)));
+  if (literalsKept.size >= 4) literalsKept.clear();
+  literalsKept.set(key, { given: p00, out });
+  return out;
+}
+
+// The last choice made from this program but for its literals' values
+// (the key leaves those out but for their sign and kind: classKey), kept
+// with what it was made from: a program that differs from that one only
+// in some literals' values (an edit of a number, the editor's drag) takes
+// it again with those values put in, and is checked again over its check
+// (infer.ts inferEdited). No decision reads a literal's value (the key),
+// and the rewrite only carries it: a literal it left where it was takes
+// the new value there. One the rewrite copied or turned into something
+// else (a copy for one side of a split, a literal job's call) has no
+// node to take it, so the choice is made again; so it is when anything
+// made has a literal of the same value, which may be its copy (machine:
+// 0.47 of a recompile's 1.15 s).
+// How many choices were taken again so (the tests).
+export let choicesAgain = 0;
+const literalsKept = keptMap<string, { given: Program; out: Program; made?: Made }>();
+const litText = (v: unknown) => `${typeof v === "string" ? "s" : "v"}${String(v).trim()}`;
+function butLiterals<P extends Program>(key: string, q: P): P | null {
+  const was = literalsKept.get(key);
+  if (!was) return null;
+  const p = was.given, out = was.out as P;
+  if (q.code === p.code && q.names === p.names && q.info === p.info) return out;
+  if (q.info.errors.length !== p.info.errors.length || q.code.defs.length !== p.code.defs.length || q.code.defs.some((d, i) => d !== p.code.defs[i])) return null;
+  if (q.names !== p.names && !sameNames(q.names, p.names)) return null;
+  const changed = changedOver(p.code.nodes, q.code.nodes);
+  if (!changed) return null;
+  const made = (was.made ??= madeLiterals(p.code, out.code));
+  const into: Record<Id, Node> = {};
+  for (const id of changed) {
+    const a = p.code.nodes[id], b = q.code.nodes[id];
+    if (a?.kind !== "lit" || b?.kind !== "lit" || !sameValue({ ...a, value: b.value }, b)) return null;
+    if (made.unknown.has(litText(a.value))) return null;
+    for (const at of [id, ...(made.copies.get(id) ?? [])]) {
+      const n = out.code.nodes[at];
+      if (n === undefined && at === id) continue;
+      if (n?.kind !== "lit" || !sameValue({ ...n, id }, a)) return null;
+      into[at] = { ...n, value: b.value } as Node;
+    }
+  }
+  if (!Object.keys(into).length) return null;
+  const code: Code = { ...out.code, nodes: withNodes(out.code.nodes, into) };
+  const layer = layerOf(out.code);
+  if (layer) onLayer(code, layer);
+  const info = inferEdited(out.code, code, out.names, out.info, out.info.options!);
+  if (!info || info.errors.length !== out.info.errors.length) return null;
+  choicesAgain++;
+  return { ...out, code, info };
+}
+// The literals the choice made: copies of the program's (model.ts
+// litOrigin), by the one copied, and the values of the rest (a job's
+// constant, or a copy made otherwise), any of which may be a copy.
+type Made = { copies: Map<Id, Id[]>; unknown: Set<string> };
+function madeLiterals(given: Code, out: Code): Made {
+  const copies = new Map<Id, Id[]>(), unknown = new Set<string>();
+  for (const n of nodesOfKind(out, "lit")) {
+    // The program's own, or the trees module's as it is (library-reps.ts withTrees).
+    if (given.nodes[n.id] !== undefined || TREES.code.nodes[n.id] === n) continue;
+    const o = litOrigin(n);
+    if (o !== undefined && given.nodes[o]?.kind === "lit") { let cs = copies.get(o); if (!cs) copies.set(o, (cs = [])); cs.push(n.id); }
+    else unknown.add(litText(n.value));
+  }
+  return { copies, unknown };
+}
+function sameNames(a: Names, b: Names): boolean {
+  const ka = Object.keys(a);
+  return ka.length === Object.keys(b).length && ka.every((k) => a[k] === b[k]);
 }
 function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, tables: boolean, sound: boolean, dataKeys: boolean): P {
   // A match on an Int's cases written out on Int first (int-cases.ts,

@@ -12,12 +12,9 @@
 
 import { nfc } from "./border.ts";
 import { KEPT, Pending, type Cells, type CellNode } from "./cells.ts";
-import type { Data, Value } from "./run.ts";
-import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
+import { fromList, OutOfSteps, PAGE_STEPS, withSteps, type Data, type Value } from "./run-values.ts";
 import { FALSE, HTML_V, MARK_V, TRUE } from "./std-ids.ts";
 import { FOREIGN_VIEW } from "./hosts.ts";
-import { rasterize } from "./raster.ts";
-import { GpuFrames, sitedOf } from "./gpu-frame.ts";
 
 export interface Node_ { textContent: string | null }
 export interface El extends Node_ {
@@ -412,7 +409,9 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
         } else if (a.tag === HTML_V.render) {
           // A frame (G9b, FRAMES.md): drawn on the CPU here, again whenever
           // a cell its view read changes.
-          watch(e, "render", () => renderFrame(e, viewOf(m.call, a.fields[0]), m.call));
+          if (!RENDER) throw new Error("this page was made without what renders frames");
+          const render = RENDER;
+          watch(e, "render", () => render(e, viewOf(m.call, a.fields[0]), m.call));
         } else if (a.tag === HTML_V.listeningWhile) {
           // Read by the listen beside it.
         } else if (a.tag === HTML_V.listen || a.tag === HTML_V.listenStereo) {
@@ -441,40 +440,12 @@ const TYPED = new Set(["input", "textarea", "select"]);
 // The marks a canvas paints (std.ts Mark), on its 2D context, in its own
 // units. A compiled record's fields are f0, f1, … and the evaluator's are
 // in fields, so each is read either way.
-// A canvas renders with WebGPU when every draw of its first frame has a
-// site the compiled page printed (gpu-frame.ts), and with raster.ts on the
-// CPU otherwise: a canvas keeps the one kind of context it first gave. While
-// WebGPU starts, the latest frame waits and is drawn once it can be.
-const rendering = new WeakMap<El, { gpu: GpuFrames | null | "opening"; latest: Value | null }>();
-// Every draw with a site.
-const listed = (v: Value): Value[] => (Array.isArray(v) ? v : fromList(v));
-const fieldOf = (o: Value, i: number): Value => (o as unknown as Record<string, Value>)[`f${i}`] ?? (o as Data).fields[i];
-const allSited = (frame: Value) => listed(fieldOf(frame, 0)).every((p) => listed(fieldOf(p, 3)).every((d) => sitedOf(d as Data)));
-function renderFrame(e: El, v: Value | null, call: Mount["call"]): void {
-  if (v === null) return;
-  let r = rendering.get(e);
-  if (!r) {
-    r = { gpu: null, latest: null };
-    rendering.set(e, r);
-    if ((globalThis.navigator as Navigator | undefined)?.gpu && allSited(v)) {
-      const state = r;
-      state.gpu = "opening";
-      void GpuFrames.open(e as unknown as HTMLCanvasElement).catch(() => null).then((g) => {
-        state.gpu = g;
-        if (state.latest !== null) renderFrame(e, state.latest, call);
-      });
-    }
-  }
-  r.latest = v;
-  if (r.gpu === "opening") return;
-  if (r.gpu && r.gpu.draw(v, sitedOf) !== false) return;
-  const c = e.getContext?.("2d");
-  if (!c?.createImageData || !c.putImageData || v === null) return;
-  const w = e.width || 300, h = e.height || 150;
-  const img = rasterize(v, w, h, call), out = c.createImageData(w, h);
-  out.data.set(img.rgba);
-  c.putImageData(out, 0, 0);
-}
+// What renders a frame on a canvas (frame-render.ts), given by a page that
+// renders one (page.ts, and a compiled page's script: core-js.ts
+// corePageScript), so a page that renders none carries none of it.
+type Render = (e: El, v: Value | null, call: Mount["call"]) => void;
+let RENDER: Render | undefined;
+export const useRender = (f: Render): void => { RENDER = f; };
 
 function paintMarks(e: El, v: Value | null): void {
   const c = e.getContext?.("2d");

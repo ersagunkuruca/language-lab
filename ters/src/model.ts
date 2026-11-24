@@ -562,10 +562,15 @@ export function idsMadeBy<T>(f: () => T): { result: T; made: Set<Id> } {
 // The same node with every id in it passed through f: its own, its
 // children's, and the ones it points at. Record keys that are ids (a solve's
 // ports) are renamed too, and kept in a fixed order.
+// The literal a literal was copied from under another id (by mapIds,
+// as a rewrite copies a definition), followed back to the first: what a
+// choice kept but for its literals puts a new value into (represented.ts).
+const litOrigins = new WeakMap<Node, Id>();
+export const litOrigin = (n: Node): Id | undefined => litOrigins.get(n);
 export function mapIds(n: Node, f: (id: Id) => Id): Node {
   const rec = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [f(k), f(v)] as const).sort(([a], [b]) => (a < b ? -1 : 1)));
   switch (n.kind) {
-    case "lit": return n.of ? { ...n, id: f(n.id), of: f(n.of) } : { ...n, id: f(n.id) };
+    case "lit": { const m = n.of ? { ...n, id: f(n.id), of: f(n.of) } : { ...n, id: f(n.id) }; if (m.id !== n.id) litOrigins.set(m, litOrigins.get(n) ?? n.id); return m; }
     case "binder": case "builtin": case "hole": return { ...n, id: f(n.id) };
     case "ref": return { ...n, id: f(n.id), target: f(n.target) };
     case "call": return isBound(n) ? { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given), binds: rec(n.binds), body: f(n.body) } : n.given ? { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given) } : { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
