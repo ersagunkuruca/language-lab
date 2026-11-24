@@ -71,7 +71,8 @@ import { browserWorld } from "../ters/src/lang/browser.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import { addGroups, loadChecks, shippedFor } from "./checkStore.ts";
 import { checkInWorker } from "./checkAsk.ts";
-import { plain, traceInWorker } from "./traceAsk.ts";
+import { traceInWorker } from "./traceAsk.ts";
+import { flatten } from "./flatValues.ts";
 import { testInWorker, type Testing } from "./testAsk.ts";
 import { exampleHere, readExamples } from "./exampleFiles.ts";
 import { join, looseOf, newLoose, split, type Drafts } from "./drafts.ts";
@@ -2418,8 +2419,9 @@ function boundedTrace(info: T.Info, args: Value[], later: (tr: Trace) => void): 
     const tr = trace(doc.code, info, ui.def, args, quietWorld(), () => { const now = performance.now(); if (!end) end = now + (here ? ms : QUICK_MS); else if (now > end) throw Object.assign(new OutOfSteps(), { message: here ? says : QUICK }); }, !!copy);
     if (tr.error?.message !== QUICK) return tr;
   }
-  if (!args.every((a) => plain(a))) return { values: new Map(), error: { id: ui.def, message: says } };
-  void traceInWorker({ code: doc.code, names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def: ui.def, args, ms, slow: says, copied: !!copy, title: titleOf(doc) }).done.then(later);
+  const sent = flatten(args);
+  if (!sent) return { values: new Map(), error: { id: ui.def, message: says } };
+  void traceInWorker({ code: doc.code, names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def: ui.def, args: sent, ms, slow: says, copied: !!copy, title: titleOf(doc) }).done.then(later);
   return { values: new Map(), error: { id: ui.def, message: WORKING } };
 }
 const WORKING = "working them out";
