@@ -2,6 +2,7 @@
 // Nothing in here knows about names, glyphs, comments, layout or text.
 
 import type { Unit } from "./units.ts";
+import { keptMap } from "./kept.ts";
 
 export type Id = string;
 
@@ -710,6 +711,42 @@ export function targetsUnder(code: Code, root: Id): readonly Id[] {
     else if (node.kind === "typedef") for (const r of node.row ?? []) found.add(r);
   }
   targetsKept.set(ids, (out = [...found]));
+  return out;
+}
+
+// Nodes of the same id and content as ones met before given as those
+// (stage 4): a pass that makes a definition again as it was hands on the
+// objects the caches kept by node (subtree walks, what a definition
+// refers to) already know, so an edit's recompile reads again only what
+// it changed. Content: each field the same value, a list or record of ids
+// the same ids.
+const steadyKept = keptMap<Id, Node>();
+const sameField = (a: unknown, b: unknown): boolean => {
+  if (a === b) return true;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i]);
+  if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(b) && Object.getPrototypeOf(a) === Object.prototype && Object.getPrototypeOf(b) === Object.prototype) {
+    const ka = Object.keys(a), kb = Object.keys(b);
+    return ka.length === kb.length && ka.every((k) => (a as Record<string, unknown>)[k] === (b as Record<string, unknown>)[k]);
+  }
+  return false;
+};
+const sameSteady = (a: Node, b: Node): boolean => {
+  const ka = Object.keys(a), kb = Object.keys(b);
+  return ka.length === kb.length && ka.every((k) => sameField((a as unknown as Record<string, unknown>)[k], (b as unknown as Record<string, unknown>)[k]));
+};
+export function steadied(code: Code, defs: readonly Id[] = code.defs): Code {
+  if (steadyKept.size > 500_000) steadyKept.clear();
+  let swap: Record<Id, Node> | null = null;
+  for (const d of defs) for (const id of subtreeKept(code, d)) {
+    const n = code.nodes[id], k = steadyKept.get(id);
+    if (!n || k === n) continue;
+    if (k && sameSteady(k, n)) (swap ??= {})[id] = k;
+    else steadyKept.set(id, n);
+  }
+  if (!swap) return code;
+  const out = { ...code, nodes: withNodes(code.nodes, swap) };
+  const layer = layers.get(code);
+  if (layer) layers.set(out, layer);
   return out;
 }
 

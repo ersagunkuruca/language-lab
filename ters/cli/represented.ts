@@ -1,7 +1,7 @@
 // A program with each type it uses stored as the chooser picks (lab.ts's
 // `ters compile`, `ters run`, and a sound's `ters render`, C137 s1).
 
-import { dependencies, idsSeeded, subtree, type Code, type Id } from "../src/model.ts";
+import { dependencies, idsSeeded, steadied, subtree, type Code, type Id } from "../src/model.ts";
 import type { Pins } from "../src/lang/signatures.ts";
 import type { Names } from "../src/presentation.ts";
 import { checksKept, infer, type Info } from "../src/lang/infer.ts";
@@ -35,7 +35,9 @@ export function represented<P extends Program>(p00: P, main: Id, hostMaps: boole
   // groups kept. The choices made are kept too, by this program but for
   // its numbers, texts and truth values (library-reps.ts choosingFor), and
   // its whole checks by groups (check-cache.ts keepingWhole).
-  const go = () => representedIn(p00, main, hostMaps, tables, sound, dataKeys);
+  // What it makes as it was made before is given as the same nodes
+  // (model.ts steadied), so a recompile reads again only what changed.
+  const go = () => { const r = representedIn(p00, main, hostMaps, tables, sound, dataKeys); const code = steadied(r.code); return code === r.code ? r : { ...r, code }; };
   if (!checksKept(p00.info.options)) return go();
   const key = classKey(p00.code, [optionsText(p00.info.options), main, p00.own, p00.reps, hostMaps, tables, sound, dataKeys, [...(p00.held ?? [])].sort(), [...(p00.measured ?? [])].map(([t, m]) => [t, m.size, [...m.calls].sort()])]);
   return idsSeeded(`representing ${main}`, () => keepingWhole(() => choosingFor(key, go)));
