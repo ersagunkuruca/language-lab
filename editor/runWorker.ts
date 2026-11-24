@@ -29,7 +29,7 @@ import { received, searchBackwards, type BackAsk, type Found } from "./backSearc
 import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
 import { receivedOnto, whereAnswers, type Answer } from "./whereAnswers.ts";
 import { receivedCode, sendCode, type SentCode } from "./runCode.ts";
-import { addShipped, groupsSince, keptKeys, loadChecks } from "./checkStore.ts";
+import { addShipped, groupsSince, keepShipped, keptKeys, loadChecks } from "./checkStore.ts";
 import { choicesFor } from "./choicesFor.ts";
 import type { TestAsk, TestSays } from "./testAsk.ts";
 import type { PictureAsk, PictureSays } from "./pictureAsk.ts";
@@ -137,7 +137,7 @@ function checked(given: SentCode, names: Names, pins: Pins, def: Id, held: [Id, 
 // started (I203), its whole check and its bodies, though the page had
 // kept them.
 const checksRead = loadChecks();
-const asked: MessageEvent<Ask | PaintAsk>[] = [];
+const asked: MessageEvent<Ask | PaintAsk | KeepShippedAsk>[] = [];
 if (checksRead) {
   self.onmessage = (e) => { asked.push(e); };
   void checksRead.then(() => { self.onmessage = onAsk; for (const e of asked.splice(0)) onAsk(e); });
@@ -168,7 +168,9 @@ function paint(m: PaintAsk) {
 }
 
 type Ask = RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk | TestAsk | PictureAsk | CheckAsk | TraceAsk | RunCodeAsk;
-function onAsk(e: MessageEvent<Ask | PaintAsk>) {
+export type KeepShippedAsk = { keepShipped: string };
+function onAsk(e: MessageEvent<Ask | PaintAsk | KeepShippedAsk>) {
+  if ("keepShipped" in e.data) return keepShipped(e.data.keepShipped);
   if ("paint" in e.data || "rows" in e.data) paint(e.data); else answer(e as MessageEvent<Ask>);
 }
 function answer(e: MessageEvent<Ask>) {

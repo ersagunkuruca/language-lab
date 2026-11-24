@@ -70,7 +70,7 @@ import { algebrasOf, describeMask, maskOfValue, type Algebra } from "../ters/src
 import { pageMain } from "../ters/src/lang/page.ts";
 import { browserWorld } from "../ters/src/lang/browser.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
-import { addGroups, loadChecks, shippedFor } from "./checkStore.ts";
+import { addGroups, loadChecks, shippedFor, shippedKeptByWorker } from "./checkStore.ts";
 import { checkInWorker } from "./checkAsk.ts";
 import { traceInWorker } from "./traceAsk.ts";
 import { flatten } from "./flatValues.ts";
@@ -3099,5 +3099,7 @@ function started() {
 }
 // The checks kept in this browser read first (checkStore.ts), so the first
 // check takes the library's from them.
+// Run's worker writes the build's shipped checks to this browser (startRun).
+if (!EMBED) shippedKeptByWorker();
 const checksRead = loadChecks();
 if (checksRead) void checksRead.then(started); else started();
