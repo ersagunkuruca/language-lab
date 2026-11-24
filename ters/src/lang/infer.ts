@@ -98,6 +98,9 @@ export interface Info {
   // a generic one at that type (L38: Int's · run backwards in whole
   // numbers).
   solveAt?: Map<Id, Type>;
+  // A let's binders whose value is generic, and their schemes (L224): each
+  // use is an instance, as a definition's is.
+  letSchemes?: Map<Id, Scheme>;
   // Each expression the checker lifts through a canonical embedding (L208c,
   // EMBEDDINGS.md), to the embedding: arith.ts inserts its map there.
   // With `of`, the expression is a function and its result is lifted
@@ -991,6 +994,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const mono = new Map<Id, Type>();
   // A let's binders whose value is generic, and their schemes (L224).
   const letSchemes = new Map<Id, Scheme>();
+  info.letSchemes = letSchemes;
   // A let's binders whose value is a function written there (L279): a call
   // of one does what the function does inside the row around the call,
   // not as that row, so a call inside a view (`part`, whose row is View)

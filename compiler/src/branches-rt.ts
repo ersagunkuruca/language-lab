@@ -235,6 +235,8 @@ let pool: Helper[] | null = null, job = 0, onWorkers = 0;
 // `wait`, the pool, once started, waits until each worker listens, so a
 // test of what crosses doesn't race the workers' start (a loaded
 // runner's workers came up after the main thread had done every unit).
+// `send`, a job is sent however much what it is sent costs (C323), so a
+// test of what crosses has something cross.
 const KNOBS = new Set(((globalThis as { process?: NodeJS.Process }).process?.env?.TERS_BRANCHES ?? "").split(","));
 if (KNOBS.has("say")) process.on("exit", () => { if (mod && wt()?.isMainThread) process.stderr.write(`branches on workers: ${onWorkers}\n`); });
 const quick = new WeakSet<Fn>();
@@ -400,7 +402,17 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
     left--;
     alone.set(site, performance.now() - t0);
   }
-  const sent = performance.now(), helpers = pool ?? [], payload = left > 0 && helpers.length ? send() : NO;
+  const sent = performance.now(), helpers = pool ?? [];
+  let payload = left > 0 && helpers.length ? send() : NO;
+  // What the workers are sent, counted (C323). Each worker reads it back
+  // whole before its first unit, and reading takes longer than writing
+  // (objects made, every worker's collector at once): taken as three
+  // times the writing, then the units shared out. Where that is no faster
+  // than the units here, they run here, now and from now on: bazaar's
+  // per-row maps close over a filed index of 200,000 rows, written out
+  // at every call (20.2 s with the workers, 3.1 s without).
+  const unit = site && !always ? alone.get(site) : undefined;
+  if (payload !== NO && unit !== undefined && !KNOBS.has("send") && 3 * (performance.now() - sent) + (unit * left) / (helpers.length + 1) >= unit * left) { quick.add(site!); payload = NO; }
   if (payload === NO) for (; left > 0; left--) values[left - 1] = attempt(() => here(left - 1));
   const mine = new Set<number>(), id = ++job;
   let theirs = 0;
@@ -416,9 +428,9 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
     // are worth less than sending them, so they stay here.
     if (!theirs && site && !always && performance.now() - t0 < 1) quick.add(site);
     for (let d = Atomics.load(claims, 1); d < theirs; d = Atomics.load(claims, 1)) Atomics.wait(claims, 1, d);
-    const unit = site && theirs ? alone.get(site) : undefined;
-    if (unit !== undefined) {
-      const misses = performance.now() - sent >= unit * left ? (unpaid.get(site!) ?? 0) + 1 : 0;
+    const unitHere = site && theirs ? alone.get(site) : undefined;
+    if (unitHere !== undefined) {
+      const misses = performance.now() - sent >= unitHere * left ? (unpaid.get(site!) ?? 0) + 1 : 0;
       unpaid.set(site!, misses);
       if (misses >= UNPAID && !always) quick.add(site!);
     }

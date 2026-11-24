@@ -198,7 +198,9 @@ test("pond's plans are made on workers from its fish sent by shape, the same pon
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
   const made = await run([ters, "compile", join(here, "../gaps/pond"), "-o", "pond.mjs"], { NO_WHOLE_COLUMNS: "1" }, dir);
   assert.equal(made[2], 0, made[1]);
-  const [side, alone] = await Promise.all([run(["pond.mjs", "100", "40"], { TERS_BRANCHES: "say,wait", TERS_WORKERS: "3" }, dir), run(["pond.mjs", "100", "40"], { TERS_WORKERS: "0" }, dir)]);
+  // `send`: at 100 fish a plan is worth less than sending the pond, so
+  // since C323 it stays here; sent anyway, as this test is of what crosses.
+  const [side, alone] = await Promise.all([run(["pond.mjs", "100", "40"], { TERS_BRANCHES: "say,wait,send", TERS_WORKERS: "3" }, dir), run(["pond.mjs", "100", "40"], { TERS_WORKERS: "0" }, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
 });
@@ -402,4 +404,19 @@ test("a fold over a tree works out its two halves on workers, the same total as 
   assert.equal(side[2], 0, side[1]);
   assert.equal(side[0], alone[0]);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
+});
+
+// C323: bazaar's per-row maps close over a filed index of the orders,
+// written out at every call and read back on each worker, so sharing them
+// cost more than the rows themselves (20.2 s at 200,000 orders, 3.1 s on
+// this thread). What a job sends is counted, and those stay here: with
+// workers it takes about what it takes without (6.5 times before).
+test("bazaar's cheap per-row maps over a big index stay on the main thread (C323)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "branches-"));
+  const made = await run([ters, "compile", join(here, "../gaps/bazaar"), "-o", "bazaar.mjs"], {}, dir);
+  assert.equal(made[2], 0, made[1]);
+  const timed = async (workers: string) => { const t = performance.now(); const r = await run(["bazaar.mjs", "50000"], { TERS_WORKERS: workers }, dir, true); return { out: r[0], ms: performance.now() - t }; };
+  const alone = await timed("0"), side = await timed("3");
+  assert.equal(side.out, alone.out);
+  assert.ok(side.ms < 3 * alone.ms, `${Math.round(side.ms)} ms with workers, ${Math.round(alone.ms)} ms without`);
 });
