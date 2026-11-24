@@ -625,6 +625,28 @@ test("replace: a match in parentheses or after else, and a tuple by its fields",
   assert.match(text("replace", { at: define("ends", ["p"]), text: "a = p.first\nb = p.third\na + b" }), /ends#\w+ : \(\(a, b, a\)\) -> a/);
 });
 
+// I361 (GAPS round 24, TG3): a match in parentheses after `and` or `not`,
+// over lines too, and a match as a function's body among a call's
+// arguments.
+test("replace: a match after and or not, and as a function's body in a call", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "wc");
+  cpSync("examples/wc", dir, { recursive: true });
+  text("open", { path: dir });
+  const define = (name: string, params: string[]) => /□#(\w+)/.exec(text("define", { name, kind: "function", params }))![1];
+  text("replace", { at: define("long head", ["xs", "b"]), text: "b and (match xs\n  nil → false\n  cons(a, r) → a > 4)" });
+  assert.equal(text("eval", { text: "long head([5, 7], true)" }), "= true : Bool");
+  text("replace", { at: define("short head", ["xs"]), text: "not (match xs; nil → false; cons(a, r) → a > 4)" });
+  assert.equal(text("eval", { text: "short head([5, 7])" }), "= false : Bool");
+  text("replace", { at: define("heads of", ["xss"]), text: "append(map(xss, (xs) => match xs; nil → 0; cons(a, r) → a), [9])" });
+  assert.equal(text("eval", { text: "heads of([[5, 7], [], [3]])" }), "= [5, 0, 3, 9] : List a where a is a Number");
+  text("replace", { at: define("firsts", ["xss"]), text: "map(xss, (xs) => match xs\n  nil → 0\n  cons(a, r) → a)" });
+  assert.equal(text("eval", { text: "firsts([[5, 7], []])" }), "= [5, 0] : List a where a is a Number");
+  assert.doesNotMatch(text("view", { at: "firsts" }), /nested match/);
+});
+
 // abs of an open input is the one abs for every number type, as + is, not
 // Float64's, which the library declares first (I342).
 test("abs of an open input is generic (I342)", async () => {

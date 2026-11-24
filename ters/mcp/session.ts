@@ -466,7 +466,7 @@ export class Session {
     const params: string[] = [];
     for (let i = 1; params.length < groups.length; i++) if (!taken.has(`nested match ${i}`)) params.push(`nested match ${i}`);
     let around = t;
-    for (let i = groups.length - 1; i >= 0; i--) around = around.slice(0, groups[i].from) + params[i] + around.slice(groups[i].to);
+    for (let i = groups.length - 1; i >= 0; i--) around = around.slice(0, groups[i].from) + `(${params[i]})` + around.slice(groups[i].to);
     // One function a match, each called on its hole: `((m1) => ((m2) =>
     // m1 * m2)(□))(□)`.
     const wrapped = params.reduceRight((body, p) => `((${p}) => ${body})(□)`, around.trim());
@@ -1527,7 +1527,9 @@ function nestedMatches(t: string): { from: number; to: number; text: string }[] 
     const c = t[i];
     if (quoted) { if (c === "\\") i++; else if (c === '"') quoted = false; continue; }
     if (c === '"') quoted = true;
-    else if (c === "(") open.push(/[\p{L}\p{N}_')\]]\s*$/u.test(t.slice(0, i)) ? -1 : i);
+    // A call's parentheses follow a name or a closing bracket; after a
+    // word of the language's own (`a and (match …)`) they group (I361).
+    else if (c === "(") open.push(/[\p{L}\p{N}_')\]]\s*$/u.test(t.slice(0, i)) && !/(?<![\p{L}\p{N}_'])(and|or|not|if|then|else)\s*$/u.test(t.slice(0, i)) ? -1 : i);
     else if ("[{".includes(c)) open.push(-1);
     else if (")]}".includes(c)) {
       const from = open.pop();
@@ -1535,6 +1537,28 @@ function nestedMatches(t: string): { from: number; to: number; text: string }[] 
       const inside = t.slice(from + 1, i);
       if (/^\s*match\s/.test(inside) || elseMatch(inside) >= 0) found.push({ from, to: i + 1, text: inside });
     }
+  }
+  // A function's body that is a match, among a call's arguments, `map(xs,
+  // (i) => match i …)`: the match goes on to the bracket that closes
+  // around it, or a comma outside brackets (I361).
+  for (let i = 0, q = false; i < t.length; i++) {
+    const c = t[i];
+    if (q) { if (c === "\\") i++; else if (c === '"') q = false; continue; }
+    if (c === '"') { q = true; continue; }
+    const arrow = /^=>\s*(?=match\s)/.exec(t.slice(i));
+    if (!arrow) continue;
+    const from = i + arrow[0].length;
+    let depth = 0, to = t.length, inq = false;
+    for (let j = from; j < t.length; j++) {
+      const d = t[j];
+      if (inq) { if (d === "\\") j++; else if (d === '"') inq = false; continue; }
+      if (d === '"') inq = true;
+      else if ("([{".includes(d)) depth++;
+      else if (")]}".includes(d)) { if (depth === 0) { to = j; break; } depth--; }
+      else if (d === "," && depth === 0) { to = j; break; }
+    }
+    // A whole text that is a function whose body is a match reads as it is.
+    if (to < t.length) found.push({ from, to, text: t.slice(from, to).replace(/\s+$/, "") });
   }
   const tail = elseMatch(t);
   if (tail >= 0) found.push({ from: tail, to: t.length, text: t.slice(tail) });
