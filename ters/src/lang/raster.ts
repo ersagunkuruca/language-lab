@@ -14,7 +14,7 @@
 // A corner or a pixel with no answer (a fragment's Choice that gave none)
 // is left out, as a shader's `discard` leaves one out.
 
-import { fromList, type Data, type Value } from "./run.ts";
+import { fromList, type Data, type Value } from "./run-values.ts";
 import { NoValue } from "./cells.ts";
 import { FRAME_V, TRUE } from "./std-ids.ts";
 import { withTextures, type Texture } from "./frame-textures.ts";

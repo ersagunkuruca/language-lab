@@ -34,7 +34,9 @@ export function recordings(code: Code): string[] {
 // inside one HTML file: core-page.ts draws it, and a page with sound
 // plays (C137d4).
 // `hosts`: the program's hosts/js.js, bundled in and asked (C137d5).
-export async function webCorePage(title: string, code: Code, info: Info, names: Names, main: Id, hosts?: string): Promise<string> {
+// `modules`: given, told the files the page's script holds code of (a
+// test that the editor's model and the evaluator stay out).
+export async function webCorePage(title: string, code: Code, info: Info, names: Names, main: Id, hosts?: string, modules?: string[]): Promise<string> {
   // Only what main reaches (C168).
   const lowered = lowerCore(code, info, names, [main]);
   const why = lowered.refused.get(main);
@@ -46,8 +48,9 @@ export async function webCorePage(title: string, code: Code, info: Info, names: 
   const out = await build({
     stdin: { contents: script, resolveDir: here, sourcefile: "page.js", loader: "js" },
     bundle: true, platform: "browser", format: "iife", target: "es2022", minify: true, write: false, logLevel: "warning",
-    plugins: carriesProgram(script) ? [] : [withoutSolver],
+    plugins: carriesProgram(script) ? [] : [withoutSolver], metafile: !!modules,
   });
+  if (modules) for (const o of Object.values(out.metafile!.outputs)) for (const [f, i] of Object.entries(o.inputs)) if (i.bytesInOutput) modules.push(f);
   return pageShell(title, out.outputFiles[0].text);
 }
 

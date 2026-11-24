@@ -3,7 +3,7 @@
 // more there and each block played through its block function, as
 // sound-thread.ts does for any compiled program.
 
-import { equal, type Value } from "../../ters/src/lang/run.ts";
+import { equal, type Value } from "../../ters/src/lang/run-values.ts";
 import { Cells } from "../../ters/src/lang/cells.ts";
 import { startSoundOn } from "../../ters/src/lang/sound-thread.ts";
 import { coreCall, coreRuntime, type HostOps, type TableSpec } from "./core-rt.ts";

@@ -12,8 +12,7 @@
 
 import { nfc } from "./border.ts";
 import { KEPT, Pending, type Cells, type CellNode } from "./cells.ts";
-import type { Data, Value } from "./run.ts";
-import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
+import { fromList, OutOfSteps, PAGE_STEPS, withSteps, type Data, type Value } from "./run-values.ts";
 import { FALSE, HTML_V, MARK_V, TRUE } from "./std-ids.ts";
 import { FOREIGN_VIEW } from "./hosts.ts";
 import { rasterize } from "./raster.ts";
