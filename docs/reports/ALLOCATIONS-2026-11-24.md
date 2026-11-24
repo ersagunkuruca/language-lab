@@ -408,6 +408,28 @@ What this changes in C327:
   measured on a program where they are hot, or WebAssembly's records,
   where frame-local GC structs go through the collector (C327g).
 
+## C327c, views by value on C (2026-11-24, evening)
+
+Built in `compiler/src/c.ts` for every array, not one function: a view
+is `{ lab_cell *b; uint32_t s, n; }`, passed, returned and held in
+record and cell fields as it is, with only its buffer counted. `rest`
+and `slice` move `s` and `n`; `push` and `pushFront` write into the
+buffer's spare room when the view ends at it; `replaceAt` and a
+column's write work in place when `b->rc == 1`, since every other view
+of the buffer holds a count of it. A definition made once for the
+threads keeps its view beside it. Same output on flock and bazaar.
+Times: medians of 7 runs, alternating, same container as above.
+
+| program | before | after |
+|---|---|---|
+| flock, one thread | 3,118 ms | 2,331 ms: **25% faster** |
+| flock, the pool | 1,374 ms | 1,100 ms: **20% faster** |
+| bazaar 10,000 | 24 ms | 26 ms: no change (6% of its cells were views) |
+
+The hand edit (C327a) measured 21% from `merge sorted` alone; the rest
+comes from the views every other array function stops making. Next is
+the same on WebAssembly (C327c2), where a view is a GC struct today.
+
 ## How this was measured
 
 On this container (4 cores), gcc 13 at `ters native`'s flags. Cells by

@@ -483,7 +483,8 @@ test("with threads, a definition's value is made once and kept uncounted for eve
   const offsets = lowered.funcs.findIndex((g) => g.name === "offsets" && !g.inner);
   const { c } = emitC(lowered, { main });
   assert.match(c, /lab_par/, "the plans are mapped on the threads");
-  assert.match(c, new RegExp(`static lab_cell \\*lab_m${offsets}_make\\(void\\) \\{ lab_cell \\*x = lab_offsets\\(\\), \\*z = 0; lab_forever\\(x\\);`));
+  // An array's view (C327c) is kept beside it, its buffer the one shared.
+  assert.match(c, new RegExp(`static Array_\\d+ lab_m${offsets}_make\\(void\\) \\{ Array_\\d+ y = lab_offsets\\(\\), \\*x = malloc\\(sizeof \\*x\\), \\*z = 0; if \\(!x\\) lab_oom\\(\\); \\*x = y; lab_forever\\(y\\.b\\);`));
   assert.doesNotMatch(c.slice(c.indexOf("\nstatic double lab_scent_at_b(")), /= lab_offsets\(\);/);
 });
 
