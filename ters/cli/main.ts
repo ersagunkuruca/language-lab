@@ -20,7 +20,7 @@ import { cacheChecks, infer, type Info, type Options } from "../src/lang/infer.t
 import { CheckCache } from "../src/lang/check-cache.ts";
 import { decidedStore, groupStore } from "../src/lang/library-store.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { addToStore, lineageOf, pointsAt, previousVersion, publishVersion, sameLines, upgrade, upgradeNames, upgradeOwn, verify, type Module } from "../src/lang/modules.ts";
+import { addToStore, lineageOf, pointsAt, previousVersion, publishVersion, sameLines, upgrade, upgradeNames, upgradeOwn, verify, withModulesHeld, type Module } from "../src/lang/modules.ts";
 import { base, baseNames, loadProgram, optionsWith, programModules, programStore } from "../src/lang/load.ts";
 import { equal, mainProblem, pageProblem, runMain, runProgram, showerFor, valueMain, type Value, type World } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
@@ -36,7 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
-import { choiceLines, choicesPath, oldChoicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, measuredIn, measuredOf, measuring, nearLines, placeLines, scheduleLines, threadLines } from "./choices.ts";
+import { HELD, choiceLines, choicesPath, oldChoicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, measuredIn, measuredOf, measuring, nearLines, placeLines, scheduleLines, threadLines } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { keepDecisionsIn, storedRows, type DecidedStore } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -677,7 +677,8 @@ function answeredHere(q: Program): Program {
 // stores those types so.
 const choicesFile = choicesPath(path);
 const readFrom = existsSync(choicesFile) ? choicesFile : existsSync(oldChoicesPath(path)) ? oldChoicesPath(path) : null;
-const writtenChoices = readFrom ? readChoices(readFileSync(readFrom, "utf8")) : [];
+// The decisions its modules' authors held about their own (L280i) too.
+const writtenChoices = withModulesHeld(readFrom ? readChoices(readFileSync(readFrom, "utf8")) : [], existsSync(path) && statSync(path).isDirectory() ? programModules(path) : []);
 const heldHere = (() => { try { return heldOf(writtenChoices); } catch (e) { fail((e as Error).message); } })();
 // And the placements held on the main thread (L280h), for every lowering.
 const placesHeld = heldPlaces(writtenChoices), holdsPlaces = Object.values(placesHeld).some((xs) => xs.length);
@@ -1071,7 +1072,10 @@ switch (command) {
     if (p.info.errors.length) fail(`${p.title} has errors; ters check says which`);
     const defs = wanted.map((n) => p.own.find((d) => p.names[d] === n) ?? fail(`${p.title} has no definition named ${n}`));
     const prev = existsSync(out) ? parseSaved<Module>(readFileSync(out, "utf8")) : null;
-    const r = publishVersion(prev, prev?.title ?? p.title, p.code, p.names, defs, LIBRARY.code, LIBRARY.pins);
+    // The decisions held about what it publishes go with it (L280i).
+    const heldFile = [choicesPath(path), oldChoicesPath(path)].find((f) => existsSync(f));
+    const held = heldFile ? readChoices(readFileSync(heldFile, "utf8")).filter((l) => l.startsWith(HELD)) : [];
+    const r = publishVersion(prev, prev?.title ?? p.title, p.code, p.names, defs, LIBRARY.code, LIBRARY.pins, {}, held);
     if (!r.ok) fail(r.reason);
     const wrong = verify(r.module, LIBRARY.code);
     if (wrong) fail(`the module isn't what it says: ${wrong}`);

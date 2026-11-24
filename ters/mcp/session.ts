@@ -14,6 +14,7 @@ import { showTypeWithUnits } from "../src/lang/unit-types.ts";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, Node, NodeOf } from "../src/model.ts";
+import { merge } from "../src/model.ts";
 import { nodesOfKindIn, children, collect, freshId, parentLookup, parentOf, portNames, portsOf, scanningOnLayer, subtree, swapIn, isCall, type Call, type NodeData, copyNodes, dropNode, nodeIds, nodeValues, withNodes } from "../src/model.ts";
 import { sameEverywhere, sharedPlaces } from "../src/lang/patterns.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
@@ -21,7 +22,8 @@ import { root } from "../src/io.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { sameLines } from "../src/lang/modules.ts";
-import { base, baseNames, optionsWith } from "../src/lang/load.ts";
+import { base, baseNames, optionsWith, programModules } from "../src/lang/load.ts";
+import type { Module } from "../src/lang/modules.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { blocksOf, pieceText, type Blk, type Piece } from "../src/lang/render.ts";
 import { showIn, showType } from "../src/lang/types.ts";
@@ -60,6 +62,12 @@ export class Session {
   // an edit inside it is checked against it and its callers against the
   // pin (L173c). A folder keeps them in signatures.json.
   pins: Pins = {};
+  // The modules a folder uses (its `modules` folder, load.ts): their code
+  // is under the program's as the library's is, their names under its
+  // names and their pins under its pins, and none of it is saved with it.
+  modules: Module[] = [];
+  // The library and the modules: what isn't the program's own.
+  under: Code = LIBRARY.code;
   private short = new Map<Id, string>();
 
   constructor(path: string) {
@@ -67,7 +75,10 @@ export class Session {
     if (!existsSync(this.path)) throw new Error(`no such program: ${path}`);
     if (statSync(this.path).isDirectory()) {
       this.title = basename(this.path);
-      this.code = base(read<Code>(join(this.path, "code.json"), { nodes: {}, defs: [] }));
+      this.modules = programModules(this.path);
+      const mine = read<Code>(join(this.path, "code.json"), { nodes: {}, defs: [] });
+      if (this.modules.length) this.under = base(merge(...this.modules.map((m) => m.code)));
+      this.code = base(this.modules.length ? merge(...this.modules.map((m) => m.code), mine) : mine);
       this.names = read<Names>(join(this.path, "names.default.json"), {});
       this.comments = read<Comments>(join(this.path, "comments.json"), {});
       this.pins = read<Pins>(join(this.path, "signatures.json"), {});
@@ -84,20 +95,23 @@ export class Session {
     this.recheck();
   }
 
-  get allNames(): Names { return baseNames(this.names); }
-  get own(): Id[] { return this.code.defs.filter((d) => !LIBRARY.code.nodes[d]); }
+  get allNames(): Names { return this.namesOver(this.names); }
+  namesOver(names: Names): Names { return baseNames(...this.modules.map((m) => m.names), names); }
+  get own(): Id[] { return this.code.defs.filter((d) => !this.under.nodes[d]); }
+  // The pins the check reads: the modules' under the program's own.
+  get checkPins(): Pins { return this.modules.length ? { ...Object.assign({}, ...this.modules.map((m) => m.pins)), ...this.pins } : this.pins; }
 
   recheck() {
     // The editor's gestures check with the same pins (typed.ts infer).
-    T.setProgramPins(this.pins);
+    T.setProgramPins(this.checkPins);
     // The editor's check, which keeps each definition group's check between
     // edits (check-cache.ts): an edit checks again what it changed and
     // what that reaches, not the whole program (I304).
     // An edit's own check, when it checked just this program, is the one.
-    this.info = T.guardedInfo(this.code, this.pins) ?? T.infer(this.code, { ...LIBRARY.names, ...this.allNames });
+    this.info = T.guardedInfo(this.code, this.checkPins) ?? T.infer(this.code, { ...LIBRARY.names, ...this.allNames });
     checked.set(this.code, this.info);
     // Shortest unique prefixes, over the program's own nodes.
-    const ids = nodeIds(this.code.nodes).filter((id) => !LIBRARY.code.nodes[id]).sort();
+    const ids = nodeIds(this.code.nodes).filter((id) => !this.under.nodes[id]).sort();
     this.short.clear();
     ids.forEach((id, i) => {
       const common = (o?: string) => { if (!o) return 0; let k = 0; while (k < id.length && id[k] === o[k]) k++; return k; };
@@ -106,7 +120,7 @@ export class Session {
   }
 
   save() {
-    const mine = own(this.code, LIBRARY.code);
+    const mine = own(this.code, this.under);
     if (this.file) {
       writeFileSync(this.path, toFile({ ...this.file, code: this.code, names: this.names, comments: this.comments, signatures: this.pins }, LIBRARY.code));
       return;
@@ -254,7 +268,7 @@ export class Session {
     walk(bs, "", 0);
     const w = Math.max(4, ...rows.map((r) => (r.id ? this.id(r.id).length : 0)));
     // An id the line already shows inline isn't repeated in the gutter.
-    const gutter = (r: { id?: Id; text: string }) => (r.id && !LIBRARY.code.nodes[r.id] && !r.text.includes(`#${this.id(r.id)}`) ? this.id(r.id) : "");
+    const gutter = (r: { id?: Id; text: string }) => (r.id && !this.under.nodes[r.id] && !r.text.includes(`#${this.id(r.id)}`) ? this.id(r.id) : "");
     return rows.map((r) => `${gutter(r).padEnd(w)}  ${r.text}`.trimEnd());
   }
 
@@ -266,7 +280,7 @@ export class Session {
       if (p.pane) return "";
       const text = this.piece(p.kids);
       const cls = p.cls.split(" ")[0];
-      if (!p.id || LIBRARY.code.nodes[p.id]) return text;
+      if (!p.id || this.under.nodes[p.id]) return text;
       // A field's id goes after its name, before its type.
       if (cls === "fld") { const [n, ...rest] = p.kids; return `${this.piece([n])}#${this.id(p.id)}${this.piece(rest)}`; }
       if (cls === "bnd" || cls === "def" || cls === "hole") return `${text}#${this.id(p.id)}`;
@@ -302,7 +316,7 @@ export class Session {
   private undos: { code: Code; names: Names; comments: Comments; pins?: Pins }[] = [];
 
   private apply(def: Id | null, make: () => { ok: true; code: Code; names: Names } | { ok: false; reason: string }, after?: (code: Code) => Id | null, share = true): string {
-    setDisplayNames(LIBRARY.names);
+    setDisplayNames(this.namesOver({}));
     const before = def ? this.viewLines(def) : [];
     const was = { code: this.code, names: this.names, comments: this.comments };
     const errs = this.info.errors.length;
@@ -429,7 +443,7 @@ export class Session {
     if (r.ok || r.reason !== "a name alone is listed already") return r;
     // A name alone, which the editor's palette lists: the nearest in
     // scope (a case's field bound in its arm, I184), else a definition.
-    const all = baseNames(names);
+    const all = this.namesOver(names);
     const near = T.scopeAt(code, def, hole).filter((b) => all[b] === norm(t)).at(-1)
       ?? code.defs.find((d) => all[d] === norm(t) && !LIBRARY.code.nodes[d]) ?? code.defs.find((d) => all[d] === norm(t));
     if (!near) return r;
@@ -448,7 +462,7 @@ export class Session {
     const groups = nestedMatches(t);
     if (!groups.length) return null;
     if (groups.length === 1 && !t.slice(0, groups[0].from).trim() && !t.slice(groups[0].to).trim()) return this.fill(code, names, hole, groups[0].text, def, as);
-    const taken = new Set(Object.values(baseNames(names)));
+    const taken = new Set(Object.values(this.namesOver(names)));
     const params: string[] = [];
     for (let i = 1; params.length < groups.length; i++) if (!taken.has(`nested match ${i}`)) params.push(`nested match ${i}`);
     let around = t;
@@ -490,7 +504,7 @@ export class Session {
   // fields, as a tuple's size is its last field read; any other choice
   // still left open is asked.
   private byFieldsRead(code: Code, names: Names, types: string[][]): number | undefined {
-    const all = baseNames(names);
+    const all = this.namesOver(names);
     const read = new Set([...(this.reading ?? "").matchAll(/\.\s*([\p{L}_][\p{L}\p{N}_']*)/gu)].map((m) => m[1].toLowerCase()));
     const fieldsOf = (type: string): Set<string> | undefined => {
       const d = code.defs.find((x) => (all[x] ?? "").toLowerCase() === type);
@@ -612,7 +626,7 @@ export class Session {
   // recursive field with no name after `with` isn't folded there.
   private foldIn(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
     const { head, cases } = casesOf(text, "fold");
-    const all = baseNames(names);
+    const all = this.namesOver(names);
     const read = cases.map((c) => /^(.+?)\s*(?:\(([^)]*)\))?\s*(?:with\s+([^→]+?))?\s*(?:→|->)\s*([\s\S]*)$/.exec(c.trim()));
     const bad = read.findIndex((k) => !k);
     if (bad >= 0) return { ok: false, reason: `a fold's case reads Case(fields) with folded → value, not ${cases[bad].trim()}` };
@@ -664,7 +678,7 @@ export class Session {
   // body asks nothing.
   private handleIn(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
     const { head, cases } = casesOf(text, "handle");
-    const all = baseNames(names);
+    const all = this.namesOver(names);
     const ops = new Map<string, NodeOf<"variant">>();
     for (const n of nodesOfKindIn(code.nodes, "typedef")) if (n.kind === "typedef" && n.effect) for (const v of n.variants) { const op = code.nodes[v]; if (op?.kind === "variant" && all[v] && !ops.has(norm(all[v]))) ops.set(norm(all[v]), op); }
     const nodes = copyNodes(code.nodes), out: Names = { ...names };
@@ -709,7 +723,7 @@ export class Session {
   // as →; a case left out, or written □, stays a hole.
   private matchIn(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
     const { head, cases } = casesOf(text, "match");
-    const all = baseNames(names);
+    const all = this.namesOver(names);
     const on = norm(head);
     const scope = T.scopeAt(code, def, hole);
     const binder = scope.filter((b) => all[b] === on).at(-1);
@@ -817,7 +831,7 @@ export class Session {
   private solveIn(code: Code, names: Names, hole: Id, text: string): { code: Code; fills: [Id, string][] } | null {
     const m = /^\s*(.+?)\s*\((.*)\)\s*$/s.exec(text);
     if (!m || !/=/.test(m[2])) return null;
-    const all = baseNames(names);
+    const all = this.namesOver(names);
     const head = norm(m[1]);
     // A field with ports of the program's (an interface's operation), else a
     // definition with results.
@@ -939,7 +953,7 @@ export class Session {
   // input) is still checked at them (L173c).
   pin(at: string, off = false): string {
     const def = this.resolve(at);
-    if (this.code.nodes[def]?.kind !== "def" || LIBRARY.code.nodes[def]) throw new Error("pin takes one of the program's definitions");
+    if (this.code.nodes[def]?.kind !== "def" || this.under.nodes[def]) throw new Error("pin takes one of the program's definitions");
     const was = { code: this.code, names: this.names, comments: this.comments, pins: this.pins };
     const pins = { ...this.pins };
     if (off) delete pins[def];
@@ -1045,7 +1059,7 @@ export class Session {
     if (!own.length) return r;
     const nodes = copyNodes(r.code.nodes), names = { ...r.names };
     const add = (n: NodeData): Id => { const id = freshId(); nodes[id] = { id, ...n } as NodeOf<"hole">; return id; };
-    const known = typeNames(r.code, baseNames(r.names), r.code.defs.filter((d) => !LIBRARY.code.nodes[d]));
+    const known = typeNames(r.code, this.namesOver(r.names), r.code.defs.filter((d) => !this.under.nodes[d]));
     const params: Id[] = [], has: Id[] = [];
     for (const [a, ifaces] of own) {
       const p = add({ kind: "binder" });
@@ -1066,7 +1080,7 @@ export class Session {
   // Type text read in this program, with a type's own parameters by name,
   // and its cases' own (L256).
   private typeIn(text: string, code: Code, names: Names, type?: Id): Build {
-    const all = baseNames(names);
+    const all = this.namesOver(names);
     const td = type ? code.nodes[(code.nodes[type] as NodeOf<"def">).body ?? ""] : undefined;
     const own = td?.kind === "typedef" ? td.variants.flatMap((v) => (code.nodes[v] as NodeOf<"variant">).params ?? []) : [];
     const params = new Map<string, Id>(td?.kind === "typedef" ? [...td.params, ...own].map((p) => [all[p] ?? "a", p]) : []);
@@ -1180,7 +1194,7 @@ export class Session {
 
   // The value of an expression written as it prints, in the program's scope.
   eval(text: string): string {
-    setDisplayNames(LIBRARY.names);
+    setDisplayNames(this.namesOver({}));
     // An action of no inputs, as main is, so what it performs (Diverge,
     // Console) is its own row and it runs as main runs (I188).
     const made = newDefinition(this.code, this.names, `eval ${Date.now()}`, { kind: "function", params: [] });
@@ -1196,12 +1210,12 @@ export class Session {
       r = { ok: true, code: { ...made.code, nodes: withNodes(made.code.nodes, { [hole]: { id: hole, kind: "ref", target } as NodeOf<"ref"> }) }, names: made.names, note: "" };
     }
     if (!r.ok) throw new Error(r.reason);
-    const info = infer(r.code, baseNames(r.names), undefined, optionsWith(this.pins));
+    const info = infer(r.code, this.namesOver(r.names), undefined, optionsWith(this.checkPins));
     const own = new Set(subtree(r.code, def));
     const e = info.errors.find((x) => own.has(x.id));
     if (e) throw new Error(e.message);
     const out: string[] = [];
-    const names = baseNames(r.names);
+    const names = this.namesOver(r.names);
     const rt = { print: (s: string) => out.push(s), names, world: this.world(out, "") };
     const ft = info.typeOf.get(def), t = ft?.t === "fn" ? ft.ret : ft;
     try {

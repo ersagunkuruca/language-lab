@@ -22,6 +22,7 @@ import { dependencies, isUse, parentLookup, subtree, useTarget, type Code, type 
 import { planSolve } from "../src/lang/solve.ts";
 import { determinism, solveMode } from "../src/lang/modes.ts";
 import { answerKeys } from "../src/lang/ports.ts";
+import { writtenAt } from "../src/lang/prelude-ids.ts";
 
 // The program's decisions beside it, `<program>.decisions`, named
 // `<program>.choices` until 2026-11-23 (the Choice effect has the name),
@@ -215,12 +216,12 @@ function sitesPlaced(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target
     if (!ir.sharedSites?.length) return [];
     const kept = sitesKept(ir.funcs ?? []);
     return [...new Set(ir.sharedSites.filter((m) => kept.has(m.site)).map((m) => {
-      return `${m.at} place: ${nameOf(defOf(m.at))}'s ${HOW[m.how] ?? m.how}: worker threads when slow; among main thread, worker threads${IN_RUNS.has(m.how) ? `; in ${RUNS} runs` : ""}; target JavaScript`;
+      return `${writtenAt(m.at)} place: ${nameOf(defOf(m.at))}'s ${HOW[m.how] ?? m.how}: worker threads when slow; among main thread, worker threads${IN_RUNS.has(m.how) ? `; in ${RUNS} runs` : ""}; target JavaScript`;
     }))];
   }
   return ir.awayMaps.map((m) => {
     const d = defOf(m.fn), on = gpu.has(m.site);
-    return `${m.fn} place: ${nameOf(d)}'s ${HOW[m.how] ?? m.how}: workers when slow${on ? ", the GPU where the browser has WebGPU" : ""}; among main thread, workers${on ? ", GPU" : ""}; in ${RUNS} runs; target ${target}`;
+    return `${writtenAt(m.fn)} place: ${nameOf(d)}'s ${HOW[m.how] ?? m.how}: workers when slow${on ? ", the GPU where the browser has WebGPU" : ""}; among main thread, workers${on ? ", GPU" : ""}; in ${RUNS} runs; target ${target}`;
   });
 }
 
@@ -263,7 +264,7 @@ function threadsPlaced(ir: Lowered & { threadSites?: { e: unknown; at: Id; how: 
   for (const f of ir.funcs ?? []) walk(f.body);
   const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
   const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
-  return [...new Set(ir.threadSites.filter((t) => kept.has((t.e as { fn?: string }).fn ?? "")).map((t) => `${t.at} place: ${nameOf(defOf(t.at))}'s ${THREADS[t.how] ?? t.how}: threads when slow; among main thread, threads${IN_RUNS.has(t.how) ? `; in ${C_RUNS} runs a thread` : t.how === "counted" ? `; in chunks of ${C_CHUNK} items` : ""}; target C`))];
+  return [...new Set(ir.threadSites.filter((t) => kept.has((t.e as { fn?: string }).fn ?? "")).map((t) => `${writtenAt(t.at)} place: ${nameOf(defOf(t.at))}'s ${THREADS[t.how] ?? t.how}: threads when slow; among main thread, threads${IN_RUNS.has(t.how) ? `; in ${C_RUNS} runs a thread` : t.how === "counted" ? `; in chunks of ${C_CHUNK} items` : ""}; target C`))];
 }
 
 // The schedule entries (the fourth kind, the order and grouping of
