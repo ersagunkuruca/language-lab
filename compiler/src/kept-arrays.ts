@@ -226,7 +226,12 @@ export function countedInts(ir: CoreIR, fi: number): Counted | null {
 // and past 2^53 too far to be in any array), no read in it can fall
 // outside, and each reads its slot unchecked (core-js.ts). Otherwise the
 // loop runs with its checks (`$c`).
-export interface Bounded { count: number; reads: { array: number; at: number }[] }
+//
+// The same holds for a library's own test of such a position (C304b:
+// a Dual array's `item at`, `if j ≥ 0 and j < length(xs) then … else
+// 0`, put in place four times a round in mnist's Newton dot): on the
+// way on, `j < 0` is false and `j < length(xs)` true, printed as such.
+export interface Bounded { count: number; reads: { array: number; at: number }[]; known: WeakMap<SExpr, boolean> }
 export function boundedReads(ir: CoreIR, fi: number, kept: Map<number, number>, counted: Counted): Bounded | null {
   const f = ir.funcs[fi], n = f.params.length;
   const of = new Map<number, number>(f.params.map((_, j) => [j, j]));
@@ -264,6 +269,7 @@ export function boundedReads(ir: CoreIR, fi: number, kept: Map<number, number>, 
   if (selfCall(off) || keptRead(off)) return null;
   // Every read of a kept array on the way on, at a counted position.
   const reads = new Map<string, { array: number; at: number }>();
+  const tests: Extract<SExpr, { k: "rt" }>[] = [];
   let ok = true;
   const walk = (x: SExpr) => {
     if (x.k === "let" && x.value.k === "local" && of.has(x.value.i)) of.set(x.i, of.get(x.value.i)!);
@@ -274,8 +280,17 @@ export function boundedReads(ir: CoreIR, fi: number, kept: Map<number, number>, 
       const array = kept.get(x.args[0].i)!;
       reads.set(`${array} ${at}`, { array, at });
     }
+    if (x.k === "rt" && x.fn === "int.less" && x.args.length === 2) tests.push(x);
     kids(x).forEach(walk);
   };
   walk(on);
-  return ok && reads.size ? { count: count!, reads: [...reads.values()] } : null;
+  if (!ok || !reads.size) return null;
+  const known = new WeakMap<SExpr, boolean>();
+  for (const t of tests) {
+    const [j, b] = t.args, at = alias(j);
+    if (at === undefined) continue;
+    if (lit(b) === 0n && [...reads.values()].some((r) => r.at === at)) known.set(t, false);
+    else if (b.k === "rt" && /^array\.length\.a\d+$/.test(b.fn) && b.args[0]?.k === "local" && kept.has(b.args[0].i) && reads.has(`${kept.get(b.args[0].i)} ${at}`)) known.set(t, true);
+  }
+  return { count: count!, reads: [...reads.values()], known };
 }

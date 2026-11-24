@@ -550,6 +550,8 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
           return t;
         }
         case "rt": {
+          // A position's test the loop's check before it answers (kept-arrays.ts).
+          { const k = bounded?.known.get(e); if (k !== undefined) return String(k); }
           const xs = exs(e.args, pre, d);
           // A loop's count or position's step, a number (kept-arrays.ts).
           if (counted?.plain.has(e)) return `(${xs[0]} ${e.fn === "int.add" ? "+" : "-"} ${xs[1]})`;
