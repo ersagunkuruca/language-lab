@@ -111,7 +111,7 @@ const INT32_RT: Op[] = ["iadd", "isub", "imul", "ineg", "iabs", "iquot", "irem",
 // Where a shader's flag is set or read.
 // A program's own handlers (L213c8): their runtime names, and the stack's
 // frames, each an effect's number and up to FRAME - 1 cases.
-const STACK = /^(hpush|hpop|handler|hhas|htake|hgive):([^:]+)(?::(\d+))?$/;
+const STACK = /^(hpush|hpop|handler|hhas|htake|hgive|hdepth|hcut|hoff|hon):([^:]+)(?::(\d+))?$/;
 const FRAME = 17, FRAMES = 4096;
 // A frame whose case runs while it may perform its own operation (pig's
 // `recorded into`, C325) is busy: its effect's number + BUSY, so `hhas`
@@ -252,6 +252,34 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         "global.get $hs", `i32.const ${TAKEN + 1}`, "local.get $t", "i32.add", "array.get $hstack", "ref.cast i31", "i31.get_s", "local.set $k",
         "global.get $hs", "local.get $k", `i32.const ${FRAME}`, "i32.mul", `i32.const ${n}`, "ref.i31", "array.set $hstack",
         "i32.const 0",
+      ].join("\n"),
+    };
+    // Handlers that answer later (C325, scalar.ts handleOps): how many
+    // frames are open, and back to that many; the frames from the nearest
+    // of effect n up taken off as one value (a perform's), and put back on top.
+    if (kind === "hdepth") return { name, params: [], result: "i32", locals: [], uses: [], native: true, body: "global.get $hn" };
+    if (kind === "hcut") return { name, params: [["d", "i32"]], result: "i32", locals: [], uses: [], native: true, body: "local.get $d\nglobal.set $hn\ni32.const 0" };
+    if (kind === "hoff") return {
+      name, params: [], result: "int", locals: [["k", "i32"], ["a", "int"]], uses: [], native: true,
+      body: [
+        "global.get $hn", "local.set $k",
+        "loop void",
+        "local.get $k", "i32.eqz", "if void", "unreachable", "end",
+        "global.get $hs", "local.get $k", "i32.const 1", "i32.sub", "local.tee $k", `i32.const ${FRAME}`, "i32.mul", "array.get $hstack",
+        "ref.cast i31", "i31.get_s", `i32.const ${BUSY - 1}`, "i32.and", `i32.const ${n}`, "i32.ne", "br_if 0",
+        "end",
+        "global.get $hn", "local.get $k", "i32.sub", `i32.const ${FRAME}`, "i32.mul", "array.new_default $hstack", "local.set $a",
+        "local.get $a", "ref.cast $hstack", "i32.const 0", "global.get $hs", "local.get $k", `i32.const ${FRAME}`, "i32.mul",
+        "global.get $hn", "local.get $k", "i32.sub", `i32.const ${FRAME}`, "i32.mul", "array.copy $hstack $hstack",
+        "local.get $k", "global.set $hn", "local.get $a",
+      ].join("\n"),
+    };
+    if (kind === "hon") return {
+      name, params: [["a", "int"]], result: "i32", locals: [["n", "i32"]], uses: [], native: true,
+      body: [
+        "local.get $a", "ref.cast $hstack", "array.len", "local.set $n",
+        "global.get $hs", "global.get $hn", `i32.const ${FRAME}`, "i32.mul", "local.get $a", "ref.cast $hstack", "i32.const 0", "local.get $n", "array.copy $hstack $hstack",
+        "global.get $hn", "local.get $n", `i32.const ${FRAME}`, "i32.div_u", "i32.add", "global.set $hn", "i32.const 0",
       ].join("\n"),
     };
     if (kind === "hpop") return { name, params: [], result: "i32", locals: [], uses: [], native: true, body: "global.get $hn\ni32.const 1\ni32.sub\nglobal.set $hn\ni32.const 0" };
@@ -659,11 +687,11 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       if (f?.table !== undefined && TBL[t] !== undefined) { const k = tblIndex.get(f.table)! + TBL[t]; return { bytes: [0x63, ...s(k)], text: `(ref null $${structs[k].name})` }; }
       if (t === "key" || t === "value") {
         const m = t === "key" ? lowered.tables[f!.table!].keyT : lowered.tables[f!.table!].value;
-        return { bytes: typeOf(m), text: m === "text" ? "(ref null $text)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" ? "eqref" : m as string };
+        return { bytes: typeOf(m), text: m === "text" ? "(ref null $text)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" || m === "host" ? "eqref" : m as string };
       }
       if (t === "array" || t === "item") {
         const m = t === "array" ? arrayOf(f) : arrayOf(f).item;
-        return { bytes: typeOf(m), text: m === "text" ? "(ref null $text)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" ? "eqref" : m as string };
+        return { bytes: typeOf(m), text: m === "text" ? "(ref null $text)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" || m === "host" ? "eqref" : m as string };
       }
       if (t === "buf" || t === "items" || t === "note") { const k = arrIndex.get(arrayOf(f).key)! + (t === "buf" ? -1 : t === "items" ? -2 : 1); return { bytes: [0x63, ...s(k)], text: `(ref null $${structs[k].name})` }; }
       return { bytes: typeOf(t as MType), text: t === "text" ? "(ref null $text)" : t === "raw" ? "(ref null $bytes)" : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t as string };
@@ -672,7 +700,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const resolve = resolver();
   const rtIndex = (n: string) => fnIndex(funcs.length + helpers.length + rts.findIndex((f) => f.name === n));
   const refIndex = (t: RType | DType | FType | AType | TType) => (isTable(t) ? tblIndex.get(t.index)! : isArray(t) ? arrIndex.get(t.key)! : isData(t) ? baseIndex.get(t.key)! : isFn(t) ? cloIndex.get(t.key)! : recIndex.get(t.key)!);
-  const typeOf = (t: MType): number[] => (t === "text" ? [0x63, ...s(textIndex)] : t === "raw" ? [0x63, ...s(bytesIndex)] : isRec(t) ? [0x63, ...s(refIndex(t))] : t === "int" ? [0x63, 0x6d] : t === "mag" ? [0x63, ...s(u32sIndex)] : [VAL[t as keyof typeof VAL]]);
+  const typeOf = (t: MType): number[] => (t === "text" ? [0x63, ...s(textIndex)] : t === "raw" ? [0x63, ...s(bytesIndex)] : isRec(t) ? [0x63, ...s(refIndex(t))] : t === "int" || t === "host" ? [0x63, 0x6d] : t === "mag" ? [0x63, ...s(u32sIndex)] : [VAL[t as keyof typeof VAL]]);
   const keyOf = (t: MType) => (isRec(t) ? t.key : t);
   // A partial function (one answer or none) gives a status after its
   // answer: 0 for an answer, 1 for none.
@@ -860,7 +888,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...[...kept.keys()].map((i) => { const t = funcs[i].result as MType; return [...typeOf(t), 0x01, 0xd0, ...s(t === "text" ? textIndex : refIndex(t as RType)), 0x0b]; }),
     ...(stack ? [[0x64, ...s(hstackIndex), 0x00, 0x41, ...s(SLOTS), 0xfb, 0x07, ...u(hstackIndex), 0x0b], [0x7f, 0x01, 0x41, 0x00, 0x0b]] : []),
   ]);
-  const zero = (t: MType) => (t === "text" ? [0xd0, ...s(textIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" ? [0xd0, 0x6d] : t === "mag" ? [0xd0, ...s(u32sIndex)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
+  const zero = (t: MType) => (t === "text" ? [0xd0, ...s(textIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" || t === "host" ? [0xd0, 0x6d] : t === "mag" ? [0xd0, ...s(u32sIndex)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
   // no answer, which the nearest handler sees)
   const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(f.result), ...(f.partial ? [0x41, 0x01] : []), 0x0f, 0x0b] : []);
@@ -1140,8 +1168,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const local = (f: SFunc, i: number) => `$${i < f.params.length ? "p" : "l"}${i}`;
   const sname = (i: number) => `$${structs[i].name}`;
   const recName = (r: RType | DType | FType | AType | TType) => sname(refIndex(r));
-  const ty = (t: MType) => (t === "text" ? "(ref null $text)" : t === "raw" ? "(ref null $bytes)" : isRec(t) ? `(ref null ${recName(t)})` : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t === "int32" ? "i32" : t);
-  const zeroText = (t: MType) => (t === "text" ? "ref.null $text" : isRec(t) ? `ref.null ${recName(t)}` : t === "int" ? "ref.null eq" : t === "mag" ? "ref.null $u32s" : `${t === "int32" ? "i32" : t}.const 0`);
+  const ty = (t: MType) => (t === "text" ? "(ref null $text)" : t === "raw" ? "(ref null $bytes)" : isRec(t) ? `(ref null ${recName(t)})` : t === "int" || t === "host" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t === "int32" ? "i32" : t);
+  const zeroText = (t: MType) => (t === "text" ? "ref.null $text" : isRec(t) ? `ref.null ${recName(t)}` : t === "int" || t === "host" ? "ref.null eq" : t === "mag" ? "ref.null $u32s" : `${t === "int32" ? "i32" : t}.const 0`);
   // As code(): `ld` blocks open around e, a status for none goes to fl.
   function wat(e: SExpr, f: SFunc, d: string, ld: number, fl: number): string {
     const w = (x: SExpr) => wat(x, f, d, ld, fl);

@@ -338,7 +338,7 @@ function nativeLoweredNow(main: Id, wasm: boolean, page: boolean, from: Program)
   const { q, root } = !page && valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
   const handled = new Set(nodesOfKindIn(q.code.nodes, "arm").flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
   const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
-  const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, dataKeys: true, releases: true, handlers: true, hosted, threads: !wasm, cells: true, closureArgs: true });
+  const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, dataKeys: true, releases: true, handlers: true, passing: wasm, hosted, threads: !wasm, cells: true, closureArgs: true });
   // A map writes into the array it was given (C60 c2): in place where
   // nothing else counts it.
   // An array a function walks by its rests, read by position, with no
