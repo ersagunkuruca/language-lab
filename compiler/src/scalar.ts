@@ -666,7 +666,7 @@ const awayOn = (at: Id): SExpr[] => { const on = onWorkers.page.get(at), n = run
 const worthHeld = (at: Id, away: boolean): SExpr[] => ((away ? onWorkers.page.has(at) : onWorkers.js.has(at)) ? [{ k: "bool", v: true }] : []);
 const always = (at: Id): SExpr[] => { const n = runsOf(at); return onWorkers.js.has(at) || n.length ? [{ k: "bool", v: onWorkers.js.has(at) }, ...n] : []; };
 
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
@@ -687,7 +687,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes, carry); } finally { stopSite = outer; }
 }
@@ -762,7 +762,7 @@ function prepared(code: Code, info: Info, names: Names, roots: Id[], host: boole
 }
 
 const fronts = new WeakMap<Set<string>, { code: Code; info: Info; names: Names; rounded: Id[] }>();
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
   let here: { node: Id; def: Id } | null = null;
@@ -1030,7 +1030,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const laterOps = new Map<Id, Id>();
   // C (C44b): the code a handler of one handles runs on a fiber of its
   // own, which a perform leaves and the rest goes back to.
-  const fibers = !!opts.handlers && !opts.host;
+  // A program's own handlers that answer later: C's on fibers (C44b), and
+  // JavaScript's and WebAssembly's (`passing`, C325) by continuation passing.
+  const fibers = !!opts.handlers && !opts.host && !opts.passing;
+  const passing = !!opts.host || (!!opts.handlers && !fibers);
   let parallel: Set<Id> | undefined, inPlace: Set<Id> | undefined, parallelList: Map<Id, ListJob> | undefined, foldsShared: Set<Id> | undefined, counts: Map<Id, "count" | "all" | "first"> | undefined;
   const countsShared = () => (counts ??= parallelCounts(code, info));
   // In C (C203), a count's, an all's or a first's search split.
@@ -1062,7 +1065,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     threadSites.push({ e: held, at, how });
     return held;
   };
-  for (const n of opts.host || fibers ? allDefs : []) {
+  for (const n of opts.host || opts.handlers ? allDefs : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && answeredLater.has(v); })) td.variants.forEach((v: Id) => laterOps.set(v, n.id));
@@ -1123,7 +1126,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // A type that may wait is one only once a closure of it does (a page
       // handler's row says Wait whether it waits or not, and so do the
       // functions its row reaches): its closures' code asks (NeedsSeveral).
-      const chooses = effs.includes(CHOICE) && severalTypes.has(key), waits = !!opts.host && (effs.includes(WAIT) || effs.includes(AWAIT) || effs.some((e) => laterEffs.has(e))) && severalTypes.has(key);
+      const chooses = effs.includes(CHOICE) && severalTypes.has(key), waits = passing && (effs.includes(WAIT) || effs.includes(AWAIT) || effs.some((e) => laterEffs.has(e))) && severalTypes.has(key);
       if (chooses || waits) {
         const sk = `${key}*`;
         if (!fns.has(sk)) fns.set(sk, { key: sk, params: [...params as LType[], kOf(result)], result: "i32", partial: true, several: true, answer: result, ...(chooses ? { chooses } : {}), ...(waits ? { waits } : {}) } as FType);
@@ -1434,6 +1437,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       for (const [d2, j] of index) if (j >= i) index.delete(d2);
       // Closures' code with it (it was left behind, C137c22).
       for (const j of closureCode) if (j >= i) closureCode.delete(j);
+      for (const j of passingCode) if (j >= i) passingCode.delete(j);
       inProgress.delete(def);
       if (e instanceof Refused) { refused.set(key, e.message); throw new Refused(`calls ${nm(def)}, which ${e.message}`); }
       throw e;
@@ -1852,7 +1856,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // them on (WebAssembly, C187) nor threads: each action in place,
         // in order, its answer kept, which is what a together of them
         // gives (an abort stops the ones after it, as run in order).
-        if (fibers && !opts.threads && target === TOGETHER && (inPlace ??= pureTogethers(code, info)).has(n.id)) {
+        if (opts.handlers && !opts.host && !opts.threads && target === TOGETHER && (inPlace ??= pureTogethers(code, info)).has(n.id)) {
           const lt = stype(zonk(id)), items = writtenItems(code.nodes, n.args[0]);
           const c = lt && isData(lt) ? lt.cases.findIndex((x) => x.variant === CONS) : -1;
           if (lt && isData(lt) && c >= 0 && items) {
@@ -1872,6 +1876,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
           const e = laterOps.get(target)!, op = (code.nodes[(code.nodes[e] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants.indexOf(target);
           if (fibers) return { k: "rt", fn: `fperform:${e}:${op}`, args: args(), host: { t, partial: true } };
+          // WebAssembly (C325): the nearest handler's performer, given the
+          // rest (laterHandler).
+          if (!opts.host) {
+            const ps = n.args.map((a) => stype(zonk(a)));
+            if (ps.some((p) => !p)) throw new Refused(`uses ${nm(target)} on ${n.args.map((a) => whyNot(zonk(a))).join(", ")}`);
+            const pt = performerType(ps as LType[], t);
+            return { k: "apply", fn: { k: "rt", fn: `handler:${e}:${op}`, args: [], host: { t: pt, partial: false } }, t: pt, args: args(), tail: false, tmp: f.locals.push(pt) - 1 };
+          }
           return { k: "world", op: `perform:${e}:${op}`, aborts: false, args: args(), t, suspends: true };
         }
         // The world's Console and Files where the program handles them
@@ -2184,7 +2196,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           // One that does: the runtime's handler runs it once the
           // computation has finished, with the handler taken off.
           const later = laterOps.get(arms[0].variant), pushed = tailOps.get(arms[0].variant);
-          if ((opts.host || fibers) && later && arms.every((a) => laterOps.get(a.variant) === later)) return handleOps(n, later, id, env, f, true, fin);
+          if ((opts.host || opts.handlers) && later && arms.every((a) => laterOps.get(a.variant) === later)) return handleOps(n, later, id, env, f, true, fin);
           if (opts.host && pushed && !tailOwn.has(pushed) && arms.every((a) => tailOps.get(a.variant) === pushed)) return handleOps(n, pushed, id, env, f, false, fin);
           throw new Refused(why);
         }
@@ -4139,6 +4151,107 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const ft = zonk(f.def);
     return ft.t === "fn" && info.subst.resolveRow(ft.eff).effs.some((x) => laterEffs.has(x));
   }
+  // A program's own handler whose cases take the rest, on WebAssembly
+  // (C325), as core-rt.ts's handleK and perform do it on JavaScript, made
+  // of closures, so no runtime function is written per type: each case
+  // becomes a performer, pushed on the handler stack (wasm.ts `$hs`) while
+  // the code handled runs; a perform calls the nearest's with the rest of
+  // its run. The performer takes that frame and those above it off (`hoff`),
+  // and calls the case with a rest that puts them back on top (`hon`), runs
+  // the code's rest, and gives what the handler then gives. Called and
+  // returning: the handler's value is kept in a box, which whatever ends
+  // last (the code's end, or a case) leaves it in, and the perform answers
+  // what the code's rest answered. A rest runs once.
+  // Prior art: CPS for effect handlers (Hillerström and Lindley), only
+  // for the performers of such an effect, as on JavaScript.
+  function performerType(ps: LType[], a: LType): FType {
+    const key = `fn(${ps.map(keyOf).join(",")})>${keyOf(a)}*perform`;
+    if (!fns.has(key)) fns.set(key, { key, params: [...ps, kOf(a)], result: "i32", partial: true, several: true, answer: a });
+    return fns.get(key)!;
+  }
+  function madeClosure(t: FType, caps: SExpr[], capTypes: LType[], name: string, def: Id, params: LType[], result: LType, partial: boolean, body: (cap: (i: number) => SExpr, g: SFunc) => SExpr): SExpr {
+    const shape = shapes.push({ t, caps: capTypes }) - 1;
+    const g: SFunc = { def, name, params: [t, ...params], result, locals: [t, ...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, partial };
+    const fn = funcs.push(g) - 1;
+    closureCode.add(fn);
+    passingCode.add(fn);
+    g.body = body((i) => ({ k: "cap", t, shape, i }), g);
+    return { k: "closure", t, fn, shape, caps };
+  }
+  function laterHandler(e: Id, cases: Extract<SExpr, { k: "closure" }>[], body: Extract<SExpr, { k: "closure" }>, t: LType, tb: LType, now: number[], passes: boolean, f: SFunc, waiting: boolean): SExpr {
+    if (!waiting) return handlerIn(e, f, cases, cases.map((c) => c.t), body, body.t, t, tb, now, passes, null);
+    // Inside code that waits for a handler outside it (C185): its value
+    // given where it goes (`out`), so the handler is a function that takes
+    // the rest, called there.
+    const ht = performerType([], t);
+    const h = madeClosure(ht, [...cases, body], [...cases.map((c) => c.t), body.t], `${f.name}.handler`, f.def, [kOf(t)], "i32", true, (cap, g) =>
+      handlerIn(e, g, cases.map((_, j) => cap(j)), cases.map((c) => c.t), cap(cases.length), body.t, t, tb, now, passes, local(1)));
+    return { k: "apply", fn: h, t: ht, args: [], tail: false, tmp: f.locals.push(ht) - 1 };
+  }
+  // The handler run in g: its value kept in a box and given back, or with
+  // `out`, given to it. `kc` holds where the handler's value goes now:
+  // the box, out, or the rest a case runs (deep handlers).
+  function handlerIn(e: Id, g: SFunc, cases: SExpr[], caseTs: FType[], body: SExpr, bodyT: FType, t: LType, tb: LType, now: number[], passes: boolean, out: SExpr | null): SExpr {
+    const kt = kOf(t), kcT = boxOf(kt), box = boxOf(t), flag = boxOf("i32"), at = (h: SFunc, ty: LType) => h.locals.push(ty) - 1;
+    const rt = (fn: string, args: SExpr[], ty: LType): SExpr => ({ k: "rt", fn, args, host: { t: ty, partial: false } });
+    const lets = (h: SFunc, xs: [LType, SExpr][], then: (ls: SExpr[]) => SExpr): SExpr => {
+      const is = xs.map(([ty]) => at(h, ty));
+      return xs.reduceRight<SExpr>((x, [, v], j) => ({ k: "let", i: is[j], value: v, body: x }), then(is.map(local)));
+    };
+    const get = (r: SExpr, rt0: RType): SExpr => ({ k: "get", rec: r, t: rt0, i: 0 });
+    const call = (h: SFunc, fn: SExpr, ft: FType, args: SExpr[], cps?: true): SExpr => ({ k: "apply", fn, t: ft, args, tail: false, tmp: at(h, ft), ...(cps ? { cps } : {}) });
+    // A closure keeping what it is given in box b.
+    const keeper = (b: SExpr, h: SFunc): SExpr => madeClosure(kt, [b], [box], `${h.name}.kept`, h.def, [t], "i32", true, (cap) => ({ k: "set", rec: cap(0), t: box, i: 0, value: local(1), then: { k: "bool", v: true } }));
+    const boxed = !out;
+    return lets(g, boxed ? [[box, { k: "make", t: box, args: [{ k: "zero", t }] }]] : [], ([b]) => lets(g, [[kcT, { k: "make", t: kcT, args: [boxed ? keeper(b, g) : out!] }], ["i32", rt(`hdepth:${e}`, [], "i32")]], ([kc, n]) => {
+      const performers = cases.map((c, j) => {
+        // A case given where its answer goes (`ks`): its type takes the
+        // rest last (its own may take one too, given the handler's).
+        const ct = caseTs[j], passed = !!ct.several, later = !now.includes(j);
+        const ins = passed ? ct.params.slice(0, -1) : ct.params, r = later ? ins[ins.length - 1] as FType : null;
+        const ps = later ? ins.slice(0, -1) : ins, a = later ? r!.params[0] : passed ? ct.answer! : ct.result, pt = performerType(ps, a), ka = kOf(a);
+        return madeClosure(pt, [kc, c, ...(boxed ? [b] : [])], [kcT, ct, ...(boxed ? [box] : [])], `${g.name}.perform`, g.def, [...ps, ka], "i32", true, (cap, h) => {
+          const xs = ps.map((_, i) => local(i + 1)), k = local(ps.length + 1);
+          // The code's rest run with the frames taken off back on top, its
+          // handler's value going to kr: what it answered.
+          const resumed = (q: SFunc, seg: SExpr, kcell: SExpr, kr: SExpr, y: SExpr, kq: SExpr) => ({ k: "set", rec: kcell, t: kcT, i: 0, value: kr, then:
+            lets(q, [["i32", rt(`hdepth:${e}`, [], "i32")], ["i32", rt(`hon:${e}`, [seg], "i32")], ["i32", call(q, kq, ka, [y], true)]], ([d, , s]) => lets(q, [["i32", rt(`hcut:${e}`, [d], "i32")]], () => s)) } as SExpr);
+          return lets(h, [["host", rt(`hoff:${e}`, [], "host")], [kt, get(cap(0), kcT)]], ([seg, kk]) => {
+            const after = (s: SExpr) => lets(h, [["i32", s], ["i32", rt(`hon:${e}`, [seg], "i32")]], ([x]) => x);
+            if (!later) {
+              // A case that leaves the rest out answers at once: the rest
+              // goes on with its answer, the handler's value where it went.
+              if (passed) return after(call(h, cap(1), ct, [...xs, madeClosure(ka, [seg, k, cap(0), kk], ["host", ka, kcT, kt], `${g.name}.now`, g.def, [a], "i32", true, (rc, q) => resumed(q, rc(0), rc(2), rc(3), local(1), rc(1)))], true));
+              return lets(h, [[a, call(h, cap(1), ct, xs)]], ([v]) => after(resumed(h, seg, cap(0), kk, v, k)));
+            }
+            return lets(h, [[flag, { k: "make", t: flag, args: [{ k: "bool", v: true }] }], [flag, { k: "make", t: flag, args: [{ k: "bool", v: false }] }]], ([answered, used]) => {
+              const caps: [SExpr, LType][] = [[seg, "host"], [k, ka], [cap(0), kcT], [used, flag], [answered, flag], ...(boxed ? [[cap(2), box] as [SExpr, LType]] : [])];
+              const rest = madeClosure(r!, caps.map((x) => x[0]), caps.map((x) => x[1]), `${g.name}.rest`, g.def, r!.several ? [a, kt] : [a], r!.several ? "i32" : t, !!r!.partial || !!r!.several, (rc, q) => {
+                // Given where the handler's value goes (kr), the rest answers
+                // what the code's rest answered; else it gives the handler's
+                // value: kept for it, or the box's when called and returning.
+                const run = r!.several ? resumed(q, rc(0), rc(2), local(2), local(1), rc(1))
+                  : boxed ? lets(q, [["i32", resumed(q, rc(0), rc(2), get(rc(2), kcT), local(1), rc(1))]], ([s]) => ({ k: "set", rec: rc(4), t: flag, i: 0, value: s, then: get(rc(5), box) }))
+                  : lets(q, [[box, { k: "make", t: box, args: [{ k: "zero", t }] }]], ([rb]) => lets(q, [["i32", resumed(q, rc(0), rc(2), keeper(rb, q), local(1), rc(1))]], ([s]) => ({ k: "set", rec: rc(4), t: flag, i: 0, value: s, then: get(rb, box) })));
+                const once: SExpr = { k: "set", rec: rc(3), t: flag, i: 0, value: { k: "bool", v: true }, then: run };
+                return { k: "if", cond: get(rc(3), flag), then: { k: "abort", reason: { k: "text", v: "the rest of the operation was resumed a second time: a rest runs once" } }, else: once, t: r!.several ? "i32" : t };
+              });
+              if (passed) return after(call(h, cap(1), ct, [...xs, rest, kk], true));
+              return lets(h, [[t, call(h, cap(1), ct, [...xs, rest])]], ([v]) => boxed
+                ? { k: "set", rec: cap(2), t: box, i: 0, value: v, then: after(get(answered, flag)) }
+                : after(call(h, kk, kt, [v], true)));
+            });
+          });
+        });
+      });
+      // The code handled: its end goes where the handler's value goes now.
+      const end = (): SExpr => madeClosure(kOf(tb), [kc], [kcT], `${g.name}.end`, g.def, [tb], "i32", true, (cap, h) => call(h, get(cap(0), kcT), kt, [local(1)], true));
+      const run = passes ? lets(g, [["i32", call(g, body, bodyT, [end()], true)]], ([s]) => s)
+        : lets(g, [[tb, call(g, body, bodyT, [])]], ([x]) => lets(g, [["i32", call(g, get(kc, kcT), kt, [x], true)]], ([s]) => s));
+      const value = lets(g, [["i32", rt(`hpush:${e}`, performers, "i32")], ["i32", run]], ([, s]) => (boxed ? get(b, box) : s));
+      return { k: "released", body: value, release: rt(`hcut:${e}`, [n], "i32"), t: boxed ? t : "i32", st: at(g, "i32") };
+    }));
+  }
   function handleOps(n: NodeOf<"match">, e: Id, id: Id, env: Map<Id, number>, f: SFunc, later = false, fin?: NodeOf<"lambda">): SExpr {
     const t = stype(zonk(id));
     if (!t) throw new Refused(`handles ${nm(e)} with a value that is ${OTHER}`);
@@ -4181,6 +4294,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // C (C44b): the code on a fiber, the cases called and returning; the
     // printer writes the handler's driver (c.ts `fhandle:`).
     if (later && fibers) return { k: "rt", fn: `fhandle:${n.id}:${e}:${now.join(",")}:${fin ? "fin" : "-"}`, args: [body, ...cases, ...finished], host: { t, partial: true } };
+    // WebAssembly (C325): the same continuation passing, made of closures
+    // over the handler stack (laterHandler).
+    if (later && !opts.host) {
+      if (fin) throw new Refused(`handles ${nm(e)}, answered later, with a case for the finish (not on WebAssembly yet)`);
+      return laterHandler(e, cases as Extract<SExpr, { k: "closure" }>[], body as Extract<SExpr, { k: "closure" }>, t, tb, now, how === "k", f, waitingIn(f));
+    }
     if (later) {
       // The cases given where their answer goes (continuation passing).
       const ks = cases.flatMap((c, i) => (cps(c) ? [i] : []));
@@ -5235,6 +5354,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // the locals it reads as inputs or captures.
   type Cont = { gen: (v: SExpr, tail: boolean) => SExpr; direct?: SExpr };
   const closureCode = new Set<number>();
+  // A performer's code (laterHandler): it takes the rest as written, so isn't
+  // made to pass its answer on.
+  const passingCode = new Set<number>();
   const kOf = (t: LType): FType => {
     const key = `fn(${keyOf(t)})>i32!`;
     if (!fns.has(key)) fns.set(key, { key, params: [t], result: "i32", partial: true });
@@ -5665,7 +5787,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const end = funcs.length;
     for (let changed = true; changed;) {
       changed = false;
-      for (let i = from; i < end; i++) if (!funcs[i].multi && (several(funcs[i].body) || (closureCode.has(i) && (funcs[i].params[0] as FType).several))) { funcs[i].multi = true; funcs[i].answer = funcs[i].result; changed = true; }
+      for (let i = from; i < end; i++) if (!funcs[i].multi && (several(funcs[i].body) || (closureCode.has(i) && !passingCode.has(i) && (funcs[i].params[0] as FType).several))) { funcs[i].multi = true; funcs[i].answer = funcs[i].result; changed = true; }
       for (let i = from; i < end; i++) if (!waiting.has(i) && waits(funcs[i].body)) { waiting.add(i); changed = true; }
     }
     for (let i = from; i < end; i++) {
@@ -6113,6 +6235,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         shapes.splice(shaped);
         for (const [d2, j] of index) if (j >= from) index.delete(d2);
         for (const j of closureCode) if (j >= from) closureCode.delete(j);
+        for (const j of passingCode) if (j >= from) passingCode.delete(j);
         refused.set(r, e.message);
       } else if (!refused.has(r)) unstarted.set(r, e.message.replace(`calls ${nm(r)}, which `, ""));
     } finally { underBudget = false; }

@@ -5,9 +5,11 @@ compiled code and pages going on from a wait (C40, L59), effects that take
 a type (L56), the audio runtime (L60), `together`, `race` and `within`
 (L71a to L71c), and a simulated clock for tests (L63). Step 5 is built on
 C: a handler whose cases keep the rest runs what it handles on a fiber of
-its own (C44b, c-rt.ts; tumble runs natively on it). On WebAssembly it
-waits for browsers to run stack switching by default (C187, closed until
-then).
+its own (C44b, c-rt.ts; tumble runs natively on it). On WebAssembly
+(2026-11-24, C325) it is continuation passing as on JavaScript: the
+handler is made of closures over the module's handler stack (scalar.ts
+`laterHandler`), so it needs no stack switching (C187). together and race
+on WebAssembly still wait for it.
 
 BACKLOG L54, written together with L71 as both rows ask. **Status
 (2026-10-30):** step 1 (L54a) is built: the evaluator and the checker run
