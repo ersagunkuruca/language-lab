@@ -384,7 +384,9 @@ export function resolvedFor(code: Code, info: Info, names: Names | undefined): {
     // gradient(f) over an array of another Number (Dual), made ahead and
     // checked again (pullback.ts): its pass back's arithmetic is then
     // resolved with the rest, which code made as it runs isn't.
-    const overOther = (call: Id) => { const o = gradientOver(code, info, call); return o?.of === ARRAY && !!o.item && o.item !== NUMBER; };
+    // gradient(f) over an array of another Number, or over a record
+    // (one pass back for all its fields, as compiled: pullback.ts).
+    const overOther = (call: Id) => { const o = gradientOver(code, info, call); return !!o && (o.of === ARRAY ? !!o.item && o.item !== NUMBER : o.of !== NUMBER); };
     const grads = asksGradient(code) ? expandArrayGradients(code, names ?? {}, info, overOther) : { code, names: names ?? {}, expanded: [] };
     const [from, check] = grads.expanded.length ? [grads.code, infer(grads.code, grads.names, undefined, info.options)] : [code, info];
     const { code: c, info: i } = resolveArithmetic(from, check, grads.names);
