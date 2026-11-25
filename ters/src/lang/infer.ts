@@ -31,7 +31,7 @@ import { laterOps } from "./later-ops.ts";
 import { INT_CASES } from "./int-cases-ids.ts";
 import { packingOf, packingProblem, packs } from "./packing.ts";
 import { TOGETHER } from "./together.ts";
-import { LITERAL, OPTIONAL, FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, ARITH_FIELD, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX } from "./std.ts";
+import { LITERAL, OPTIONAL, FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, ARITH_FIELD, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, PAIR, S, SET, SIGS, SMART, TRUE, TUPLE_MAX } from "./std.ts";
 import { tupleType } from "./std-values.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
@@ -47,6 +47,8 @@ import { sizeChangeCloses, spineTerminates, type Arc, type CallGraph } from "./s
 // The searches: they run a function on paths they may abandon or repeat, so
 // its row holds no world effect (std.ts searchRow) and is inside the call's.
 const SEARCHES = new Set<Id>([S.all, S.count, S.first, S.optional]);
+// gradient and value and gradient, typed once f's type is known.
+const GRADIENTS = new Set<Id>([S.gradient, S.valueAndGradient]);
 
 discharge("a match on an effect's operations", [DECLARED], "a case for each operation says what it does: the handler");
 
@@ -1544,7 +1546,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         if (named) { t = named; break; }
         // gradient(f) needs f's type first: which record it's over. In
         // gradient(f)(p), p's type says so too, when f is generic.
-        const isGradient = (c: Node | undefined) => isCall(c) && c.args.length === 1 && code.nodes[c.fn]?.kind === "ref" && (code.nodes[c.fn] as NodeOf<"ref">).target === S.gradient;
+        const isGradient = (c: Node | undefined) => isCall(c) && c.args.length === 1 && code.nodes[c.fn]?.kind === "ref" && GRADIENTS.has((code.nodes[c.fn] as NodeOf<"ref">).target);
         const gradient = isGradient(n);
         const applied = isGradient(code.nodes[n.fn]) ? n.args.map((a) => expr(a, env, row)) : null;
         if (applied?.length === 1) {
@@ -1839,6 +1841,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const point = at.get(n.id);
     if (point) { const fr = s.resolve(ft); if (fr.t === "fn" && fr.params.length === 1) { try { s.trial().unify(fr.params[0], point); s.unify(fr.params[0], point); } catch { /* reported at the call */ } } }
     const f = s.zonk(ft);
+    // value and gradient gives f(p) with the slopes.
+    const given = (r: Type): Type => ((code.nodes[n.fn] as NodeOf<"ref">).target === S.valueAndGradient ? { t: "con", id: PAIR, args: [num, r] } : r);
     if (f.t !== "fn" || f.params.length !== 1) return null;
     const r = f.params[0];
     if (r.t !== "con") return null;
@@ -1847,13 +1851,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (r.id === ARRAY) {
       try { s.unify(r.args[0], num); } catch { return null; }
       const e = s.freshRow();
-      const t: Type = { t: "fn", params: [{ t: "fn", params: [r], ret: num, eff: e }], ret: { t: "fn", params: [r], ret: r, eff: { effs: [CHOICE], tail: e.tail } }, eff: s.freshRow() };
+      const t: Type = { t: "fn", params: [{ t: "fn", params: [r], ret: num, eff: e }], ret: { t: "fn", params: [r], ret: given(r), eff: { effs: [CHOICE], tail: e.tail } }, eff: s.freshRow() };
       info.typeOf.set(n.fn, t);
       return t;
     }
     if (r.id === NUMBER ? !hasSmoothDerivative(code, n.args[0]) : !hasSmoothGradient(code, n.args[0], recordVariant(code, r.id) ?? "")) return null;
     const e = s.freshRow();
-    const t: Type = { t: "fn", params: [{ t: "fn", params: [r], ret: num, eff: e }], ret: { t: "fn", params: [r], ret: r, eff: e }, eff: s.freshRow() };
+    const t: Type = { t: "fn", params: [{ t: "fn", params: [r], ret: num, eff: e }], ret: { t: "fn", params: [r], ret: given(r), eff: e }, eff: s.freshRow() };
     info.typeOf.set(n.fn, t);
     return t;
   }

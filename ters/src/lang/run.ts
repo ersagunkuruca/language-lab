@@ -39,7 +39,7 @@ import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
-import { ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT } from "./std-ids.ts";
+import { ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT, PAIR_V } from "./std-ids.ts";
 import { COMPUTE_ONLY, FILE_OPS, KEPT_FILES, LOCALE_V, MY_LOCALE_OP, MY_LATENCY_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, ORDERED, CASE_NAME, SOME, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std-ids.ts";
 import { tupleVariant } from "./std-values.ts";
 import { ArrayView } from "./array-view.ts";
@@ -495,6 +495,22 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     if (q) fast.set(b, q);
   }
   for (const [id, f] of Object.entries(STD_MANY)) builtins[id] = (...a) => f(...a);
+  // gradient(f): the record it is over is known once there's a point to
+  // take it at; over a Float64 it's the derivative.
+  const gradientOf = (f: Value): Fn => {
+    const m = (f as unknown as Record<symbol, { lambda: Id; env: Map<Id, Value> } | { prim: Id }>)[META];
+    const env = fromMap("env" in m ? m.env : new Map());
+    writable();
+    return function* (p: Value) {
+      // At an array, in one pass back (pullback.ts, L285); where a slope
+      // can't be read there, there is none.
+      let lambda: Id;
+      try {
+        lambda = typeof p === "number" || !("lambda" in m) ? derivativeLambda(code, m) : p instanceof ArrayView ? arrayGradientLambda(code, m.lambda, (id) => info.copyOf?.get(id) ?? id) : gradientLambda(code, m, (p as Data).tag);
+      } catch (e) { if (e instanceof NotDifferentiable) return; throw e; }
+      for (const g of run((machine) => machine.eval(lambda, env))) yield* (g as Fn)(p);
+    } as Fn;
+  };
   const ones: Record<Id, (...xs: Value[]) => Value> = {
     [S.less]: (a, b) => bool(numberOrder(a as number, b as number) < 0),
     [S.equal]: (a, b) => bool(equal(a, b, usedSameNumber)),
@@ -596,22 +612,12 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       writable();
       return run((machine) => machine.eval(derivativeLambda(code, m), fromMap("env" in m ? m.env : new Map())));
     },
-    // The record a gradient is over is known once there's a point to take
-    // it at; over a Float64 it's the derivative.
-    [S.gradient]: (f) => {
-      const m = (f as unknown as Record<symbol, { lambda: Id; env: Map<Id, Value> } | { prim: Id }>)[META];
-      const env = fromMap("env" in m ? m.env : new Map());
-      writable();
-      return one(function* (p: Value) {
-        // At an array, in one pass back (pullback.ts, L285); where a slope
-        // can't be read there, there is none.
-        let lambda: Id;
-        try {
-          lambda = typeof p === "number" || !("lambda" in m) ? derivativeLambda(code, m) : p instanceof ArrayView ? arrayGradientLambda(code, m.lambda, (id) => info.copyOf?.get(id) ?? id) : gradientLambda(code, m, (p as Data).tag);
-        } catch (e) { if (e instanceof NotDifferentiable) return; throw e; }
-        for (const g of run((machine) => machine.eval(lambda, env))) yield* (g as Fn)(p);
-      } as Fn);
-    },
+    [S.gradient]: (f) => one(gradientOf(f)),
+    // f(p) and gradient(f)(p), each of f's answers with each slope.
+    [S.valueAndGradient]: (f) => one(function* (p: Value) {
+      const g = gradientOf(f);
+      for (const v of (f as Fn)(p)) for (const d of g(p)) yield { tag: PAIR_V, fields: [v, d] };
+    } as Fn),
   } satisfies Record<Id, Fn>);
   for (const id of Object.keys(ones)) fast.set(builtins[id], ones[id] as Fast);
   for (const [id, f] of Object.entries(builtins)) tag(f, { prim: id });

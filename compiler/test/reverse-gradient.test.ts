@@ -1,7 +1,8 @@
 // gradient over an array of Float64s, in one pass back (pullback.ts,
 // L285, docs/design/numbers/REVERSE-GRADIENT-2026-11-23.md): a sum of
 // squares, a softmax's first item, a branch and a definition calling
-// itself, each against its slopes worked out by hand, in the evaluator,
+// itself, each against its slopes worked out by hand, and value and
+// gradient over an array and over a Float64, in the evaluator,
 // the core IR's JavaScript (`ters run`), WebAssembly and C.
 
 import { test } from "node:test";
@@ -33,15 +34,18 @@ test("gradient of a function of an array: one pass back, in the evaluator and co
     "shown(first(gradient(bent)(array of(list of(1.0, 2.0))), else array of(list of())))",
     "shown(first(gradient(bent)(array of(list of(−1.0, 2.0))), else array of(list of())))",
     "shown(first(gradient((q) => dots(q, 3, 0.0))(array of(list of(1.0, 2.0, 3.0))), else array of(list of())))",
+    "shown(first(value and gradient(soft)(array of(list of(0.5, −1.0, 2.0))), else (0.0, array of(list of()))))",
+    "shown(first(value and gradient((x) => x · x · x)(2.0), else (0.0, 0.0)))",
   ].reduce((a, b) => `${a} ++ "\\n" ++ ${b}`).replace(/^/, "print(") + ")");
   assert.equal(s.errors(), "ok");
   // The evaluator's own gradient, where the function is known only once
   // it runs.
   assert.equal(s.eval("all(gradient(squares)(array of(list of(1.0, 2.0, 3.0))))"), "= [array [2, 4, 6]] : List (Array Float64)");
+  assert.equal(s.eval("all(value and gradient(squares)(array of(list of(1.0, 2.0, 3.0))))"), "= [(14, array [2, 4, 6])] : List (Float64, Array Float64)");
   s.save();
   // softmax's first item s0 at p: ∂s0/∂p0 = s0(1 − s0), ∂s0/∂pj = −s0·sj.
   const e = [0.5, -1, 2].map(Math.exp), total = e.reduce((a, b) => a + b), sm = e.map((x) => x / total);
-  const want = [[2, 4, 6], [sm[0] * (1 - sm[0]), -sm[0] * sm[1], -sm[0] * sm[2]], [0, 3], [2, -1], [2, 4, 6]];
+  const want = [[2, 4, 6], [sm[0] * (1 - sm[0]), -sm[0] * sm[1], -sm[0] * sm[2]], [0, 3], [2, -1], [2, 4, 6], [sm[0], sm[0] * (1 - sm[0]), -sm[0] * sm[1], -sm[0] * sm[2]], [8, 12]];
   const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
   const check = (how: string, out: string) => {
     const got = out.trim().split("\n").map((l) => [...l.matchAll(/-?[\d.]+(?:e-?\d+)?/g)].map((m) => +m[0]));

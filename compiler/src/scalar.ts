@@ -2170,7 +2170,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             return { k: "let", i, value: expr(n.args[0], env, f, false), body: { k: "rt", fn: "derived", args: [{ k: "local", i }], host: { t: derivativeType(ft), partial: false } } };
           }
         }
-        if (opts.host && (target === S.derivative || target === S.gradient) && n.args.length === 1) {
+        if (opts.host && (target === S.derivative || target === S.gradient || target === S.valueAndGradient) && n.args.length === 1) {
           const t = stype(zonk(id));
           if (!t || !isFn(t)) throw new Refused(`takes ${nm(target)} giving ${whyNot(zonk(id))}`);
           return { k: "rt", fn: `derive:${target}`, args: [expr(n.args[0], env, f, false)], host: { t, partial: false } };
