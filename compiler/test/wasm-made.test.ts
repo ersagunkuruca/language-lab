@@ -53,6 +53,25 @@ test("pack on WebAssembly makes a deep loop's frames only as deep as it goes", (
   assert.ok(on.places.some(([n]) => /\(fresh frame\)$/.test(n)), "the fresh frames are counted");
 });
 
+// A closure given to functions made for it (`any pass·contains.λ`) goes
+// as what it captured (closure-parts.ts): mini makes none.
+test("mini on WebAssembly makes no closure for the copies made for it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "wasm-closures-"));
+  const build = (out: string, env: Record<string, string>) => {
+    const r = spawnSync(process.execPath, [lab, "wasi", join(gaps, "mini"), "-o", join(dir, out)], { encoding: "utf8", env: { ...process.env, TERS_COUNT_MAKES: "1", ...env } });
+    assert.equal(r.status, 0, r.stderr);
+    return join(dir, out);
+  };
+  const run = (wasm: string, out: string) => { const fd = openSync(join(dir, out), "w"); try { return made(wasm, ["300"], dir, fd); } finally { closeSync(fd); } };
+  const off = run(build("off.wasm", { NO_CLOSURE_PARTS: "1" }), "off.txt"), on = run(build("on.wasm", {}), "on.txt");
+  assert.equal(readFileSync(join(dir, "on.txt"), "utf8"), readFileSync(join(dir, "off.txt"), "utf8"));
+  assert.ok(readFileSync(join(dir, "on.txt"), "utf8").length > 0);
+  assert.equal(on.code, 0);
+  const closures = (r: typeof on) => r.places.filter(([n]) => n.startsWith("closure ")).reduce((n, [, c]) => n + c, 0);
+  assert.ok(closures(off) > 1000, `${closures(off)} closures without closure-parts`);
+  assert.equal(closures(on), 0);
+});
+
 // A case with no fields (pack's Order.0 and Order.2, an empty list) is one
 // struct in a global: the run makes none of them, and prints the same.
 test("pack on WebAssembly makes a field-less case once, not per use", () => {
