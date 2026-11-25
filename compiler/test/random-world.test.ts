@@ -19,6 +19,7 @@ import { RANDOM_OP, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm, instantiate, fromText } from "../src/wasm.ts";
 import { build, skip } from "./c-harness.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 // [a world draw, the first draw under seeded(7), a world draw], shown.
 function program() {
@@ -69,7 +70,7 @@ test("Random from the world under WASI (C136)", async () => {
     const io = mkdtempSync(join(tmpdir(), "random-wasi-"));
     const stdout = openSync(join(io, "out"), "w");
     const wasi = new WASI({ version: "preview1", args: ["main"], stdout, returnOnExit: true });
-    wasi.start(await WebAssembly.instantiate(await WebAssembly.compile(m.bytes), wasi.getImportObject() as WebAssembly.Imports));
+    wasi.start(await WebAssembly.instantiate(await WebAssembly.compile(m.bytes), wasiImports(wasi)));
     closeSync(stdout);
     texts.push(readFileSync(join(io, "out"), "utf8").trim());
   }

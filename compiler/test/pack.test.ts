@@ -17,6 +17,7 @@ import { PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { CARRIED, uses } from "../../ters/src/lang/represent.ts";
 import { LIST } from "../../ters/src/lang/std.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const w = await ways();
 const all = (args: string[]) => {
@@ -97,7 +98,7 @@ test("pack through ters wasi and ters native prints what ters run prints", async
   assert.equal(made.status, 0, made.stderr);
   const of = join(dir, "out.txt"), fd = openSync(of, "w");
   const wasi = new WASI({ version: "preview1", args: ["p", "6400"], stdout: fd, stderr: fd, returnOnExit: true });
-  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasi.getImportObject() as WebAssembly.Imports));
+  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasiImports(wasi)));
   closeSync(fd);
   assert.equal(readFileSync(of, "utf8"), want.stdout, "ters wasi");
   if (skip) return;

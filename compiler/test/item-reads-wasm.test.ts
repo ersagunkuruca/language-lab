@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { wasiImportsSource } from "../src/wasi-imports.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 const folder = join(import.meta.dirname, "../gaps/greenhouse");
@@ -21,9 +22,9 @@ test("the greenhouse on WebAssembly with item at in place prints as compiled Jav
   assert.equal(js.status, 0, js.stderr);
   const want = spawnSync(process.execPath, [join(dir, "g.mjs"), ...args], { encoding: "utf8" });
   assert.equal(want.status, 0, want.stderr);
-  writeFileSync(join(dir, "w.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi";
+  writeFileSync(join(dir, "w.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi"; ${wasiImportsSource}
 const w = new WASI({ version: "preview1", args: ["g", ...process.argv.slice(3)], returnOnExit: true });
-w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(process.argv[2])), w.getImportObject()));`);
+w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(process.argv[2])), wasiImports(w)));`);
   for (const off of [false, true]) {
     const env = { ...process.env, ...(off ? { NO_ITEM_READS: "1" } : {}) };
     const out = join(dir, off ? "off.wasm" : "on.wasm");

@@ -13,6 +13,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { call } from "../../ters/mcp/server.ts";
+import { wasiImportsSource } from "../src/wasi-imports.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 
@@ -33,9 +34,9 @@ function written(): string {
 // Run in a child, its memory read after: the count is at 120.
 function views(wasm: string, args: string[]): { out: string; made: bigint } {
   const r = spawnSync(process.execPath, ["--no-warnings", "--input-type=module", "-e", `
-    import { readFileSync } from "node:fs"; import { WASI } from "node:wasi";
+    import { readFileSync } from "node:fs"; import { WASI } from "node:wasi"; ${wasiImportsSource}
     const w = new WASI({ version: "preview1", args: ["views", ...${JSON.stringify(args)}], returnOnExit: true });
-    const i = new WebAssembly.Instance(await WebAssembly.compile(readFileSync(${JSON.stringify(wasm)})), w.getImportObject());
+    const i = new WebAssembly.Instance(await WebAssembly.compile(readFileSync(${JSON.stringify(wasm)})), wasiImports(w));
     w.start(i);
     console.error("made " + new DataView(i.exports.memory.buffer).getBigInt64(120, true));`], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);

@@ -17,6 +17,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cut, folder, ways } from "./mnist.ts";
+import { wasiImportsSource } from "../src/wasi-imports.ts";
 
 const runs = (process.argv.slice(2).length ? process.argv.slice(2) : ["adam:1000:1", "adam:10000:1", "adam:60000:1", "reverse:1000:1", "reverse:10000:1", "newton:1000:3", "newton:10000:1", "reverse-newton:1000:3", "reverse-newton:10000:1"]).map((s) => s.split(":"));
 const skip = new Set((process.env.SKIP ?? "").split(",").filter(Boolean));
@@ -25,9 +26,9 @@ const dir = mkdtempSync(join(tmpdir(), "bench-mnist-")), lab = join(import.meta.
 if (!skip.has("native")) spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "mnist")]);
 if (!skip.has("wasi")) {
   spawnSync(process.execPath, [lab, "wasi", folder, "-o", join(dir, "mnist.wasm")]);
-  writeFileSync(join(dir, "run-wasi.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi";
+  writeFileSync(join(dir, "run-wasi.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi"; ${wasiImportsSource}
 const w = new WASI({ version: "preview1", args: ["mnist", ...process.argv.slice(2)], preopens: { ".": process.argv[2] }, returnOnExit: true });
-process.exitCode = w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(${JSON.stringify(join(dir, "mnist.wasm"))})), w.getImportObject()));`);
+process.exitCode = w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(${JSON.stringify(join(dir, "mnist.wasm"))})), wasiImports(w)));`);
 }
 const line = (what: string, way: string, ms: number, idealMs: number, same: boolean, note = "") =>
   console.log(`${what.padEnd(16)} ${way.padEnd(13)} ${ms.toFixed(0).padStart(9)} ms ${(ms / idealMs).toFixed(1).padStart(7)}x${same ? "" : "  (prints differently)"}${note}`);

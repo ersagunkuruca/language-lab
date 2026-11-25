@@ -14,6 +14,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { NOW_OP, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 
@@ -30,7 +31,7 @@ test("now() on WebAssembly is the time in whole milliseconds, as on C and in ter
   assert.equal(made.status, 0, made.stderr);
   const o = join(dir, "out.txt"), fo = openSync(o, "w");
   const w = new WASI({ version: "preview1", args: ["p"], preopens: { ".": dir }, stdout: fo, stderr: fo, returnOnExit: true });
-  assert.equal(w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), w.getImportObject() as WebAssembly.Imports)), 0);
+  assert.equal(w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasiImports(w))), 0);
   closeSync(fo);
   const m = /^(\d+)\n\[false, true\]\n$/.exec(readFileSync(o, "utf8"));
   assert.ok(m, readFileSync(o, "utf8"));

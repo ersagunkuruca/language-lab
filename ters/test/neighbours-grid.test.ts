@@ -20,6 +20,7 @@ import { NUMBER } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
 import { call } from "../mcp/server.ts";
 import { skip } from "../../compiler/test/c-harness.ts";
+import { wasiImports } from "../../compiler/src/wasi-imports.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
@@ -85,7 +86,7 @@ test("C and a WASI command find a program's neighbours on the grid and print wha
   run(ters, "wasi", dir, "-o", join(dir, "near.wasm"));
   const out = join(dir, "out.txt"), fd = openSync(out, "w");
   const w = new WASI({ version: "preview1", args: ["near", "500"], stdout: fd, returnOnExit: true });
-  assert.equal(w.start(new WebAssembly.Instance(new WebAssembly.Module(readFileSync(join(dir, "near.wasm"))), w.getImportObject() as WebAssembly.Imports)), 0);
+  assert.equal(w.start(new WebAssembly.Instance(new WebAssembly.Module(readFileSync(join(dir, "near.wasm"))), wasiImports(w))), 0);
   closeSync(fd);
   assert.equal(readFileSync(out, "utf8"), want);
 });

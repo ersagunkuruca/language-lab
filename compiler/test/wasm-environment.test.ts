@@ -13,6 +13,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { ENV_OP, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm, runMain } from "../src/wasm.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const k = new Lang();
 const main = k.def("main");
@@ -34,7 +35,7 @@ test("environment variable in a WASI command: the value after name=, or none", a
   const dir = mkdtempSync(join(tmpdir(), "env-wasi-")), of = join(dir, "out.txt"), fd = openSync(of, "w");
   // TERS_L25 is a prefix of a variable that is set, but isn't set itself.
   const w = new WASI({ version: "preview1", args: ["p"], env: { OTHER: "x", TERS_L253: "a=b c", TERS_L2530: "no" }, preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
-  const status = w.start(new WebAssembly.Instance(await WebAssembly.compile(m.bytes), w.getImportObject() as WebAssembly.Imports));
+  const status = w.start(new WebAssembly.Instance(await WebAssembly.compile(m.bytes), wasiImports(w)));
   closeSync(fd);
   assert.deepEqual([readFileSync(of, "utf8"), status], ['some("a=b c")\nnone\nnone\n', 0]);
 });

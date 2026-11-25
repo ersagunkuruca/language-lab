@@ -9,6 +9,7 @@ import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WASI } from "node:wasi";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 const examples = join(import.meta.dirname, "../../ters/examples");
@@ -16,7 +17,7 @@ const examples = join(import.meta.dirname, "../../ters/examples");
 async function wasi(file: string, args: string[], dir: string): Promise<[string, number]> {
   const of = join(dir, "out.txt"), fd = openSync(of, "w");
   const w = new WASI({ version: "preview1", args: ["p", ...args], preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
-  const code = w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(file)), w.getImportObject() as WebAssembly.Imports));
+  const code = w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(file)), wasiImports(w)));
   closeSync(fd);
   return [readFileSync(of, "utf8"), code];
 }

@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WASI } from "node:wasi";
 import { call } from "../../ters/mcp/server.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 
@@ -70,7 +71,7 @@ test("an array walk checked once on WebAssembly: the same answers", async () => 
     const of = join(at, "out.txt"), fd = openSync(of, "w");
     const wasi = new WASI({ version: "preview1", args: ["walks", ...args], stdout: fd, stderr: fd, returnOnExit: true });
     mods.push(readFileSync(wasm));
-    wasi.start(new WebAssembly.Instance(await WebAssembly.compile(mods.at(-1)!), wasi.getImportObject() as WebAssembly.Imports));
+    wasi.start(new WebAssembly.Instance(await WebAssembly.compile(mods.at(-1)!), wasiImports(wasi)));
     closeSync(fd);
     assert.equal(readFileSync(of, "utf8"), run.stdout, JSON.stringify(env));
   }

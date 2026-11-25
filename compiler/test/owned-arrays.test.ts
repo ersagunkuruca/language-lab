@@ -25,6 +25,7 @@ import { ownedArrays } from "../src/owned-arrays.ts";
 import { arrayOf, itemsIn, replaceOwned, restOf } from "../../ters/src/lang/array-view.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm } from "../src/wasm.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 // main prints what `body` makes of a = array of [1, 2, 3]; each way, and
 // whether a replace was written in place.
@@ -44,7 +45,7 @@ function both(body: (k: Lang, a: Id, zeros: Id) => Id): { evaluator: string[]; c
   const ownedInWasm = ownedArrays(lowered, code, info, names, main) > 0;
   const io = mkdtempSync(join(tmpdir(), "owned-")), out = openSync(join(io, "out"), "w");
   const wasi = new WASI({ version: "preview1", args: ["main"], stdout: out, returnOnExit: true });
-  wasi.start(new WebAssembly.Instance(new WebAssembly.Module(emitWasm(lowered, { wasi: true, main }).bytes), wasi.getImportObject() as WebAssembly.Imports));
+  wasi.start(new WebAssembly.Instance(new WebAssembly.Module(emitWasm(lowered, { wasi: true, main }).bytes), wasiImports(wasi)));
   closeSync(out);
   const owned = printed(ir).js.includes("array.replaceOwned");
   assert.equal(ownedInWasm, owned);

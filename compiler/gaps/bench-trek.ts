@@ -10,6 +10,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { folder, track, ways } from "./trek.ts";
+import { wasiImportsSource } from "../src/wasi-imports.ts";
 const w = await ways();
 const sizes = (process.argv.slice(2).length ? process.argv.slice(2) : ["400", "4000", "40000"]).map(Number);
 const runs = Number(process.env.RUNS ?? 3);
@@ -24,9 +25,9 @@ const built = process.env.BUILT === "1";
 if (built) {
   spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "trek")]);
   spawnSync(process.execPath, [lab, "wasi", folder, "-o", join(dir, "trek.wasm")]);
-  writeFileSync(join(dir, "run-wasi.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi";
+  writeFileSync(join(dir, "run-wasi.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi"; ${wasiImportsSource}
 const w = new WASI({ version: "preview1", args: ["trek", "d.txt"], preopens: { ".": "." }, returnOnExit: true });
-w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync("trek.wasm")), w.getImportObject()));`);
+w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync("trek.wasm")), wasiImports(w)));`);
 }
 for (const n of sizes) {
   const files = { "d.txt": track(n) }, args = ["d.txt"];

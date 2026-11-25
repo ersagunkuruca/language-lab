@@ -11,6 +11,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { folder, ways } from "./bazaar.ts";
+import { wasiImportsSource } from "../src/wasi-imports.ts";
 
 const w = await ways();
 const sizes = (process.argv.slice(2).length ? process.argv.slice(2) : ["10000", "200000"]).map(Number);
@@ -26,9 +27,9 @@ if (!skip.has("compile")) spawnSync(process.execPath, [lab, "compile", folder, "
 if (!skip.has("native")) spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "bazaar")]);
 if (!skip.has("wasi")) {
   spawnSync(process.execPath, [lab, "wasi", folder, "-o", join(dir, "bazaar.wasm")]);
-  writeFileSync(join(dir, "run-wasi.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi";
+  writeFileSync(join(dir, "run-wasi.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi"; ${wasiImportsSource}
 const w = new WASI({ version: "preview1", args: ["bazaar", ...process.argv.slice(2)], returnOnExit: true });
-process.exitCode = w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(${JSON.stringify(join(dir, "bazaar.wasm"))})), w.getImportObject()));`);
+process.exitCode = w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(${JSON.stringify(join(dir, "bazaar.wasm"))})), wasiImports(w)));`);
 }
 for (const n of sizes) {
   const args = [String(n)];

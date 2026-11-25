@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WASI } from "node:wasi";
 import { call } from "../../ters/mcp/server.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 
@@ -54,7 +55,7 @@ test("a replace or push on an array nobody else holds is in place, per value", (
   assert.equal(wmade.status, 0, wmade.stderr);
   const io = mkdtempSync(join(tmpdir(), "holders-io-")), out2 = openSync(join(io, "out"), "w");
   const wasi = new WASI({ version: "preview1", args: ["p"], stdout: out2, returnOnExit: true });
-  const inst = new WebAssembly.Instance(new WebAssembly.Module(readFileSync(wasm)), wasi.getImportObject() as WebAssembly.Imports);
+  const inst = new WebAssembly.Instance(new WebAssembly.Module(readFileSync(wasm)), wasiImports(wasi));
   wasi.start(inst);
   closeSync(out2);
   assert.equal(readFileSync(join(io, "out"), "utf8"), ev.stdout);

@@ -18,6 +18,7 @@ import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync,
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { book } from "../gaps/ledger.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 // What a run says: its answer, or why it stopped (L125c: an Abort, from the
@@ -772,7 +773,7 @@ test("whole programs as WASI commands: files, console, arguments and exit codes 
       writeFileSync(`${io}.in`, input);
       const [stdin, stdout, stderr] = [openSync(`${io}.in`, "r"), openSync(`${io}.out`, "w"), openSync(`${io}.err`, "w")];
       const wasi = new WASI({ version: "preview1", args: [p.name, ...args], preopens: { ".": got }, stdin, stdout, stderr, returnOnExit: true });
-      const code = wasi.start(await WebAssembly.instantiate(module, wasi.getImportObject() as WebAssembly.Imports));
+      const code = wasi.start(await WebAssembly.instantiate(module, wasiImports(wasi)));
       [stdin, stdout, stderr].forEach((fd) => closeSync(fd));
       const lined = (xs: string[]) => xs.map((l) => `${l}\n`).join("");
       assert.deepEqual(

@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { WASI } from "node:wasi";
 import { folder, ways } from "../gaps/bazaar.ts";
 import { skip } from "./c-harness.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const w = await ways();
 const ideal = (n: number) => w.ideal([String(n)]);
@@ -55,7 +56,7 @@ test("bazaar through ters compile, ters wasi and ters native prints what the ide
   assert.equal(made.status, 0, made.stderr);
   const of = join(dir, "out.txt"), fd = openSync(of, "w");
   const wasi = new WASI({ version: "preview1", args: ["b", "2000"], stdout: fd, stderr: fd, returnOnExit: true });
-  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "b.wasm"))), wasi.getImportObject() as WebAssembly.Imports));
+  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "b.wasm"))), wasiImports(wasi)));
   closeSync(fd);
   assert.equal(readFileSync(of, "utf8"), want, "ters wasi");
   if (skip) return;

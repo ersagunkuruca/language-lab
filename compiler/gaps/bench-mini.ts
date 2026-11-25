@@ -9,6 +9,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { folder, ways } from "./mini.ts";
+import { wasiImportsSource } from "../src/wasi-imports.ts";
 const w = await ways();
 const sizes = (process.argv.slice(2).length ? process.argv.slice(2) : ["200", "2000", "8000"]).map(Number);
 const runs = Number(process.env.RUNS ?? 3);
@@ -23,9 +24,9 @@ const built = process.env.BUILT === "1";
 if (built) {
   spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "mini")]);
   spawnSync(process.execPath, [lab, "wasi", folder, "-o", join(dir, "mini.wasm")]);
-  writeFileSync(join(dir, "run-wasi.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi";
+  writeFileSync(join(dir, "run-wasi.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi"; ${wasiImportsSource}
 const w = new WASI({ version: "preview1", args: ["mini", ...process.argv.slice(2)], returnOnExit: true });
-w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync("mini.wasm")), w.getImportObject()));`);
+w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync("mini.wasm")), wasiImports(w)));`);
 }
 for (const n of sizes) {
   const args = [String(n)];

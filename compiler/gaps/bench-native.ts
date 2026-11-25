@@ -41,10 +41,11 @@ int main(int argc, char **argv) {
 `);
 execFileSync(cc, ["-O2", "-o", join(dir, "rusage"), join(dir, "rusage.c")]);
 writeFileSync(join(dir, "wasi.mjs"), `import { readFileSync } from "node:fs";
-import { WASI } from "node:wasi";
+import { WASI } from "node:wasi"; ${wasiImportsSource}
+import { wasiImportsSource } from "../src/wasi-imports.ts";
 const [file, ...args] = process.argv.slice(2);
 const wasi = new WASI({ version: "preview1", args: [file, ...args], preopens: { ".": "." }, returnOnExit: true });
-const m = await WebAssembly.instantiate(await WebAssembly.compile(readFileSync(file)), wasi.getImportObject());
+const m = await WebAssembly.instantiate(await WebAssembly.compile(readFileSync(file)), wasiImports(wasi));
 process.exitCode = wasi.start(m);
 `);
 
