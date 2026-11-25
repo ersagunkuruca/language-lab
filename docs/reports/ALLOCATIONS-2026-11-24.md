@@ -770,3 +770,32 @@ outlives V8's young generation, so each write of a young value into it
 goes through the write barrier and the remembered set. scan, bazaar
 and strings took the same time. It stays on: allocations are judged by
 the structs a run makes, not by one engine's collector (2026-11-25).
+
+## C327e on WebAssembly, a closure passed as its captures (2026-11-25)
+
+On WebAssembly closures were up to a third of the structs a run makes:
+mini 37%, typeset 34%, scan 15%. Every closure that made many was given
+to a function that the lowering had already copied for it, such as
+`any pass·contains.λ` or `map.onto·moved.λ`. A copy like that calls
+the closure's code directly, and takes the closure only to hand it to
+the code, or on to the next copy. closure-parts.ts finds these inputs
+and passes the closure's captures in their place, to the copies and to
+a copy of the code that reads the captures as inputs. It works out
+which code each input carries from the closures given to it, and
+through inputs that pass it on, then drops any input that is given
+anything else or used any other way. `NO_CLOSURE_PARTS=1` turns it off.
+
+| program | structs before | after |
+|---|---|---|
+| scan 3,200 | 81.7 M | 69.7 M (−15%) |
+| mini 8,000 | 9.87 M | 6.23 M (−37%) |
+| bazaar 200,000 | 14.20 M | 13.31 M (−6%) |
+| pack 3,200 | 254 k | 230 k (−9%) |
+| strings 8 | 86.3 M | 84.8 M (−2%) |
+| typeset 1,000 at 300 | 10.08 M | 6.62 M (−34%) |
+| flock 100 × 5,000 | 69.8 M | 68.8 M (−1%) |
+| mnist reverse 300 | 767 k | 727 k (−5%) |
+
+None of these programs makes a closure any more, and all eight print the
+same. mini 8,000 runs 0.39 to 0.45 s before and 0.36 to 0.39 s after,
+about 8% faster. The others take the same time, within the noise.

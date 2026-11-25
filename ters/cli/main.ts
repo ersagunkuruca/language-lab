@@ -69,6 +69,7 @@ const { itemReads } = compiles ? await import("../../compiler/src/item-reads.ts"
 const { columns } = compiles ? await import("../../compiler/src/columns.ts") : ({} as typeof import("../../compiler/src/columns.ts"));
 const { ownPushes, ownedPerValue } = compiles ? await import("../../compiler/src/holders.ts") : ({} as typeof import("../../compiler/src/holders.ts"));
 const { chosenParts } = compiles ? await import("../../compiler/src/chosen-parts.ts") : ({} as typeof import("../../compiler/src/chosen-parts.ts"));
+const { closureParts } = compiles ? await import("../../compiler/src/closure-parts.ts") : ({} as typeof import("../../compiler/src/closure-parts.ts"));
 const { checkedOnce } = compiles ? await import("../../compiler/src/checked-once.ts") : ({} as typeof import("../../compiler/src/checked-once.ts"));
 const { untaggedLoops, untaggedFunctions } = compiles ? await import("../../compiler/src/untagged-ints.ts") : ({} as typeof import("../../compiler/src/untagged-ints.ts"));
 const { earlyAnd } = compiles ? await import("../../compiler/src/early-and.ts") : ({} as typeof import("../../compiler/src/early-and.ts"));
@@ -388,6 +389,8 @@ function nativeLoweredNow(main: Id, wasm: boolean, page: boolean, from: Program)
     // A record read only by its parts, as its parts, as on JavaScript
     // (chosen-parts.ts; C327g): a zipped fold's pair, no struct made.
     if (!process.env.NO_CHOSEN_PARTS) chosenParts(lowered);
+    // A closure given to a function made for it, as its captures (C327e).
+    if (!process.env.NO_CLOSURE_PARTS) closureParts(lowered);
     intoAsSets(lowered);
     // A loop computing on Ints alone, with them as i64s (C207k).
     untaggedLoops(lowered, true);
