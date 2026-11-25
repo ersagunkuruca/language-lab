@@ -27,6 +27,11 @@ test("gradient of a function of an array: one pass back, in the evaluator and co
   fill("soft", ["p"], `((e) => ${at("e", "0")} / sum(map(range(3), (i) => ${at("e", "i")})))(array of(map(range(array length(p)), (i) => exp(${at("p", "i")}))))`);
   fill("bent", ["p"], `if ${at("p", "0")} > 0.0 then ${at("p", "1")} · 3.0 else ${at("p", "0")} · ${at("p", "1")}`);
   fill("dots", ["p", "k", "acc"], `if k ≤ 0 then acc else dots(p, k − 1, acc + ${at("p", "k − 1")} · ${at("p", "k − 1")})`);
+  // Forward over reverse (a Hessian times a vector): the pass back at
+  // dual numbers, its arithmetic theirs.
+  const dat = (i: string) => `first(item at(p, ${i}), else dual(0.0, 0.0))`;
+  fill("cubes", ["p"], `sum(map(range(array length(p)), (i) => ${dat("i")} · ${dat("i")} · ${dat("i")}))`);
+  fill("hv", ["p"], "items of array(first(gradient(cubes)(p), else array of(list of())))");
   fill("shown", ["g"], "show(g)");
   fill("main", [], [
     "shown(first(gradient(squares)(array of(list of(1.0, 2.0, 3.0))), else array of(list of())))",
@@ -36,16 +41,20 @@ test("gradient of a function of an array: one pass back, in the evaluator and co
     "shown(first(gradient((q) => dots(q, 3, 0.0))(array of(list of(1.0, 2.0, 3.0))), else array of(list of())))",
     "shown(first(value and gradient(soft)(array of(list of(0.5, −1.0, 2.0))), else (0.0, array of(list of()))))",
     "shown(first(value and gradient((x) => x · x · x)(2.0), else (0.0, 0.0)))",
+    "shown(map(hv(array of(list of(dual(1.0, 1.0), dual(2.0, 0.0)))), (d) => d.value))",
+    "shown(map(hv(array of(list of(dual(1.0, 1.0), dual(2.0, 0.0)))), (d) => d.slope))",
   ].reduce((a, b) => `${a} ++ "\\n" ++ ${b}`).replace(/^/, "print(") + ")");
   assert.equal(s.errors(), "ok");
   // The evaluator's own gradient, where the function is known only once
   // it runs.
   assert.equal(s.eval("all(gradient(squares)(array of(list of(1.0, 2.0, 3.0))))"), "= [array [2, 4, 6]] : List (Array Float64)");
   assert.equal(s.eval("all(value and gradient(squares)(array of(list of(1.0, 2.0, 3.0))))"), "= [(14, array [2, 4, 6])] : List (Float64, Array Float64)");
+  // Over dual numbers only as made ahead: x³'s 3x² at x = 1 + ε is 3 + 6ε.
+  assert.equal(s.eval("hv(array of(list of(dual(1.0, 1.0), dual(2.0, 0.0))))"), "= [dual(3, 6), dual(12, 0)] : List Dual");
   s.save();
   // softmax's first item s0 at p: ∂s0/∂p0 = s0(1 − s0), ∂s0/∂pj = −s0·sj.
   const e = [0.5, -1, 2].map(Math.exp), total = e.reduce((a, b) => a + b), sm = e.map((x) => x / total);
-  const want = [[2, 4, 6], [sm[0] * (1 - sm[0]), -sm[0] * sm[1], -sm[0] * sm[2]], [0, 3], [2, -1], [2, 4, 6], [sm[0], sm[0] * (1 - sm[0]), -sm[0] * sm[1], -sm[0] * sm[2]], [8, 12]];
+  const want = [[2, 4, 6], [sm[0] * (1 - sm[0]), -sm[0] * sm[1], -sm[0] * sm[2]], [0, 3], [2, -1], [2, 4, 6], [sm[0], sm[0] * (1 - sm[0]), -sm[0] * sm[1], -sm[0] * sm[2]], [8, 12], [3, 12], [6, 0]];
   const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
   const check = (how: string, out: string) => {
     const got = out.trim().split("\n").map((l) => [...l.matchAll(/-?[\d.]+(?:e-?\d+)?/g)].map((m) => +m[0]));

@@ -41,8 +41,13 @@ test("mnist: a Newton step from dual numbers gives the R-operator's step", () =>
   assert.equal(r.out[1], "epoch 1: loss 2.2962, damping 0.6667");
 });
 
+test("mnist: Newton with gradient's gradient and Hessian times a vector prints what the hand-written one does (L285)", () => {
+  const files = madeUp(100, 100), r = same(["d", "reverse-newton", "100", "1"], files);
+  assert.deepEqual(r.out.slice(1), w.ideal(["d", "newton", "100", "1"], files).out.slice(1));
+});
+
 test("mnist: usage and files that aren't MNIST's", () => {
-  const usage = ["usage: mnist <folder> [adam|reverse|newton] [training digits, at least 100] [passes]"];
+  const usage = ["usage: mnist <folder> [adam|reverse|newton|reverse-newton] [training digits, at least 100] [passes]"];
   for (const args of [[], ["d", "sgd"], ["d", "adam", "50"], ["d", "adam", "100", "0"]]) assert.deepEqual(same(args, {}), { out: [], err: usage, code: 2 });
   assert.deepEqual(same(["nope"], {}).err, ["mnist: no such file or folder: nope/train-images-idx3-ubyte"]);
   const files = madeUp(100, 100);

@@ -1848,10 +1848,16 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (r.t !== "con") return null;
     // Over an array of Float64s, in one pass back (pullback.ts, L285): its
     // slopes are an array too, and may fail where a slope can't be read.
+    // Over an array of another Number written there (Dual: forward over
+    // reverse), the same pass at that number.
     if (r.id === ARRAY) {
-      try { s.unify(r.args[0], num); } catch { return null; }
+      const item = s.resolve(r.args[0]);
+      if (item.t !== "con") { try { s.unify(r.args[0], num); } catch { return null; } }
+      else if (item.t === "con" && item.args.length) return null;
+      const el = s.zonk(r.args[0]);
       const e = s.freshRow();
-      const t: Type = { t: "fn", params: [{ t: "fn", params: [r], ret: num, eff: e }], ret: { t: "fn", params: [r], ret: given(r), eff: { effs: [CHOICE], tail: e.tail } }, eff: s.freshRow() };
+      const pair = (code.nodes[n.fn] as NodeOf<"ref">).target === S.valueAndGradient ? { t: "con" as const, id: PAIR, args: [el, r] } : r;
+      const t: Type = { t: "fn", params: [{ t: "fn", params: [r], ret: el, eff: e }], ret: { t: "fn", params: [r], ret: pair, eff: { effs: [CHOICE], tail: e.tail } }, eff: s.freshRow() };
       info.typeOf.set(n.fn, t);
       return t;
     }

@@ -21,14 +21,14 @@ import { bytesValue, plainBytes } from "./bytes.ts";
 import { plainRequest, responseValue, type PlainRequest, type PlainResponse } from "./network.ts";
 import { bordered } from "./border.ts";
 import { answerKeys, givenInOrder } from "./ports.ts";
-import { nodesOfKindIn, dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call, isUse, bindsOf, copyNodes, nodeValues } from "../model.ts";
+import { nodesOfKindIn, dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call, isUse, bindsOf, copyNodes, nodeValues, ownNodes } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl, preludeNames } from "../prelude.ts";
 import { PRELUDE_DEFS } from "./prelude-ids.ts";
 import { readByDescent } from "./descent.ts";
-import type { Info } from "./infer.ts";
+import { infer, type Info } from "./infer.ts";
 import { derivativeLambda, gradientLambda, NotDifferentiable } from "./derive.ts";
-import { arrayGradientLambda } from "./pullback.ts";
+import { arrayGradientLambda, expandArrayGradients, gradientOver } from "./pullback.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
 import { resolveArithmetic } from "./arith.ts";
 import { worldTimers } from "./timers.ts";
@@ -53,7 +53,7 @@ import * as T from "./text.ts";
 import { Cells, NoValue, Pending, nodeOf, pathValue } from "./cells.ts";
 import { seededGenerator, worldRandom, type Generator as RandomGenerator } from "./random.ts";
 import { fieldIndex, fieldPath, placePath, setPath } from "./records.ts";
-import { CELLS, CHOICE, DIVERGE, INT, NETWORK, Subst, WORLD, type Type } from "./types.ts";
+import { ARRAY, CELLS, CHOICE, DIVERGE, INT, NETWORK, NUMBER, Subst, WORLD, type Type } from "./types.ts";
 import { reachedImplementing } from "./reached.ts";
 
 // A program's values and a page's budget (run-values.ts), as every runner's.
@@ -374,11 +374,23 @@ export interface World {
 // wording of a refusal (thrown, so not kept) and the names it gives back,
 // which no caller here reads.
 const resolved = new WeakMap<Code, WeakMap<Info, { code: Code; info: Info }>>();
+// Whether the program's own code uses gradient (or value and gradient).
+const asksGradient = (code: Code) => ownNodes(code).some((n) => n.kind === "ref" && (n.target === S.gradient || n.target === S.valueAndGradient));
 export function resolvedFor(code: Code, info: Info, names: Names | undefined): { code: Code; info: Info } {
   let byInfo = resolved.get(code);
   if (!byInfo) resolved.set(code, (byInfo = new WeakMap()));
   let r = byInfo.get(info);
-  if (!r) { const { code: c, info: i } = resolveArithmetic(code, info, names ?? {}); byInfo.set(info, (r = { code: c, info: i })); resolvedAlready(c, i); }
+  if (!r) {
+    // gradient(f) over an array of another Number (Dual), made ahead and
+    // checked again (pullback.ts): its pass back's arithmetic is then
+    // resolved with the rest, which code made as it runs isn't.
+    const overOther = (call: Id) => { const o = gradientOver(code, info, call); return o?.of === ARRAY && !!o.item && o.item !== NUMBER; };
+    const grads = asksGradient(code) ? expandArrayGradients(code, names ?? {}, info, overOther) : { code, names: names ?? {}, expanded: [] };
+    const [from, check] = grads.expanded.length ? [grads.code, infer(grads.code, grads.names, undefined, info.options)] : [code, info];
+    const { code: c, info: i } = resolveArithmetic(from, check, grads.names);
+    byInfo.set(info, (r = { code: c, info: i }));
+    resolvedAlready(c, i);
+  }
   return r;
 }
 // A program resolved already, or made from one without new arithmetic
@@ -504,6 +516,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     return function* (p: Value) {
       // At an array, in one pass back (pullback.ts, L285); where a slope
       // can't be read there, there is none.
+      // Over another Number, only as made ahead (resolvedFor).
+      if (p instanceof ArrayView && p.n > 0 && typeof p.buf.items[p.start] !== "number") throw new Error("gradient over an array of another Number than Float64 needs its function written where gradient is called");
       let lambda: Id;
       try {
         lambda = typeof p === "number" || !("lambda" in m) ? derivativeLambda(code, m) : p instanceof ArrayView ? arrayGradientLambda(code, m.lambda, (id) => info.copyOf?.get(id) ?? id) : gradientLambda(code, m, (p as Data).tag);

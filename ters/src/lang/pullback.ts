@@ -42,7 +42,7 @@ import { LIBRARY } from "./library.ts";
 import { ARITH, S, TRIG_OPS } from "./std.ts";
 import { CONS, DIVIDE, NIL } from "./std-ids.ts";
 import { tuplePart, tupleVariant } from "./std-values.ts";
-import { ARRAY, NUMBER } from "./types.ts";
+import { ARRAY, NUMBER, type Type } from "./types.ts";
 import type { Info } from "./infer.ts";
 import { NotDifferentiable } from "./derive.ts";
 
@@ -58,6 +58,8 @@ const OPS: Record<Id, string> = {
   [DIVIDE]: "div",
 };
 const ARRAY_AT = "builtin.array.at", ARRAY_REPLACE_AT = "builtin.array.replaceAt", ARRAY_OF = "builtin.array.of", ARRAY_LENGTH = "builtin.array.length";
+// The primitive table's operations that every Number has.
+const GENERIC: Record<string, Id> = { add: ARITH.add, sub: ARITH.sub, mul: ARITH.mul, neg: ARITH.neg, div: DIVIDE, ...Object.fromEntries(["sin", "cos", "tan", "exp", "log"].map((f) => [f, (TRIG_OPS as Record<string, Id>)[f]])) };
 const lib = (name: string): Id => {
   const d = LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name);
   if (!d) throw new Error(`pullback.ts: no library definition named ${name}`);
@@ -91,7 +93,11 @@ interface Ctx {
 
 // `origin`: the definition a copy was made from (arith.ts copies generic
 // definitions per type, info.copyOf), so sum and map are known after it.
-export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id = (id) => id) {
+// `generic`: over an array of another Number than Float64 (Dual, for the
+// Hessian times a vector: forward over reverse), the slopes' arithmetic
+// the one + − · / and Trig's, which that number's own ways answer.
+// `still(id)`: whether a node's value can't move, known by its type.
+export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id = (id) => id, generic = false, still: (id: Id) => boolean = () => false) {
   // The definitions made (pullbacks of definitions that call themselves).
   const defs: Id[] = [];
   const is = (target: Id, name: string) => {
@@ -105,7 +111,9 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
   const binder = () => add({ kind: "binder" });
   const ref = (target: Id) => add({ kind: "ref", target });
   const call = (fn: Id, ...args: Id[]) => add({ kind: "call", fn: ref(fn), args });
-  const num = (v: number) => add({ kind: "lit", value: v, of: NUMBER });
+  const num = (v: number) => add(generic ? { kind: "lit", value: v } : { kind: "lit", value: v, of: NUMBER });
+  // An operation of the primitive table at the slopes' number.
+  const op = (name: string): Id => (generic ? GENERIC[name] ?? cant(`no ${name} for every Number`) : `builtin.${name}`);
   const letIn = (bs: Id[], vs: Id[], body: Id) => add({ kind: "call", fn: add({ kind: "lambda", params: bs, body }), args: vs });
   const thunk = (body: Id) => add({ kind: "lambda", params: [], body });
   const nm = (id: Id) => names[id] ?? id;
@@ -151,6 +159,7 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
   // Whether expression `id` moves with the input.
   function moves(id: Id, ctx: Ctx, seen = new Set<Id>()): boolean {
     const n = nodes[id];
+    if (still(id)) return false;
     if (n.kind === "ref") {
       if (ctx.moving.has(n.target)) return true;
       const l = ctx.lams.get(n.target);
@@ -186,17 +195,17 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
   // nothing else holds them it is in place.
   const addAt = (i: Id, s: Id) => (cur: () => Id): Id => {
     const v = binder();
-    return letIn([v], [itemOr0(cur, () => ref(i))], call(ARRAY_REPLACE_AT, cur(), ref(i), call("builtin.add", ref(v), ref(s))));
+    return letIn([v], [itemOr0(cur, () => ref(i))], call(ARRAY_REPLACE_AT, cur(), ref(i), call(op("add"), ref(v), ref(s))));
   };
   // Two arrays of slopes, added item by item.
   const addArrays = (cur: () => Id, more: () => Id): Id => {
     const j = binder();
-    return call(ARRAY_OF, call(lib("map"), call("builtin.int.range", call(ARRAY_LENGTH, cur())), add({ kind: "lambda", params: [j], body: call("builtin.add", itemOr0(cur, () => ref(j)), itemOr0(more, () => ref(j))) })));
+    return call(ARRAY_OF, call(lib("map"), call("builtin.int.range", call(ARRAY_LENGTH, cur())), add({ kind: "lambda", params: [j], body: call(op("add"), itemOr0(cur, () => ref(j)), itemOr0(more, () => ref(j))) })));
   };
   // A dense array's slopes as a seed.
   const denseSeed = (d: () => Id): Seed => ({ k: "a", dense: d, add: (cur) => addArrays(cur, d) });
   // One code for the sum of a Float64's slopes found.
-  const total = (parts: (() => Id)[]): Id => parts.slice(1).reduce((s, p) => call("builtin.add", s, p()), parts[0]());
+  const total = (parts: (() => Id)[]): Id => parts.slice(1).reduce((s, p) => call(op("add"), s, p()), parts[0]());
   // Slopes as one value, a tuple of them (tuples nest past 8), and taken
   // apart again.
   function tupled(vals: (() => Id)[]): Id {
@@ -535,12 +544,21 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     if (!prim) return cant(`no slope for ${name}`);
     const vals = args.map((a) => () => copy(a, ctx));
     const holes = args.map((_, i): SolverTree => ({ k: "var", name: `#${i}` }));
-    const tree = (t: SolverTree): Id => (t.k === "num" ? num(t.v!) : t.k === "var" ? vals[+t.name!.slice(1)]() : call(`builtin.${t.f}`, ...t.args!.map(tree)));
+    // x to a whole power (a quotient's slope has its bottom squared), as
+    // products where only the one + − · / are known.
+    const power = (t: SolverTree): Id | null => {
+      const [x, n] = t.args!;
+      if (!generic || n.k !== "num" || !Number.isInteger(n.v) || n.v! < 1 || n.v! > 4) return null;
+      let out = tree(x);
+      for (let i = 1; i < n.v!; i++) out = call(op("mul"), out, tree(x));
+      return out;
+    };
+    const tree = (t: SolverTree): Id => (t.k === "num" ? num(t.v!) : t.k === "var" ? vals[+t.name!.slice(1)]() : (t.f === "pow" && power(t)) || call(op(t.f!), ...t.args!.map(tree)));
     const going = args.map((a, i) => i).filter((i) => moves(args[i], ctx));
     const step = (j: number, acc2: Res): Id => {
       if (j === going.length) return k(acc2);
       const i = going[j];
-      return bound(() => call("builtin.mul", seed.at(), tree(prim.d[i](holes))), (at) => back(args[i], { k: "s", at }, ctx, acc2, (r) => step(j + 1, r)));
+      return bound(() => call(op("mul"), seed.at(), tree(prim.d[i](holes))), (at) => back(args[i], { k: "s", at }, ctx, acc2, (r) => step(j + 1, r)));
     };
     return step(0, acc);
   }
@@ -626,7 +644,7 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     const next = tupled(keys.map((key, i) => () => {
       const c = done.get(key);
       if (!c) return parts[i]();
-      return c.k === "s" ? call("builtin.add", parts[i](), total(c.parts)) : c.cur();
+      return c.k === "s" ? call(op("add"), parts[i](), total(c.parts)) : c.cur();
     }));
     nodes[finished] = { ...nodes[next], id: finished } as never;
     const first = tupled(keys.map((key) => () => {
@@ -695,13 +713,15 @@ export function arrayGradientLambda(code: Code, lambda: Id, origin?: (id: Id) =>
 // its value from the same run forward. Over a record or a Float64, value
 // and gradient(f) is written as (q) ↦ (f(q), gradient(f)(q)), whose
 // gradient forward mode makes later (over a Float64, derivative(f)).
-// `over(call)`: the type the checker gave that call's function's input.
-export function expandArrayGradients(code: Code, names: Names, over: (call: Id) => Id | null): { code: Code; names: Names; expanded: Id[] } {
-  const overArray = (call: Id) => over(call) === ARRAY;
+// `info`: the code's check, which says what each call is over.
+// `only`: the calls to make (all of them when not given).
+export function expandArrayGradients(code: Code, names: Names, info: Info, only?: (call: Id) => boolean): { code: Code; names: Names; expanded: Id[] } {
+  const over = (call: Id) => gradientOver(code, info, call);
+  const overArray = (call: Id) => over(call)?.of === ARRAY;
   const asked = (n: Node | undefined) => isCall(n) && n.args.length === 1 && code.nodes[n.fn]?.kind === "ref" ? (code.nodes[n.fn] as NodeOf<"ref">).target : null;
   const calls = nodeIds(code.nodes).filter((id) => {
     const n = code.nodes[id], t = asked(n);
-    if (t !== S.gradient && t !== S.valueAndGradient) return false;
+    if ((t !== S.gradient && t !== S.valueAndGradient) || (only && !only(id))) return false;
     const f = (n as Call).args[0];
     return t === S.valueAndGradient ? !!lambdaOf(code, f) || code.nodes[f]?.kind === "ref" : !!lambdaOf(code, f) && overArray(id);
   });
@@ -710,7 +730,8 @@ export function expandArrayGradients(code: Code, names: Names, over: (call: Id) 
   const outNames = { ...names };
   const expanded: Id[] = [];
   for (const id of calls) {
-    const pb = pullbacker(out, outNames);
+    const item = over(id)?.item, generic = !!item && item !== NUMBER;
+    const pb = pullbacker(out, outNames, undefined, generic, generic ? stillBesides(info, item) : undefined);
     const n = out.nodes[id] as Call, f = n.args[0], value = asked(n) === S.valueAndGradient;
     let lam: Id;
     if (value && !(lambdaOf(out, f) && overArray(id))) {
@@ -719,7 +740,7 @@ export function expandArrayGradients(code: Code, names: Names, over: (call: Id) 
       const add = (d: NodeData): Id => { const x = freshId(); out.nodes[x] = { id: x, ...d } as never; return x; };
       const fn = () => (out.nodes[f]?.kind === "lambda" ? pb.copied(f) : add({ kind: "ref", target: (out.nodes[f] as NodeOf<"ref">).target }));
       const q = add({ kind: "binder" }), at = () => add({ kind: "ref", target: q });
-      const grad = add({ kind: "call", fn: add({ kind: "call", fn: add({ kind: "ref", target: over(id) === NUMBER ? S.derivative : S.gradient }), args: [fn()] }), args: [at()] });
+      const grad = add({ kind: "call", fn: add({ kind: "call", fn: add({ kind: "ref", target: over(id)?.of === NUMBER ? S.derivative : S.gradient }), args: [fn()] }), args: [at()] });
       lam = add({ kind: "lambda", params: [q], body: add({ kind: "call", fn: add({ kind: "ref", target: tupleVariant(2) }), args: [add({ kind: "call", fn: fn(), args: [at()] }), grad] }) });
     } else {
       try { lam = pb.gradient(lambdaOf(out, f)!, value); } catch (e) { if (e instanceof NotDifferentiable) continue; throw e; }
@@ -731,6 +752,15 @@ export function expandArrayGradients(code: Code, names: Names, over: (call: Id) 
   return { code: out, names: outNames, expanded };
 }
 
+// Over another Number than Float64, a value of a type without it in it
+// can't move: none of that Number's operations makes one (a part of one
+// read out, as a dual number's value, is no slope's way: the hand-written
+// pass takes it as a constant too). A type left open isn't known to be one.
+function stillBesides(info: Info, item: Id): (id: Id) => boolean {
+  const without = (t: Type): boolean => t.t === "con" ? t.id !== item && t.args.every(without) : t.t === "fn" ? t.params.every(without) && without(t.ret) : false;
+  return (id) => { const t = info.typeOf.get(id); return !!t && without(info.subst.zonk(t)); };
+}
+
 // gradient's function, written right there or a definition's.
 function lambdaOf(code: Code, f: Id): Id | null {
   const n = code.nodes[f];
@@ -740,10 +770,12 @@ function lambdaOf(code: Code, f: Id): Id | null {
 }
 
 // The type the checker gave gradient call `call`'s function's input (an
-// Array, a record, Float64), by its id.
-export function gradientOver(code: Code, info: Info, call: Id): Id | null {
+// Array, a record, Float64), by its id, and an array's items'.
+export function gradientOver(code: Code, info: Info, call: Id): { of: Id; item: Id | null } | null {
   const f = (code.nodes[call] as Call | undefined)?.args?.[0];
   const t = f ? info.typeOf.get(f) : undefined;
   const z = t && info.subst.zonk(t);
-  return z?.t === "fn" && z.params.length === 1 && z.params[0].t === "con" ? z.params[0].id : null;
+  if (z?.t !== "fn" || z.params.length !== 1 || z.params[0].t !== "con") return null;
+  const p = z.params[0], item = p.id === ARRAY ? p.args[0] : undefined;
+  return { of: p.id, item: item?.t === "con" ? item.id : null };
 }
