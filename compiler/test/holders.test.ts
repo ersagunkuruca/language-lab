@@ -3,14 +3,16 @@
 // which main prints again after. Arrays of Float64 have two holders here,
 // so one-holder.ts, deciding by type, writes none of them in place; per
 // value, bump's replaces and fill's pushes are written in place, and
-// nudge's stay versions, so `b` prints as it was made.
+// nudge's stay versions, so `b` prints as it was made. On JavaScript and
+// on WebAssembly.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WASI } from "node:wasi";
 import { call } from "../../ters/mcp/server.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
@@ -45,4 +47,16 @@ test("a replace or push on an array nobody else holds is in place, per value", (
   assert.equal([...js.matchAll(/R2\.rt\("array\.replaceOwned\./g)].length, 1, "bump's replace, not nudge's");
   assert.equal([...js.matchAll(/R2\.rt\("array\.replaceAt\./g)].length, 1, "nudge's replace");
   assert.ok(js.includes('R2.rt("array.pushOwned.'), "fill's push");
+  // And on WebAssembly, its replaces in place counted as the arrays they
+  // make: nudge's three alone.
+  const wasm = join(mkdtempSync(join(tmpdir(), "holders-wasm-")), "p.wasm");
+  const wmade = spawnSync(process.execPath, [lab, "wasi", dir, "-o", wasm], { encoding: "utf8", env: { ...env, TERS_COUNT_VIEWS: "array\\.replace" } });
+  assert.equal(wmade.status, 0, wmade.stderr);
+  const io = mkdtempSync(join(tmpdir(), "holders-io-")), out2 = openSync(join(io, "out"), "w");
+  const wasi = new WASI({ version: "preview1", args: ["p"], stdout: out2, returnOnExit: true });
+  const inst = new WebAssembly.Instance(new WebAssembly.Module(readFileSync(wasm)), wasi.getImportObject() as WebAssembly.Imports);
+  wasi.start(inst);
+  closeSync(out2);
+  assert.equal(readFileSync(join(io, "out"), "utf8"), ev.stdout);
+  assert.equal(new DataView((inst.exports.memory as WebAssembly.Memory).buffer).getBigInt64(120, true), 3n);
 });

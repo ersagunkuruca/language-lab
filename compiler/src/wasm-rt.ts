@@ -6974,7 +6974,7 @@ export function byteSlots(f: RtFn): RtFn {
     // The buffer kept where its items were, and each item read from it.
     body = body.replace(/struct\.get \$arr 0\s*struct\.get \$buf 0([\s\S]*?)array\.get \$items/, `$1call $array.slot.a${a}`);
     uses.push(`array.slot.a${a}`);
-  } else if (["array.replaceAt", "array.replaceOwned", "array.pushFront", "array.push"].includes(base)) {
+  } else if (["array.replaceAt", "array.replaceOwned", "array.pushFront", "array.push", "array.pushOwned"].includes(base)) {
     body = `local.get $a\ncall $array.widen.a${a}\n${body}`;
     uses.push(`array.widen.a${a}`);
   } else if (base === "array.of") {
@@ -7924,6 +7924,14 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       struct.new $arr`,
   },
 };
+// A push onto an array nobody else holds (C327f, holders.ts): as push,
+// but its buffer isn't marked as having another view (field 3), since the
+// view given isn't read again; a later owned replace then writes in place.
+{
+  const mark = "\n        local.get $b\n        i32.const 1\n        struct.set $buf 3";
+  if (!ARRAYS["array.push"].body.includes(mark)) throw new Error("array.push: no mark to leave out");
+  ARRAYS["array.pushOwned"] = { ...ARRAYS["array.push"], body: ARRAYS["array.push"].body.replace(mark, "") };
+}
 // A shader's arrays (C66c) in WebAssembly: the same Array, its Int an i32
 // and no answer the flag $none, as in WGSL and js-scalar.ts. `of` is the
 // items written out, k of them (`array.of3.a0`).

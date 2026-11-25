@@ -643,3 +643,28 @@ Same output each way. Of the other 20 benchmarks in compiler/gaps, only
 typeset's code changes (one more replace in place). Not done here: C and
 WebAssembly still decide by type, and the owned-* passes stay (C327f's
 rest).
+
+## C327f on WebAssembly (2026-11-25)
+
+The same holders.ts on WebAssembly's lowering (`ters wasi`), after
+owned-arrays.ts: its replaces are `array.replaceOwned`, which already
+wrote in place unless another view shares the buffer, and its pushes
+`array.pushOwned`, a push that doesn't mark its buffer as having another
+view (wasm-rt.ts; wasm-views.ts takes it as a push, by value too).
+
+Arrays the replaces make (`TERS_COUNT_VIEWS=array\.replace`), mnist at
+300 digits, one epoch:
+
+| run | before | after | time before | after |
+|---|---|---|---|---|
+| reverse | 7,738,331 | 6,431 | 8.8 to 9.9 s | 8.3 to 8.4 s |
+| adam | 0 | 0 | 7.0 to 8.3 s | the same |
+
+Same output. The time hardly moves: four fifths of it is the collector,
+and what it collects is the records and closures the reverse pass makes
+(tuples of arrays, Duals, closures), not arrays: C327g's ground. C makes
+nothing here to remove, since a replace there writes in place whenever
+its count is 1.
+
+Node segfaulted on about one run in three of mnist's adam and reverse on
+WebAssembly, before this change as after (C344).
