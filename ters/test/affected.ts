@@ -48,7 +48,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { availableParallelism } from "node:os";
-import { limitFor, printMap, readMap, recordOne, type TestMap } from "./test-map.ts";
+import { fullLimitFor, limitFor, printMap, readMap, recordOne, type TestMap } from "./test-map.ts";
 import { changeFrom, cover, haveCommit, reached, reachedTests, type Change } from "./select.ts";
 import { intervalDays, isDue, streakAfter } from "./schedule.ts";
 import { bisect } from "./bisect.ts";
@@ -299,7 +299,11 @@ if (recordTo) {
     const t = todo.shift();
     if (!t) return;
     const prev = before?.tests[t];
-    const { entry, output } = await recordOne(top, t, at, env, !(t in bundles), limitFor(prev?.seconds));
+    // Under a full sweep, from the file's last full run (the nightly-times'
+    // before one), not its last run's slice.
+    const full = env.SWEEP === "all", lastFull = prev?.full ?? times[t];
+    const { entry, output } = await recordOne(top, t, at, env, !(t in bundles), full ? fullLimitFor(lastFull) : limitFor(prev?.seconds));
+    if (entry.full === undefined && prev?.full !== undefined) entry.full = prev.full;
     const edited = !!prev && prev.at !== at && (!haveCommit(top, prev.at) || git("diff", "--name-only", prev.at, at, "--", t) !== "");
     entry.streak = streakAfter(prev, entry.passed, edited);
     parts.tests[t] = entry;

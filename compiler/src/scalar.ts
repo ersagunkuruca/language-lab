@@ -87,6 +87,7 @@ import { FLOAT32_TYPE, LIBRARY } from "../../ters/src/lang/library.ts";
 import { SITES, STOPS } from "./stops.ts";
 import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
+import { expandArrayGradients } from "../../ters/src/lang/pullback.ts";
 import { carriedDerivatives } from "./carried-derivatives.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { bakeCalls } from "./bake.ts";
@@ -868,6 +869,21 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // ray marcher's scene moved by a PGA motor; read before, its derivative
     // would be the clifford functions' generic folds again), and what the
     // derivatives made is staged in turn.
+    // A gradient over an array or a record of a function written there,
+    // first as one pass back (pullback.ts, L285), as the chooser's program
+    // has it made (represented.ts): forward mode can't follow a recursive
+    // loss (housefit's misfit), which the evaluator's would then refuse.
+    const back = expandArrayGradients(code, names, info);
+    if (back.expanded.length) {
+      const checked = infer(back.code, back.names, undefined, recheck);
+      if (checked.errors.length <= info.errors.length) {
+        ({ code, names } = back);
+        info = checked;
+        const again = stageProgram(code, info, names, roots);
+        ({ code, names, info } = again);
+        st.rounded.push(...again.rounded);
+      }
+    }
     const later = expandDerivatives(code, names, (call) => {
       const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as Call).args[0]) ?? { t: "var", v: -1 });
       return f.t === "fn" && f.params[0]?.t === "con" ? recordVariant(code, f.params[0].id) : null;

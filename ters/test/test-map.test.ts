@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fromRanges, limitFor, recordOne, toRanges } from "./test-map.ts";
+import { fromRanges, fullLimitFor, limitFor, recordOne, toRanges } from "./test-map.ts";
 
 test("ranges read back as the lines written", () => {
   assert.equal(toRanges([7, 1, 2, 3, 9, 10]), "1-3,7,9-10");
@@ -93,4 +93,14 @@ test("a file's time limit is 480 s, or twice its last time up to 720 s", () => {
   assert.equal(limitFor(30), 480);
   assert.equal(limitFor(293.3), 587);
   assert.equal(limitFor(480), 720);
+});
+
+// With every sweep in full (I368): twice the file's last full run, up to
+// 40 minutes, since a run after a merge checks a slice of the sweep only
+// (core-js.test 1450 s in full, under 100 s as a slice).
+test("under a full sweep a file's limit is twice its last full run, up to 40 minutes", () => {
+  assert.equal(fullLimitFor(undefined), 480);
+  assert.equal(fullLimitFor(100), 480);
+  assert.equal(fullLimitFor(700), 1400);
+  assert.equal(fullLimitFor(1449.9), 2400);
 });
