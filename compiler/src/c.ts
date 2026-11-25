@@ -61,7 +61,7 @@ import { BASE, C_TAKEN, cName, POSIX, reservedNames, RT_C, runtimeC, WORLD_H, ty
 // The `lab_` names c.ts's own runtime text defines (the thread pool, the
 // shared counts, stops, fdlibm's maths), kept from a program's definitions
 // (I214). c-rt.ts's are found in its text (reservedNames).
-export const C_RUNTIME = ["_hd", "_hd_cap", "_hd_n", "_held", "_hold", "_holds", "_hs", "_hs_cap", "_hs_n", "_hseen", "_int_hold", "mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "dclosure", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_always", "par_items", "par_runs", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
+export const C_RUNTIME = ["_hd", "_hd_cap", "_hd_n", "_held", "_hold", "_holds", "_hs", "_hs_cap", "_hs_n", "_hseen", "_int_hold", "mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "dclosure", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_always", "par_items", "par_runs", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stack", "stack_below", "stack_copy", "stack_done", "stack_new", "stack_push", "stack_spare", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
 // The prefixes this file puts a number after (lab_m3), or with true any
 // name (lab_print_ and a type's), which a program's own names must not
 // start with either (c-names.test.ts checks both lists against this file).
@@ -147,6 +147,50 @@ const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.st
 // With threads (L101, `par:map`), each thread has its own status, cells
 // and free lists (TL), and a cell another thread may hold too has the top
 // bit of its count set (lab_share) and its count changed atomically.
+// A fold's stack (C327d): pushed in place while one holds it, otherwise
+// first copied, as a cell is. Its first values in its own cell (88 bytes,
+// from the free lists): most folds go no deeper than eight.
+const stackC = (TL: string) => `#define LAB_STACK_IN 8
+typedef struct { lab_cell h; uint32_t n, cap; lab_cell **it; lab_cell *in[LAB_STACK_IN]; } lab_stack;
+// A stack with room for its first LAB_STACK_IN values in its own cell,
+// then malloc's.
+static lab_stack *lab_stack_new(uint32_t n, uint16_t type) {
+  lab_stack *s = lab_new(sizeof(lab_stack), type, 0);
+  s->n = 0; s->cap = LAB_STACK_IN; s->it = s->in;
+  if (n > LAB_STACK_IN) { s->cap = n; s->it = malloc(n * sizeof *s->it); if (!s->it) lab_oom(); }
+  return s;
+}
+static lab_cell *lab_stack_copy(lab_cell *c, uint32_t n, uint32_t room, uint16_t type) {
+  lab_stack *o = (lab_stack *)c, *s = lab_stack_new(n + room, type);
+  for (uint32_t k = 0; k < n; k++) s->it[k] = lab_dup(o->it[k]);
+  s->n = n; s->h.tag = n != 0;
+  return (lab_cell *)s;
+}
+static lab_cell *lab_stack_below(lab_cell *c, uint16_t type) { return lab_stack_copy(c, c->tag ? ((lab_stack *)c)->n - 1 : 0, 0, type); }
+// The last stack emptied, kept for the next fold (most folds are shallow:
+// scan's average under two values), so a fold makes no cell at all; not
+// counted live while it waits.
+static ${TL}lab_stack *lab_stack_spare = 0;
+static void lab_stack_done(lab_cell *c) {
+  if (c->rc == 1 && !c->tag && !lab_stack_spare) { lab_stack_spare = (lab_stack *)c; lab_live--; }
+  else lab_drop(c);
+}
+static lab_cell *lab_stack_push(lab_cell *c, lab_cell *x, uint16_t type) {
+  lab_stack *s;
+  if (c->rc == 1) s = (lab_stack *)c;
+  else if (!c->rc && lab_stack_spare) { s = lab_stack_spare; lab_stack_spare = 0; s->h.type = type; lab_live++; }
+  else { s = (lab_stack *)lab_stack_copy(c, c->tag ? ((lab_stack *)c)->n : 0, 1, type); lab_drop(c); }
+  if (s->n == s->cap) {
+    lab_cell **g = malloc(2 * s->cap * sizeof *g);
+    if (!g) lab_oom();
+    for (uint32_t k = 0; k < s->n; k++) g[k] = s->it[k];
+    if (s->it != s->in) free(s->it);
+    s->it = g; s->cap *= 2;
+  }
+  s->it[s->n++] = x; s->h.tag = 1;
+  return (lab_cell *)s;
+}`;
+
 const cellsC = (threads: boolean) => {
   const TL = threads ? "_Thread_local " : "";
   return `typedef struct lab_cell { uint32_t rc; uint16_t type; uint8_t tag, size; } lab_cell;
@@ -897,6 +941,19 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // Whether a value of t is a cell, or holds counts (an Int may be a cell).
   const cell = (t: LType) => t === "text" || isData(t) || isFn(t) || isTable(t) || (isRecord(t) && !!t.mutable);
   const counted = (t: LType): boolean => cell(t) || t === "int" || isArray(t) || (isRecord(t) && t.fields.some((x) => counted(x.t)));
+  // A fold's stack (scalar.ts framesOf, C327d): the values its loop down
+  // passed, which only that loop and its loop up see, each using it once.
+  // One growable stack a run, not a cell a value (ALLOCATIONS-2026-11-24.md:
+  // every fold frame is freed in its frame, 11% to 16% of the cells most
+  // benchmarks make): pushed on the way down, popped on the way up, its
+  // tag 1 while it holds any. Not where a function giving several answers
+  // takes it, whose later answers go on from the same stack again (as
+  // core-js.ts's stacks).
+  const noStacks = typeof process !== "undefined" && !!process.env.NO_FOLD_STACKS;
+  const several = new Set<string>();
+  const framesIn = (e: SExpr) => { const t = (e as { t?: LType }).t; if (t && isData(t) && t.inner && t.key.endsWith(".frames")) several.add(t.key); kids(e).forEach(framesIn); };
+  for (const g of funcs) if (g.multi) framesIn(g.body);
+  const stackOf = (t: LType): boolean => isData(t) && !!t.inner && t.key.endsWith(".frames") && t.cases.length === 2 && !t.cases[0].fields.length && t.cases[1].fields.length === 2 && t.cases[1].fields[1].t === t && cell(t.cases[1].fields[0].t) && !several.has(t.key) && !noStacks;
   const dup = (t: LType, x: string) => (cell(t) ? `lab_dup(${x})` : t === "int" ? `lab_int_dup(${x})` : (isRecord(t) || isArray(t)) && counted(t) ? `${sn(t)}_dup(${x})` : x);
   // A local that may hold its value without a count (an item read lent,
   // C265), with the flag set when it holds a count after all.
@@ -1225,6 +1282,10 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const fieldsOf: string[] = [], sharesOf: string[] = [], holdsOf: string[] = [];
   const kidsOf = (out: string[], each: (t: LType, x: string) => string) => {
     for (const d of data.values()) {
+      if (stackOf(d)) {
+        out.push(`case ${tnum.get(d.key)}: { lab_stack *s = (lab_stack *)c; for (uint32_t k = 0; k < s->n; k++) ${each(d.cases[1].fields[0].t, "s->it[k]")}${out === fieldsOf ? " if (s->it != s->in) free(s->it);" : ""} } break;`);
+        continue;
+      }
       const arms = d.cases.map((c, j) => {
         const ks = c.fields.map((x, k) => ({ t: x.t, at: `((${cname(d, j)} *)c)->f${k}` })).filter((x) => counted(x.t));
         return ks.length ? `case ${j}: ${ks.map((x) => each(x.t, x.at)).join(" ")} break;` : "";
@@ -1295,6 +1356,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...(threads ? [SHARE_C] : []),
     "",
     ...types,
+    ...([...data.values()].some(stackOf) ? [stackC(TL)] : []),
     ...counts,
     ...(opts.page ? [READS_C] : []),
     ...(cells ? [`static void lab_fields(lab_cell *c) { switch (c->type) { ${fieldsOf.filter(Boolean).join(" ")} default: break; } }`] : []),
@@ -2239,6 +2301,12 @@ int main(int argc, char **argv) {
     const aliased = (e: SExpr & { k: "let" }): string | null => {
       if (!aliases.has(e.i)) return null;
       const v = e.value;
+      if (v.k === "field" && v.rec.k === "local" && !isCounted(v.rec.i) && stackOf(v.t)) {
+        // A lent fold's stack: its top read as it is; the rest below it
+        // can't be lent (a copy of its own).
+        if (v.i === 0) return `((lab_stack *)${local(v.rec.i)})->it[((lab_stack *)${local(v.rec.i)})->n - 1]`;
+        throw new Error(`C: a lent fold's stack read below its top into a local (${f.name})`);
+      }
       if (v.k === "field" && v.rec.k === "local" && !isCounted(v.rec.i)) return `((${cname(v.t, v.c)} *)${local(v.rec.i)})->f${v.i}`;
       if (v.k === "get" && !v.t.mutable && v.rec.k === "local" && !isCounted(v.rec.i)) return `${local(v.rec.i)}.f${v.i}`;
       return null;
@@ -2369,8 +2437,10 @@ int main(int argc, char **argv) {
     }
     // A field of rec (data, a record or a box): rec is borrowed, the field
     // dup'd, and rec dropped if this was its last use.
-    function borrow(rec: SExpr, t: LType, at: (r: string) => string, pre: string[], d: string, after: Set<number>): string {
-      const read = (r: string) => { const v = at(r); return counted(t) ? dup(t, v) : v; };
+    // `made`: at gives a value of its own, not dup'd (a fold's stack below
+    // its top, a copy).
+    function borrow(rec: SExpr, t: LType, at: (r: string) => string, pre: string[], d: string, after: Set<number>, made = false): string {
+      const read = (r: string) => { const v = at(r); return counted(t) && !made ? dup(t, v) : v; };
       if (rec.k === "local") {
         if (!isCounted(rec.i) || after.has(rec.i)) return read(local(rec.i));
         const v = temp(t);
@@ -2825,6 +2895,7 @@ int main(int argc, char **argv) {
           const c = e.t.cases[e.c];
           if (!c.fields.length) return `(&${cname(e.t, e.c)})`;
           const xs = args(e.args, pre, d, after);
+          if (stackOf(e.t)) return `lab_stack_push(${xs[1]}, ${xs[0]}, ${tnum.get(e.t.key)})`;
           const v = temp(e.t), n = cname(e.t, e.c);
           const r = tokens.findLast((x) => x.alive && x.fields === layout(c.fields));
           const made = `${v} = lab_new(sizeof(${n}), ${tnum.get(e.t.key)}, ${e.c});`;
@@ -2843,7 +2914,15 @@ int main(int argc, char **argv) {
           }
           return v;
         }
-        case "field": return borrow(e.rec, e.t.cases[e.c].fields[e.i].t, (r) => `((${cname(e.t, e.c)} *)${r})->f${e.i}`, pre, d, after);
+        case "field": {
+          if (stackOf(e.t)) {
+            // Outside an arm that takes it apart (a copy reading its stack
+            // lent): the top, or a copy of the rest.
+            if (e.i === 1) return borrow(e.rec, e.t, (r) => `lab_stack_below(${r}, ${tnum.get(e.t.key)})`, pre, d, after, true);
+            return borrow(e.rec, e.t.cases[e.c].fields[0].t, (r) => `((lab_stack *)${r})->it[((lab_stack *)${r})->n - 1]`, pre, d, after);
+          }
+          return borrow(e.rec, e.t.cases[e.c].fields[e.i].t, (r) => `((${cname(e.t, e.c)} *)${r})->f${e.i}`, pre, d, after);
+        }
         case "tag": return borrow(e.rec, "i32", (r) => `(int32_t)${r}->tag`, pre, d, after);
         case "call": {
           const ps = lent.get(e.fn);
@@ -2979,6 +3058,25 @@ int main(int argc, char **argv) {
       }
       if (!reads.length || free(body).has(s) || new Set(reads.map((r) => r.f)).size < reads.length) return null;
       const used = union(free(body), after);
+      if (stackOf(t)) {
+        // A fold's stack: its top popped, the stack itself the rest (no
+        // cell freed, so none to give away); shared, a copy without it.
+        const vt = t.cases[c].fields[0].t, at = `((lab_stack *)${local(s)})`;
+        const top = reads.find((r) => r.f === 0), below = reads.find((r) => r.f === 1);
+        const keepTop = top && used.has(top.i), keepBelow = below && used.has(below.i);
+        return [
+          `${d}if (${local(s)}->rc == 1) {`,
+          keepTop ? `${d}  ${local(top!.i)} = ${at}->it[--${at}->n];` : `${d}  ${drop(vt, `${at}->it[--${at}->n]`)}`,
+          `${d}  ${local(s)}->tag = ${at}->n != 0;`,
+          keepBelow ? `${d}  ${local(below!.i)} = ${local(s)};` : `${d}  lab_drop(${local(s)});`,
+          `${d}} else {`,
+          ...(keepTop ? [`${d}  ${local(top!.i)} = ${dup(vt, `${at}->it[${at}->n - 1]`)};`] : []),
+          ...(keepBelow ? [`${d}  ${local(below!.i)} = lab_stack_below(${local(s)}, ${tnum.get(t.key)});`] : []),
+          `${d}  lab_drop(${local(s)});`,
+          `${d}}`,
+          ...rest(body),
+        ];
+      }
       const n = cname(t, c), fields = t.cases[c].fields;
       const at = (k: number) => `((${n} *)${local(s)})->f${k}`;
       const kept = reads.filter((r) => used.has(r.i) || !counted(f.locals[r.i]));
@@ -3057,7 +3155,9 @@ int main(int argc, char **argv) {
           return (isCounted(e.s) && !after.has(e.s) ? takeApart(a, e.s, e.t, j, after, d + "  ", go) : null) ?? go(a);
         }), d + "  ");
         js.forEach((j, k) => {
-          pre.push(`${d}case ${j}: { // ${e.t.cases[j].name}`, ...drops(inLive, arms[j], after, d + "  "), ...bodies[k], ...(to === "return" ? [] : [`${d}  break;`]), `${d}}`);
+          // A fold's stack done with goes back to be the next fold's.
+          const gone = drops(inLive, arms[j], after, d + "  ").map((x) => (stackOf(e.t) && j === 0 && x.trim() === `lab_drop(${local(e.s)});` ? x.replace("lab_drop(", "lab_stack_done(") : x));
+          pre.push(`${d}case ${j}: { // ${e.t.cases[j].name}`, ...gone, ...bodies[k], ...(to === "return" ? [] : [`${d}  break;`]), `${d}}`);
         });
         pre.push(`${d}default: abort();`, `${d}}`);
         return pre;

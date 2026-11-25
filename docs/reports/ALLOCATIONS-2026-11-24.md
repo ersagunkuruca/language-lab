@@ -465,6 +465,23 @@ frames as one stack) are open again, judged by the cells and structs a
 run makes as well as its time, and C327b (the analysis) no longer waits
 for a reader that buys 10% of V8's time.
 
+### C327d on C, built (2026-11-25)
+
+`compiler/src/c.ts` keeps a fold's frames (scalar.ts framesOf) on one
+growable stack: a cell holding up to eight values itself, then a
+malloc'd array, pushed in place while one holds it and popped as the
+arm takes it apart; the last stack emptied waits for the next fold, so
+a shallow fold makes no cell. Cells made at the sizes of the table
+above, one thread (`kinds.py`), and the best of five times:
+
+| program | cells before | after | time before | after |
+|---|---|---|---|---|
+| bazaar 10,000 | 1.13 M | 0.95 M: **-16%** | 26 ms | 25 ms |
+| strings 8 | 66.9 M | 57.3 M: **-14%** | 580 ms | 566 ms |
+| pack 3,200 | 418 k | 365 k: **-13%** | 15 ms | 15 ms |
+| scan 800 | 19.7 M | 17.6 M: **-11%** | 490 ms | 483 ms |
+| mini 2,000 | 5.26 M | 5.19 M: -1% | 80 ms | 78 ms |
+
 ## How this was measured
 
 On this container (4 cores), gcc 13 at `ters native`'s flags. Cells by
