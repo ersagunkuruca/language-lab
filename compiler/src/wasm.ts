@@ -592,9 +592,16 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // case, a closure) counts what it makes in an exported i64 global,
   // `made.<k>`, the module's `made` naming each (C327g: structs made, not
   // time; compiler/gaps/made.ts reads them).
+  // A case with no fields (an empty list, `none`, a deep loop's `done`)
+  // is one struct made once, in a global, as a fold stack's `done` is
+  // (C327g): nothing can tell two apart, nothing writes them.
+  const noNils = typeof process !== "undefined" && !!process.env.NO_NIL_GLOBALS;
+  const nils: { t: DType; c: number }[] = [], nilAt = new Map<string, number>();
+  const nilKey = (e: SExpr): string | null => (e.k === "new" && !e.args.length && !stackOf(e.t) && !noNils ? `${e.t.key}\u0000${e.c}` : null);
+  for (const f of funcs) (function walk(e: SExpr) { const k = nilKey(e); if (k !== null && !nilAt.has(k)) { nilAt.set(k, nils.length); nils.push({ t: (e as { t: DType }).t, c: (e as { c: number }).c }); } kids(e).forEach(walk); })(f.body);
   const counting = typeof process !== "undefined" && !!process.env.TERS_COUNT_MAKES;
   const made: string[] = [], madeAt = new Map<string, number>();
-  const site = (e: SExpr, f: SFunc): string | null => e.k === "make" ? `make ${e.t.name ?? e.t.key} in ${f.name}` : e.k === "new" && !stackOf(e.t) ? `new ${e.t.name ?? e.t.key}.${e.c} in ${f.name}` : e.k === "closure" ? `closure ${funcs[e.fn].name} in ${f.name}` : null;
+  const site = (e: SExpr, f: SFunc): string | null => e.k === "make" ? `make ${e.t.name ?? e.t.key} in ${f.name}` : e.k === "new" && !stackOf(e.t) && nilKey(e) === null ? `new ${e.t.name ?? e.t.key}.${e.c} in ${f.name}` : e.k === "closure" ? `closure ${funcs[e.fn].name} in ${f.name}` : null;
   if (counting) for (const f of funcs) (function walk(e: SExpr) { const k = site(e, f); if (k !== null && !madeAt.has(k)) { madeAt.set(k, made.length); made.push(k); } kids(e).forEach(walk); })(f.body);
   const fstack = (op: "push" | "top" | "pop", t: DType) => `fstack.${op}.${lowered.data.findIndex((x) => x.key === t.key)}`;
   const rtCalls = (e: SExpr): void => {
@@ -1036,8 +1043,9 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...[...kept.keys()].map((i) => { const t = funcs[i].result as MType; return [...typeOf(t), 0x01, 0xd0, ...s(t === "text" ? textIndex : refIndex(t as RType)), 0x0b]; }),
     ...(stack ? [[0x64, ...s(hstackIndex), 0x00, 0x41, ...s(SLOTS), 0xfb, 0x07, ...u(hstackIndex), 0x0b], [0x7f, 0x01, 0x41, 0x00, 0x0b]] : []),
     ...stacks.flatMap((d) => { const k = caseIndex(d, 1), z = caseIndex(d, 0); return [[0x63, ...s(k), 0x01, 0xd0, ...s(k), 0x0b], [0x64, ...s(z), 0x00, 0x41, 0x00, 0xfb, 0x00, ...u(z), 0x0b]]; }),
+    ...nils.map(({ t, c }) => { const k = caseIndex(t, c); return [0x64, ...s(k), 0x00, 0x41, ...s(c), 0xfb, 0x00, ...u(k), 0x0b]; }),
   ];
-  const madeBase = globalsBefore.length;
+  const madeBase = globalsBefore.length, nilBase = madeBase - nils.length;
   const globalSec = vec([...globalsBefore, ...made.map(() => [0x7e, 0x01, 0x42, 0x00, 0x0b])]);
   // A made struct counted: made.<k> += 1, the struct left on the stack.
   const count = (e: SExpr, f: SFunc): number[] => { const k = counting ? madeAt.get(site(e, f) ?? "") : undefined; if (k === undefined) return []; const g = u(madeBase + k); return [0x23, ...g, 0x42, 0x01, 0x7c, 0x24, ...g]; };
@@ -1177,6 +1185,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "get": return [...code1(e.rec), 0xfb, 0x02, ...u(recIndex.get(e.t.key)!), ...u(e.i), ...(isFloat32(e.t) ? [0xbb] : [])];
       case "new":
         if (stackOf(e.t)) return e.c === 0 ? [0x23, ...u(stackGlobals + 2 * stacks.findIndex((x) => x.key === e.t.key) + 1)] : [...e.args.flatMap(code1), 0x10, ...u(rtIndex(fstack("push", e.t)))];
+        { const nk = nilKey(e); const ni = nk === null ? undefined : nilAt.get(nk); if (ni !== undefined) return [0x23, ...u(nilBase + ni)]; }
         return [0x41, ...s(e.c), ...e.args.flatMap(code1), 0xfb, 0x00, ...u(caseIndex(e.t, e.c)), ...count(e, f)];
       // The items in order on the stack, then from the last: each into
       // `item`, made into a cons onto `acc` (L181b).
@@ -1312,7 +1321,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
     // WASI's memory, with the math functions' page when they're used.
     ...(wasi ? section(5, vec([[0x00, math ? 0x02 : 0x01]])) : []),
-    ...(fuel || aborts || ryu || math || escapes || flags || rand || kept.size || stack || stacks.length || made.length ? section(6, globalSec) : []), ...section(7, exportSecOf()),
+    ...(fuel || aborts || ryu || math || escapes || flags || rand || kept.size || stack || stacks.length || nils.length || made.length ? section(6, globalSec) : []), ...section(7, exportSecOf()),
     // ref.func needs the functions declared: one declarative segment.
     ...(declared.length ? section(9, vec([[0x03, 0x00, ...vec(declared.map((i) => u(fnIndex(i))))]])) : []),
     ...section(10, codeSec),
@@ -1372,6 +1381,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "get": return `${w(e.rec)}\n${d}struct.get ${recName(e.t)} ${e.i}${isFloat32(e.t) ? `\n${d}f64.promote_f32` : ""}`;
       case "new":
         if (stackOf(e.t)) return e.c === 0 ? `${d}global.get $done${stacks.findIndex((x) => x.key === e.t.key)}` : [...e.args.map(w), `${d}call $${fstack("push", e.t)}`].join("\n");
+        { const nk = nilKey(e); const ni = nk === null ? undefined : nilAt.get(nk); if (ni !== undefined) return `${d}global.get $nil${ni}`; }
         return [`${d}i32.const ${e.c}`, ...e.args.map(w), `${d}struct.new ${sname(caseIndex(e.t, e.c))}`].join("\n");
       case "list": {
         const [nil, cons] = listSteps(e);
@@ -1489,6 +1499,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...[...kept.keys()].map((i) => `  (global $kept${i} (mut ${ty(funcs[i].result as MType)}) (${zeroText(funcs[i].result as MType)}))`),
     ...(stack ? [`  (global $hs (ref $hstack) (array.new_default $hstack (i32.const ${SLOTS})))`, "  (global $hn (mut i32) (i32.const 0))"] : []),
     ...stacks.flatMap((d, j) => { const k = sname(caseIndex(d, 1)), z = sname(caseIndex(d, 0)); return [`  (global $spare${j} (mut (ref null ${k})) (ref.null ${k}))`, `  (global $done${j} (ref ${z}) (struct.new ${z} (i32.const 0)))`]; }),
+    ...nils.map(({ t, c }, j) => { const k = sname(caseIndex(t, c)); return `  (global $nil${j} (ref ${k}) (struct.new ${k} (i32.const ${c})))`; }),
     ...(declared.length ? [`  (elem declare func${declared.map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");
