@@ -177,6 +177,12 @@ of text; they were these cells logging every finished row).
     it stops when a batch doesn't. A flat profile, many parts each under
     10%, is not a stop by itself (stage 4: machine's recompile 820 to 450
     ms in seven PRs, five of them under 10%).
+  - **A round that stops "spread thin" names its cause** (Ersagun
+    2026-11-25). A performance round or row that stops above 3x the ideal
+    because no single pass buys 10% writes a row for what the leftover is
+    made of (a representation, a kind of check, the collector on lists
+    made between steps), never "no row". If such a row already exists,
+    the stop adds its program to that row's examples.
 - The PR body says which item: `Backlog: E3`. The same PR moves the row to
   the table of the lane that did it in [DONE.md](DONE.md) (its own table,
   at the top, whatever the row's letter, so two lanes never edit the same
