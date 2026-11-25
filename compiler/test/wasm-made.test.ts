@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { made } from "../gaps/made.ts";
 
-const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), folder = join(import.meta.dirname, "../gaps/strings");
+const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), gaps = join(import.meta.dirname, "../gaps"), folder = join(gaps, "strings");
 
 test("strings on WebAssembly makes no pair for a zipped fold's step, and prints the same", () => {
   const dir = mkdtempSync(join(tmpdir(), "wasm-made-"));
@@ -30,5 +30,25 @@ test("strings on WebAssembly makes no pair for a zipped fold's step, and prints 
   const pairs = (r: typeof on) => r.places.filter(([n]) => /^make Tuple2 in difference at Float64\.fold\.zipped/.test(n)).reduce((n, [, c]) => n + c, 0);
   assert.ok(pairs(off) > 0, "without chosen-parts the pairs are made");
   assert.equal(pairs(on), 0, "the pairs read by their parts aren't made");
+  assert.ok(on.total < off.total * 0.8, `${on.total} structs, ${off.total} before`);
+});
+
+// A case with no fields (pack's Order.0 and Order.2, an empty list) is one
+// struct in a global: the run makes none of them, and prints the same.
+test("pack on WebAssembly makes a field-less case once, not per use", () => {
+  const dir = mkdtempSync(join(tmpdir(), "wasm-nil-"));
+  const build = (out: string, env: Record<string, string>) => {
+    const r = spawnSync(process.execPath, [lab, "wasi", join(gaps, "pack"), "-o", join(dir, out)], { encoding: "utf8", env: { ...process.env, TERS_COUNT_MAKES: "1", ...env } });
+    assert.equal(r.status, 0, r.stderr);
+    return join(dir, out);
+  };
+  const run = (wasm: string, out: string) => { const fd = openSync(join(dir, out), "w"); try { return made(wasm, ["400"], dir, fd); } finally { closeSync(fd); } };
+  const off = run(build("off.wasm", { NO_NIL_GLOBALS: "1" }), "off.txt"), on = run(build("on.wasm", {}), "on.txt");
+  assert.equal(readFileSync(join(dir, "on.txt"), "utf8"), readFileSync(join(dir, "off.txt"), "utf8"));
+  assert.ok(readFileSync(join(dir, "on.txt"), "utf8").length > 0);
+  assert.equal(on.code, 0);
+  const orders = (r: typeof on) => r.places.filter(([n]) => /^new Order\.[02] /.test(n)).reduce((n, [, c]) => n + c, 0);
+  assert.ok(orders(off) > 0, "without the globals the field-less orders are made");
+  assert.equal(orders(on), 0);
   assert.ok(on.total < off.total * 0.8, `${on.total} structs, ${off.total} before`);
 });

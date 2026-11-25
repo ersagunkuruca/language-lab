@@ -714,3 +714,27 @@ FFT items in `difference at`'s zipped fold.
 The other six benchmarks make the same structs. All eight print the same.
 Left: the `$down` frames (several fields, a case a call site) as one stack,
 on C and on WebAssembly.
+
+## C327g part 2a, a case with no fields made once on WebAssembly (2026-11-25)
+
+A case with no fields (an empty list, `none`, an order's `less` and
+`greater`, a frame's `done`) was a struct made at each use. Nothing can
+tell two of them apart and nothing writes them, so each such case is now
+one struct in an immutable global, as a fold stack's `done` already was.
+`NO_NIL_GLOBALS=1` turns it off.
+
+| program | structs before | after |
+|---|---|---|
+| scan 3,200 | 141.8 M | 81.7 M (−42%) |
+| mini 8,000 | 12.36 M | 9.87 M (−20%) |
+| bazaar 200,000 | 22.26 M | 15.02 M (−33%) |
+| pack 3,200 | 602 k | 388 k (−36%) |
+| strings 8 | 93.5 M | 86.6 M (−7%) |
+| typeset 1,000 at 300 | 10.46 M | 10.08 M (−4%) |
+| flock 100 × 5,000 | 233.8 M | 166.8 M (−29%) |
+| mnist reverse 300 | 844 k | 767 k (−9%) |
+
+All eight print the same. Times, five runs each: scan 3,200 2.21 to 2.32 s
+before, 2.12 to 2.20 s after; bazaar 200,000 1.18 to 1.45 s both; strings
+32 4.61 to 5.27 s, 4.60 to 4.87 s; flock 100 × 5,000 5.34 to 5.79 s,
+4.90 to 5.90 s.
