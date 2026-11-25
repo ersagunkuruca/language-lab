@@ -164,6 +164,12 @@ of text; they were these cells logging every finished row).
   of what it targets. Speed work stops when the next stage buys less (the
   10-hour run of 2026-11-04/05 spent about three hours in two lanes on
   speed ideas that gained 4% or less).
+  - **What an idea targets is a kind of cost, not one site** (Ersagun
+    2026-11-25, TEN-PERCENT-RULE-2026-11-25.md). Measure it as the kind it
+    is (every unneeded finite check, every versioned read, every pair made
+    per item) over every benchmark and target it touches, not at one site
+    of one benchmark. It passes at 10% on one benchmark, or at about 3%
+    geometric mean over the benchmarks it touches.
 - The PR body says which item: `Backlog: E3`. The same PR moves the row to
   the table of the lane that did it in [DONE.md](DONE.md) (its own table,
   at the top, whatever the row's letter, so two lanes never edit the same
