@@ -1347,6 +1347,14 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     "#include <stdio.h>",
     "#include <stdlib.h>",
     "#include <math.h>",
+    // What's written inline is put in place (C333): gcc and clang left
+    // small reads (an array's item, a leaf) as calls in mnist's hottest
+    // loops otherwise.
+    "#if defined(__GNUC__)",
+    "#define LAB_INLINE inline __attribute__((always_inline))",
+    "#else",
+    "#define LAB_INLINE inline",
+    "#endif",
     ...(world ? [WORLD_H] : []),
     ...(entry || threads ? ["#include <pthread.h>", PTHREAD_STACK] : []),
     ...(threads ? ["#include <string.h>", "#include <time.h>", "#include <unistd.h>"] : []),
@@ -1406,7 +1414,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...(opts.harness ? ["", tests] : []),
     ...(entry ? ["", entry] : []),
     "",
-  ].join("\n");
+  ].join("\n").replace(/^static inline /gm, "static LAB_INLINE ");
   return { c, names, refused };
 
   // The wrapper of a host's operation: the program's values to C's, the
