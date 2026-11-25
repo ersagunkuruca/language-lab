@@ -383,6 +383,8 @@ function nativeLoweredNow(main: Id, wasm: boolean, page: boolean, from: Program)
     untaggedLoops(lowered, true);
     // And a function only computing on Ints, called (round 13 P4).
     if (!process.env.NO_UNTAGGED_FNS) untaggedFunctions(lowered);
+    // An array walk's range checked once as it starts (C336b).
+    if (!process.env.NO_CHECKED_ONCE) checkedOnce(lowered, lowered.funcs.map((_, i) => i), { lengths: true });
     // A choice over a range's items as one i64, no list (C207u).
     if (!process.env.NO_RANGE_CHOICES) rangeChoices(lowered);
     // And `array of range x` of Ints filled with no list (C207v).

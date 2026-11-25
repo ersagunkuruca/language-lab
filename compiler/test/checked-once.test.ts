@@ -3,14 +3,16 @@
 // the bounds check, taken when the whole walk is in range as it starts. A
 // walk past the end (its `at` 0 there) runs as written. `ters native`
 // prints what `ters run` prints, with the copy and without. `back dot`
-// goes round before it adds (C338, as mnist's `dot back` does).
+// goes round before it adds (C338, as mnist's `dot back` does). On
+// WebAssembly too (C336b), the array's length given.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WASI } from "node:wasi";
 import { call } from "../../ters/mcp/server.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
@@ -54,4 +56,23 @@ test("an array walk checked once: the same answers, in range and past the end", 
   }
   assert.equal(outs[0], run.stdout);
   assert.equal(outs[1], run.stdout);
+});
+
+test("an array walk checked once on WebAssembly: the same answers", async () => {
+  const dir = written(), args = ["p", "q"];
+  const run = spawnSync(process.execPath, [lab, "run", dir, ...args], { encoding: "utf8" });
+  assert.equal(run.status, 0, run.stderr);
+  const mods: Buffer[] = [];
+  for (const env of [{ NO_CHECKED_ONCE: "1" }, {}]) {
+    const at = mkdtempSync(join(tmpdir(), "checked-once-w-")), wasm = join(at, "walks.wasm");
+    const b = spawnSync(process.execPath, [lab, "wasi", dir, "-o", wasm], { encoding: "utf8", env: { ...process.env, ...env } });
+    assert.equal(b.status, 0, b.stderr);
+    const of = join(at, "out.txt"), fd = openSync(of, "w");
+    const wasi = new WASI({ version: "preview1", args: ["walks", ...args], stdout: fd, stderr: fd, returnOnExit: true });
+    mods.push(readFileSync(wasm));
+    wasi.start(new WebAssembly.Instance(await WebAssembly.compile(mods.at(-1)!), wasi.getImportObject() as WebAssembly.Imports));
+    closeSync(fd);
+    assert.equal(readFileSync(of, "utf8"), run.stdout, JSON.stringify(env));
+  }
+  assert.ok(mods[1].length > mods[0].length, "the copies in range made");
 });

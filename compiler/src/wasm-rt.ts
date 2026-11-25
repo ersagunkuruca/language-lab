@@ -8784,12 +8784,51 @@ export const runtime = (name: string): RtFn => {
   // a $huge; a value stepped past an i64 gives i64's least, which wasm.ts
   // takes as the round to start again as written. (Counts, i64.add and
   // i64.sub, aren't untagged on WebAssembly.)
-  const i64 = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit|range|rangeSplit|muladdv|mod|walkIn)$/.exec(name);
+  const i64 = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit|range|rangeSplit|muladdv|mod|walkIn|walkLen)$/.exec(name);
   if (i64) {
     const op = i64[1];
-    // An array walk in range (C336, checked-once.ts): on C only, c.ts
-    // prints it; its shape here.
+    // An array walk in range (C336, checked-once.ts; C336b here): n ≤ 0,
+    // or its first index p and last p + s·(n − 1) in the array. An array
+    // holds under 2³¹ items, so with p in it, s and n − 1 under 2³¹ the
+    // last fits an i64; past that it isn't taken.
     if (op === "walkIn") return { name, params: [["a", "array"], ["p", "i64"], ["s", "i64"], ["n", "i64"]], result: "i32", locals: [], uses: [], native: true, body: "unreachable" };
+    if (op === "walkLen") return {
+      name, params: [["m", "i64"], ["p", "i64"], ["s", "i64"], ["n", "i64"]], result: "i32", locals: [["l", "i64"]], uses: [], native: true,
+      body: `local.get $n
+i64.const 0
+i64.le_s
+if void
+i32.const 1
+return
+end
+local.get $p
+local.get $m
+i64.ge_u
+local.get $n
+i64.const 2147483648
+i64.gt_s
+i32.or
+local.get $s
+i64.const 2147483648
+i64.add
+i64.const 4294967296
+i64.ge_u
+i32.or
+if void
+i32.const 0
+return
+end
+local.get $p
+local.get $s
+local.get $n
+i64.const 1
+i64.sub
+i64.mul
+i64.add
+local.tee $l
+local.get $m
+i64.lt_u`,
+    };
     // A range's items as one int64 (C207p; C207u on WebAssembly, which
     // splits no choice): its end in the 31 bits above the next item's,
     // and a range whose list wouldn't fit in memory a trap.
