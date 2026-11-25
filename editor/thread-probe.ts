@@ -40,11 +40,7 @@ const LONG_MS = 200;
 // long list below: a 1,377 ms task, what it made collected).
 const PAGE_LONG_MS = 1500;
 // The places whose row moves or bounds them, not built yet.
-const KNOWN: Record<string, string> = {
-  // Five tasks of 80 to 200 ms, one of them (its graph drawn, or the
-  // click's own) sometimes over.
-  "opening a large definition": "E319k",
-};
+const KNOWN: Record<string, string> = {};
 
 // `then`: what the place shows once its work is done, off the thread or not.
 // `opening`: what's measured is the file's opening itself.
