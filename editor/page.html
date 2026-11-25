@@ -206,8 +206,10 @@ body.resizing { user-select: none; }
 .p-text .text-head { padding: 6px 8px 6px 12px; margin: 0; }
 .p-text .body { flex: 1; overflow: auto; min-height: 0; padding: 0 12px 12px; }
 .p-text .text { background: none; padding: 0; }
-.ins-tabs { display: flex; flex-wrap: wrap; gap: 2px; margin: -4px -6px 10px; }
-.ins-tabs button { border: 0; background: none; padding: 4px 8px; border-radius: 999px; cursor: pointer; color: var(--muted); font-size: 12.5px; }
+/* One line (I350): six tabs fit the side's 330 px; narrower, the row scrolls. */
+.ins-tabs { display: flex; gap: 0; margin: -4px -10px 10px; overflow-x: auto; scrollbar-width: none; }
+.ins-tabs::-webkit-scrollbar { display: none; }
+.ins-tabs button { flex: none; border: 0; background: none; padding: 4px 6px; border-radius: 999px; cursor: pointer; color: var(--muted); font-size: 12.5px; }
 .ins-tabs button:hover { color: var(--fg); }
 .ins-tabs button.on { background: var(--tone); color: var(--fg); font-weight: 600; }
 
