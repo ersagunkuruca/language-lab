@@ -207,8 +207,8 @@ const fixed = (x, places) => {
 
 export function mnist(args, io) {
   const mode = args[1] ?? "adam", n0 = Number(args[2] ?? "1000"), of = Number(args[3] ?? "1");
-  if (!args.length || (mode !== "adam" && mode !== "reverse" && mode !== "newton") || !(n0 >= 100) || !(of >= 1)) {
-    io.printError("usage: mnist <folder> [adam|reverse|newton] [training digits, at least 100] [passes]");
+  if (!args.length || (mode !== "adam" && mode !== "reverse" && mode !== "newton" && mode !== "reverse-newton") || !(n0 >= 100) || !(of >= 1)) {
+    io.printError("usage: mnist <folder> [adam|reverse|newton|reverse-newton] [training digits, at least 100] [passes]");
     return 2;
   }
   try {
@@ -217,7 +217,10 @@ export function mnist(args, io) {
     const n = Math.min(n0, train.n), t = Math.min(n, test.n);
     io.print(`mnist: ${n} training digits, ${t} test digits, 784-${H}-10 tanh, ${mode}`);
     let p;
-    if (mode === "newton") {
+    // reverse-newton: Newton with its gradient and Hessian times a vector
+    // from `gradient`, in the program; here, as for reverse, the
+    // hand-written pass is the ideal of both.
+    if (mode === "newton" || mode === "reverse-newton") {
       const s = { p: startingWeights(20261123), damping: 1 }, b = Math.min(n, 1000);
       for (let k = 1; k <= of; k++) {
         const total = newtonEpoch(s, train, n, b);

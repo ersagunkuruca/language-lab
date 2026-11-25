@@ -3,7 +3,7 @@
 This is GAPS.md round 22's program (docs/reports/GAPS.md). A small network learns to read handwritten digits, by Adam or by Newton steps, and is then tested.
 
 ```
-ters run compiler/gaps/mnist <folder> [adam|reverse|newton] [training digits] [passes]
+ters run compiler/gaps/mnist <folder> [adam|reverse|newton|reverse-newton] [training digits] [passes]
 ```
 
 ## The data
@@ -18,6 +18,7 @@ The folder holds MNIST's four files as they are unpacked: `train-images-idx3-uby
    - **adam**: 100 digits at a time, the gradient by backpropagation, a step of Adam (Kingma and Ba, 2015) with its usual settings.
    - **reverse**: as adam, the loss and gradient by `value and gradient` (reverse mode, L285) instead of the hand-written backpropagation.
    - **newton**: 1000 digits at a time (all of them, when fewer), a damped Newton step (Hessian-free, as Martens did it in 2010): conjugate gradients on the exact Hessian plus λ times the identity, at most 10 directions. The Hessian times a direction comes from running the same backward pass on dual numbers, the parameters moved along the direction by ε (forward over backward, Pearlmutter 1994). λ follows Levenberg-Marquardt.
+   - **reverse-newton**: as newton, the gradient by `value and gradient` and the Hessian times a direction by `gradient` at dual numbers (L285), instead of the hand-written pass on both.
 4. It prints each pass's mean loss (and, for newton, λ after it), then how many of as many test digits (10000 at most) it names right.
 
 ## Exit codes

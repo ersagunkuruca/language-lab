@@ -42,7 +42,7 @@ import { LIBRARY } from "./library.ts";
 import { ARITH, S, TRIG_OPS } from "./std.ts";
 import { CONS, DIVIDE, NIL } from "./std-ids.ts";
 import { tuplePart, tupleVariant } from "./std-values.ts";
-import { ARRAY, NUMBER } from "./types.ts";
+import { ARRAY, NUMBER, type Type } from "./types.ts";
 import type { Info } from "./infer.ts";
 import { NotDifferentiable } from "./derive.ts";
 
@@ -96,7 +96,8 @@ interface Ctx {
 // `generic`: over an array of another Number than Float64 (Dual, for the
 // Hessian times a vector: forward over reverse), the slopes' arithmetic
 // the one + − · / and Trig's, which that number's own ways answer.
-export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id = (id) => id, generic = false) {
+// `still(id)`: whether a node's value can't move, known by its type.
+export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id = (id) => id, generic = false, still: (id: Id) => boolean = () => false) {
   // The definitions made (pullbacks of definitions that call themselves).
   const defs: Id[] = [];
   const is = (target: Id, name: string) => {
@@ -158,6 +159,7 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
   // Whether expression `id` moves with the input.
   function moves(id: Id, ctx: Ctx, seen = new Set<Id>()): boolean {
     const n = nodes[id];
+    if (still(id)) return false;
     if (n.kind === "ref") {
       if (ctx.moving.has(n.target)) return true;
       const l = ctx.lams.get(n.target);
@@ -542,7 +544,16 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     if (!prim) return cant(`no slope for ${name}`);
     const vals = args.map((a) => () => copy(a, ctx));
     const holes = args.map((_, i): SolverTree => ({ k: "var", name: `#${i}` }));
-    const tree = (t: SolverTree): Id => (t.k === "num" ? num(t.v!) : t.k === "var" ? vals[+t.name!.slice(1)]() : call(op(t.f!), ...t.args!.map(tree)));
+    // x to a whole power (a quotient's slope has its bottom squared), as
+    // products where only the one + − · / are known.
+    const power = (t: SolverTree): Id | null => {
+      const [x, n] = t.args!;
+      if (!generic || n.k !== "num" || !Number.isInteger(n.v) || n.v! < 1 || n.v! > 4) return null;
+      let out = tree(x);
+      for (let i = 1; i < n.v!; i++) out = call(op("mul"), out, tree(x));
+      return out;
+    };
+    const tree = (t: SolverTree): Id => (t.k === "num" ? num(t.v!) : t.k === "var" ? vals[+t.name!.slice(1)]() : (t.f === "pow" && power(t)) || call(op(t.f!), ...t.args!.map(tree)));
     const going = args.map((a, i) => i).filter((i) => moves(args[i], ctx));
     const step = (j: number, acc2: Res): Id => {
       if (j === going.length) return k(acc2);
@@ -702,10 +713,10 @@ export function arrayGradientLambda(code: Code, lambda: Id, origin?: (id: Id) =>
 // its value from the same run forward. Over a record or a Float64, value
 // and gradient(f) is written as (q) ↦ (f(q), gradient(f)(q)), whose
 // gradient forward mode makes later (over a Float64, derivative(f)).
-// `over(call)`: the type the checker gave that call's function's input
-// (and an array's items').
+// `info`: the code's check, which says what each call is over.
 // `only`: the calls to make (all of them when not given).
-export function expandArrayGradients(code: Code, names: Names, over: (call: Id) => { of: Id; item: Id | null } | null, only?: (call: Id) => boolean): { code: Code; names: Names; expanded: Id[] } {
+export function expandArrayGradients(code: Code, names: Names, info: Info, only?: (call: Id) => boolean): { code: Code; names: Names; expanded: Id[] } {
+  const over = (call: Id) => gradientOver(code, info, call);
   const overArray = (call: Id) => over(call)?.of === ARRAY;
   const asked = (n: Node | undefined) => isCall(n) && n.args.length === 1 && code.nodes[n.fn]?.kind === "ref" ? (code.nodes[n.fn] as NodeOf<"ref">).target : null;
   const calls = nodeIds(code.nodes).filter((id) => {
@@ -719,8 +730,8 @@ export function expandArrayGradients(code: Code, names: Names, over: (call: Id) 
   const outNames = { ...names };
   const expanded: Id[] = [];
   for (const id of calls) {
-    const item = over(id)?.item;
-    const pb = pullbacker(out, outNames, undefined, !!item && item !== NUMBER);
+    const item = over(id)?.item, generic = !!item && item !== NUMBER;
+    const pb = pullbacker(out, outNames, undefined, generic, generic ? stillBesides(info, item) : undefined);
     const n = out.nodes[id] as Call, f = n.args[0], value = asked(n) === S.valueAndGradient;
     let lam: Id;
     if (value && !(lambdaOf(out, f) && overArray(id))) {
@@ -739,6 +750,15 @@ export function expandArrayGradients(code: Code, names: Names, over: (call: Id) 
     expanded.push(id);
   }
   return { code: out, names: outNames, expanded };
+}
+
+// Over another Number than Float64, a value of a type without it in it
+// can't move: none of that Number's operations makes one (a part of one
+// read out, as a dual number's value, is no slope's way: the hand-written
+// pass takes it as a constant too). A type left open isn't known to be one.
+function stillBesides(info: Info, item: Id): (id: Id) => boolean {
+  const without = (t: Type): boolean => t.t === "con" ? t.id !== item && t.args.every(without) : t.t === "fn" ? t.params.every(without) && without(t.ret) : false;
+  return (id) => { const t = info.typeOf.get(id); return !!t && without(info.subst.zonk(t)); };
 }
 
 // gradient's function, written right there or a definition's.
