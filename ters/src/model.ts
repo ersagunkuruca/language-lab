@@ -308,6 +308,16 @@ export function holdsAll(nodes: Record<Id, Node>, lib: Record<Id, Node>): boolea
   for (const id of nodesUnder(lib) ? nodeIds(lib) : underOf(lib).ids) if (nodes[id] !== lib[id]) return false;
   return true;
 }
+// The ids that may differ from `lib` in `nodes` when `nodes` sits over it
+// (the own ids of each version down to it), or undefined when it doesn't.
+export function idsOver(nodes: Record<Id, Node>, lib: Record<Id, Node>): Set<Id> | undefined {
+  let over: Record<Id, Node> | undefined = nodes;
+  while (over && over !== lib) over = nodesUnder(over);
+  if (!over) return undefined;
+  const out = new Set<Id>();
+  for (let v = nodes; v !== lib; v = nodesUnder(v)!) for (const id of Object.keys(rawNodes(v))) out.add(id);
+  return out;
+}
 // The ids whose node differs between two versions, read from their own
 // nodes when one sits over the other or both over the same nodes: in
 // `next`'s order, then those gone in `before`'s order, as a walk of both
