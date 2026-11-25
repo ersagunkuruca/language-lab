@@ -40,7 +40,7 @@ import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import { LIBRARY } from "./library.ts";
 import { ARITH, S, TRIG_OPS } from "./std.ts";
-import { CONS, DIVIDE, NIL } from "./std-ids.ts";
+import { CONS, DIVIDE, NIL, TENSOR } from "./std-ids.ts";
 import { tuplePart, tupleVariant } from "./std-values.ts";
 import { ARRAY, NUMBER, type Type } from "./types.ts";
 import type { Info } from "./infer.ts";
@@ -57,6 +57,8 @@ const OPS: Record<Id, string> = {
   ...Object.fromEntries(Object.entries(TRIG_OPS).filter(([op]) => op in impl).map(([op, id]) => [id, op])),
   [DIVIDE]: "div",
 };
+// The prelude's tensor ways a pass goes back through by their meaning.
+const TENSOR_WAYS = ["contracted", "tensor of", "tensor map", "tensor sum", "tensor difference", "tensor product item by item", "tensor negated"];
 const ARRAY_AT = "builtin.array.at", ARRAY_REPLACE_AT = "builtin.array.replaceAt", ARRAY_OF = "builtin.array.of", ARRAY_LENGTH = "builtin.array.length";
 // The primitive table's operations that every Number has.
 const GENERIC: Record<string, Id> = { add: ARITH.add, sub: ARITH.sub, mul: ARITH.mul, neg: ARITH.neg, div: DIVIDE, ...Object.fromEntries(["sin", "cos", "tan", "exp", "log"].map((f) => [f, (TRIG_OPS as Record<string, Id>)[f]])) };
@@ -100,7 +102,9 @@ interface Ctx {
 // Hessian times a vector: forward over reverse), the slopes' arithmetic
 // the one + − · / and Trig's, which that number's own ways answer.
 // `still(id)`: whether a node's value can't move, known by its type.
-export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id = (id) => id, generic = false, still: (id: Id) => boolean = () => false) {
+// `tensor(id)`: whether a node of the code read is a Tensor, known by its
+// type (its slopes are its items', an array of them: L285's tensors).
+export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id = (id) => id, generic = false, still: (id: Id) => boolean = () => false, tensor: (id: Id) => boolean = () => false) {
   // The definitions made (pullbacks of definitions that call themselves).
   const defs: Id[] = [];
   const is = (target: Id, name: string) => {
@@ -192,7 +196,7 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
   // The context with fresh binders for `bs`, none of them moving.
   function scope(ctx: Ctx, bs: Id[]): Ctx {
     const bind = new Map(ctx.bind), moving = new Set(ctx.moving), lams = new Map(ctx.lams);
-    for (const b of bs) { bind.set(b, binder()); moving.delete(b); lams.delete(b); }
+    for (const b of bs) { const nb = binder(); bind.set(b, nb); moving.delete(b); lams.delete(b); if (tensor(b)) tensorKeys.add(nb); }
     return { ...ctx, bind, moving, lams };
   }
 
@@ -236,7 +240,10 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
   const unslot = (v: Id): Id => (generic ? call(tuplePart(2, 0), v) : v);
   // n zeros, and as many as array `of` has.
   const zerosOf = (n: () => Id): Id => call(ARRAY_OF, call(lib("map"), call("builtin.int.range", n()), add({ kind: "lambda", params: [binder()], body: slot(num(0)) })));
-  const zerosLike = (of: Id): Id => zerosOf(() => call(ARRAY_LENGTH, ref(of)));
+  // A tensor's slopes are as many as its items (binders made for a
+  // tensor's, in `tensorKeys`).
+  const tensorKeys = new Set<Id>();
+  const zerosLike = (of: Id): Id => zerosOf(() => tensorKeys.has(of) ? call(lib("tensor size"), ref(of)) : call(ARRAY_LENGTH, ref(of)));
   // An item of an array, 0 outside it.
   const itemOr0 = (arr: () => Id, i: () => Id): Id => call(S.first, thunk(unslot(call(ARRAY_AT, arr(), i()))), thunk(num(0)));
   // Slope s added at position i of the slopes so far: replaced, so where
@@ -331,6 +338,104 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     return letIn([b], [c()], then(() => ref(b)));
   }
 
+  // ---- tensors ----
+  // A Tensor's slopes are an array of its items' (row-major), as an
+  // array's are; the ways of the prelude a pass goes back through are
+  // known here by what they mean, not put in place (contracted's slopes
+  // are contractions themselves: two, where going through its sums one
+  // product at a time would add each in at its place).
+  // tensor items(t): the tensor read.
+  const itemsRead = (id: Id): Id | null => {
+    const n = nodes[id];
+    return isCall(n) && n.args.length === 1 && nodes[n.fn]?.kind === "ref" && is((nodes[n.fn] as NodeOf<"ref">).target, "tensor items") ? n.args[0] : null;
+  };
+  // An array's slopes out of their pairs (over another Number), and into
+  // them.
+  const plainOf = (arr: () => Id): Id => (generic ? (() => { const b = binder(), j = binder(); return letIn([b], [arr()], call(ARRAY_OF, call(lib("map"), call("builtin.int.range", call(ARRAY_LENGTH, ref(b))), add({ kind: "lambda", params: [j], body: itemOr0(() => ref(b), () => ref(j)) })))); })() : arr());
+  const slottedOf = (arr: () => Id): Id => (generic ? (() => { const b = binder(), j = binder(); return letIn([b], [arr()], call(ARRAY_OF, call(lib("map"), call("builtin.int.range", call(ARRAY_LENGTH, ref(b))), add({ kind: "lambda", params: [j], body: slot(call(S.first, thunk(call(ARRAY_AT, ref(b), ref(j))), thunk(num(0)))) })))); })() : arr());
+  // Item by item from the slopes y (in their pairs) and arrays of values.
+  const itemwise = (y: () => Id, f: (yj: Id, j: Id) => Id): Id => {
+    const b = binder(), j = binder();
+    return letIn([b], [y()], call(ARRAY_OF, call(lib("map"), call("builtin.int.range", call(ARRAY_LENGTH, ref(b))), add({ kind: "lambda", params: [j], body: slot(f(itemOr0(() => ref(b), () => ref(j)), j)) }))));
+  };
+  // The seed of a tensor's items, every one s (a sum of them read).
+  const filledSeed = (s: () => Id, items: Id, ctx: Ctx): Seed => {
+    const d = () => { const j = binder(); return call(ARRAY_OF, call(lib("map"), call("builtin.int.range", call(lib("tensor size"), copy(itemsRead(items)!, ctx))), add({ kind: "lambda", params: [j], body: slot(s()) }))); };
+    return { k: "a", dense: d, add: (cur) => addArrays(cur, d) };
+  };
+  // The slopes of a value worked out there as one array, bound: the
+  // seed's own where it is one, else added into as many zeros as `size`.
+  const denseOf = (seed: Seed, size: () => Id, then: (y: () => Id) => Id): Id => {
+    if (seed.k !== "a") return cant("a tensor read as a number");
+    return bound(() => (seed.dense ? seed.dense() : seed.add(() => zerosOf(size))), then);
+  };
+  // Each moving input in turn, with the seed `seedOf` gives it.
+  const each = (ins: { arg: Id; seed: () => Seed }[], ctx: Ctx, acc: Res, k: (r: Res) => Id): Id => {
+    const going = ins.filter((x) => moves(x.arg, ctx));
+    const step = (j: number, acc2: Res): Id => (j === going.length ? k(acc2) : back(going[j].arg, going[j].seed(), ctx, acc2, (r) => step(j + 1, r)));
+    return step(0, acc);
+  };
+  const itemsOfCopy = (t: Id): Id => call(ARRAY_OF, call(lib("tensor items"), ref(t)));
+  // + − · −x of tensors, item by item.
+  function tensorArith(name: string, args: Id[], seed: Seed, ctx: Ctx, acc: Res, k: (r: Res) => Id): Id {
+    const vs = args.map(() => binder());
+    return letIn(vs, args.map((a) => copy(a, ctx)), denseOf(seed, () => call(lib("tensor size"), ref(vs[0])), (y) => {
+      const same = () => denseSeed(y);
+      const negated = () => { const d = () => itemwise(y, (yj) => call(op("neg"), yj)); return { k: "a" as const, dense: d, add: (cur: () => Id) => addArrays(cur, d) }; };
+      const times = (other: Id) => () => { const d = () => { const o = binder(); return letIn([o], [itemsOfCopy(other)], itemwise(y, (yj, j) => call(op("mul"), yj, call(S.first, thunk(call(ARRAY_AT, ref(o), ref(j))), thunk(num(0)))))); }; return { k: "a" as const, dense: d, add: (cur: () => Id) => addArrays(cur, d) }; };
+      if (name === "add") return each([{ arg: args[0], seed: same }, { arg: args[1], seed: same }], ctx, acc, k);
+      if (name === "sub") return each([{ arg: args[0], seed: same }, { arg: args[1], seed: negated }], ctx, acc, k);
+      if (name === "neg") return each([{ arg: args[0], seed: negated }], ctx, acc, k);
+      if (name === "mul") return each([{ arg: args[0], seed: times(vs[1]) }, { arg: args[1], seed: times(vs[0]) }], ctx, acc, k);
+      return cant(`no slope for ${name} of tensors`);
+    }));
+  }
+  function tensorBack(way: string, args: Id[], seed: Seed, ctx: Ctx, acc: Res, k: (r: Res) => Id): Id {
+    if (way === "tensor sum" || way === "tensor difference" || way === "tensor product item by item" || way === "tensor negated")
+      return tensorArith({ "tensor sum": "add", "tensor difference": "sub", "tensor product item by item": "mul", "tensor negated": "neg" }[way]!, args, seed, ctx, acc, k);
+    if (way === "tensor of") {
+      // Its items: an array's, or a map over a range's.
+      const xs = nodes[args[1]];
+      if (seed.k !== "a") return cant("a tensor read as a number");
+      if (isCall(xs) && nodes[xs.fn]?.kind === "ref" && (nodes[xs.fn] as NodeOf<"ref">).target === "builtin.array.items") return back(xs.args[0], seed, ctx, acc, k);
+      return arrayBack(args[1], seed, ctx, acc, k);
+    }
+    if (way === "contracted") {
+      const [a, b, ps] = args, va = binder(), vb = binder(), vp = binder();
+      return letIn([va, vb, vp], [copy(a, ctx), copy(b, ctx), copy(ps, ctx)], denseOf(seed, () => call(lib("tensor size"), call(lib("contracted"), ref(va), ref(vb), ref(vp))), (y) => {
+        const of = (helper: string) => () => denseSeed(() => slottedOf(() => call(lib(helper), ref(va), ref(vb), ref(vp), plainOf(y))));
+        return each([{ arg: a, seed: of("contracted slopes of first") }, { arg: b, seed: of("contracted slopes of second") }], ctx, acc, k);
+      }));
+    }
+    if (way === "tensor map") {
+      // f's slope at each item, times the item's seed: f gone back through
+      // with only its input moving.
+      const [f, t] = args, fn = nodes[f];
+      const fl = fn?.kind === "lambda" ? { lam: f, ctx } : fn?.kind === "ref" ? ctx.lams.get(fn.target) : undefined;
+      const lam = fl ? nodes[fl.lam] as NodeOf<"lambda"> : undefined;
+      if (!fl || !lam || lam.params.length !== 1) return cant("tensor map of a function not written there");
+      if (!moves(t, ctx)) return cant("tensor map's function reads what moves besides its item");
+      const vt = binder();
+      return letIn([vt], [copy(t, ctx)], denseOf(seed, () => call(lib("tensor size"), ref(vt)), (y) => {
+        const d = () => {
+          const xs = binder();
+          return letIn([xs], [itemsOfCopy(vt)], itemwise(y, (yj, j) => {
+            const inner = scope(fl.ctx, lam.params);
+            inner.moving.add(lam.params[0]);
+            const xb = inner.bind.get(lam.params[0])!, s = binder();
+            return letIn([xb, s], [call(S.first, thunk(call(ARRAY_AT, ref(xs), ref(j))), thunk(num(0))), yj], back(lam.body, { k: "s", at: () => ref(s) }, inner, new Res(), (r) => {
+              for (const key of r.keys()) if (key !== xb && key !== VAL) cant("tensor map's function reads what moves besides its item");
+              const c = r.get(xb);
+              return c?.k === "s" ? total(c.parts) : num(0);
+            }));
+          }));
+        };
+        return back(t, { k: "a", dense: d, add: (cur) => addArrays(cur, d) }, ctx, acc, k);
+      }));
+    }
+    return cant(`the slope goes through ${way}`);
+  }
+
   // ---- going back ----
   // `want`: the value of `id` too, as the slopes of VAL. Lets, calls put
   // in place and branches give their body's; anything else is worked out
@@ -344,7 +449,7 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     if (head.kind !== "ref") return false;
     const t = head.target;
     if (ctx.lams.has(t)) return true;
-    if (OPS[t] || t === S.float32 || t === ARRAY_AT || t === S.first || t === ARRAY_OF || is(t, "sum")) return false;
+    if (OPS[t] || t === S.float32 || t === ARRAY_AT || t === S.first || t === ARRAY_OF || is(t, "sum") || TENSOR_WAYS.some((w) => is(t, w))) return false;
     const d = nodes[t];
     return d?.kind === "def" && !!d.body && nodes[d.body].kind === "lambda" && !recursive(t);
   }
@@ -376,13 +481,18 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
         const target = head.target;
         const lam = ctx.lams.get(target);
         if (lam) return letBack(n.args, nodes[lam.lam] as NodeOf<"lambda">, ctx, seed, lam.ctx, acc, k, want);
+        if (OPS[target] && n.args.some((a) => tensor(a))) return tensorArith(OPS[target], n.args, seed, ctx, acc, k);
         if (OPS[target]) return chain(OPS[target], n.args, seed, ctx, acc, k);
+        const way = TENSOR_WAYS.find((w) => is(target, w));
+        if (way) return tensorBack(way, n.args, seed, ctx, acc, k);
         if (target === S.float32) return back(n.args[0], seed, ctx, acc, k);
         if (target === ARRAY_AT) return readBack(n.args[0], n.args[1], seed, ctx, acc, k, true);
         if (target === S.first) return firstBack(n, seed, ctx, acc, k);
         const read = fieldRead(id);
         if (read) return readFieldBack(read, seed, ctx, acc, k);
+        if (is(target, "sum") && itemsRead(n.args[0])) return back(itemsRead(n.args[0])!, seed.k === "s" ? filledSeed(seed.at, n.args[0], ctx) : cant("a sum read as an array"), ctx, acc, k);
         if (is(target, "sum")) return sumBack(n.args[0], seed, ctx, acc, k);
+        if (target === ARRAY_OF && itemsRead(n.args[0])) return back(itemsRead(n.args[0])!, seed, ctx, acc, k);
         if (target === ARRAY_OF) return arrayBack(n.args[0], seed, ctx, acc, k);
         const t = nodes[target];
         if (t?.kind === "def" && t.body && nodes[t.body].kind === "lambda") {
@@ -826,10 +936,10 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
 // For the evaluator: gradient(f) at an array, as a lambda (kept, as
 // derive.ts keeps its own).
 const kept = new WeakMap<object, Map<Id, Id>>();
-export function arrayGradientLambda(code: Code, lambda: Id, origin?: (id: Id) => Id): Id {
+export function arrayGradientLambda(code: Code, lambda: Id, origin?: (id: Id) => Id, info?: Info): Id {
   let c = kept.get(code.nodes);
   if (!c) kept.set(code.nodes, (c = new Map()));
-  if (!c.has(lambda)) c.set(lambda, pullbacker(code, {}, origin).gradient(lambda));
+  if (!c.has(lambda)) c.set(lambda, pullbacker(code, {}, origin, false, undefined, info ? tensorIn(info) : undefined).gradient(lambda));
   return c.get(lambda)!;
 }
 
@@ -862,7 +972,7 @@ export function expandArrayGradients(code: Code, names: Names, info: Info, only?
   const expanded: Id[] = [];
   for (const id of calls) {
     const item = over(id)?.item, generic = !!item && item !== NUMBER;
-    const pb = pullbacker(out, outNames, undefined, generic, generic ? stillBesides(info, item) : undefined);
+    const pb = pullbacker(out, outNames, undefined, generic, generic ? stillBesides(info, item) : undefined, tensorIn(info));
     const n = out.nodes[id] as Call, f = n.args[0], value = asked(n) === S.valueAndGradient;
     let lam: Id | null = null;
     // Over a record, one pass back where it can be made.
@@ -894,6 +1004,11 @@ export function expandArrayGradients(code: Code, names: Names, info: Info, only?
 function stillBesides(info: Info, item: Id): (id: Id) => boolean {
   const without = (t: Type): boolean => t.t === "con" ? t.id !== item && t.args.every(without) : t.t === "fn" ? t.params.every(without) && without(t.ret) : false;
   return (id) => { const t = info.typeOf.get(id); return !!t && without(info.subst.zonk(t)); };
+}
+
+// Whether a node is a Tensor, by the check's types.
+function tensorIn(info: Info): (id: Id) => boolean {
+  return (id) => { const t = info.typeOf.get(id); if (!t) return false; const z = info.subst.zonk(t); return z.t === "con" && z.id === TENSOR; };
 }
 
 // A type of one case whose fields are all Float64s.

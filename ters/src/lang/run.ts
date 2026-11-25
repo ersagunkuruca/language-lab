@@ -522,7 +522,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (p instanceof ArrayView && p.n > 0 && typeof p.buf.items[p.start] !== "number") throw new Error("gradient over an array of another Number than Float64 needs its function written where gradient is called");
       let lambda: Id;
       try {
-        lambda = typeof p === "number" || !("lambda" in m) ? derivativeLambda(code, m) : p instanceof ArrayView ? arrayGradientLambda(code, m.lambda, (id) => info.copyOf?.get(id) ?? id) : gradientLambda(code, m, (p as Data).tag);
+        lambda = typeof p === "number" || !("lambda" in m) ? derivativeLambda(code, m) : p instanceof ArrayView ? arrayGradientLambda(code, m.lambda, (id) => info.copyOf?.get(id) ?? id, info) : gradientLambda(code, m, (p as Data).tag);
       } catch (e) { if (e instanceof NotDifferentiable) return; throw e; }
       for (const g of run((machine) => machine.eval(lambda, env))) yield* (g as Fn)(p);
     } as Fn;

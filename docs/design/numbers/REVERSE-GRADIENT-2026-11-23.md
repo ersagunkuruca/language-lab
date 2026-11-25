@@ -91,8 +91,12 @@ this today with its hand-written pass, and it would keep doing it with
 4. **R4.** mnist's `loss at` differentiated by `gradient`, checked against
    its hand-written `loss and gradient`, and raced (bench-mnist.ts).
 5. **R5.** Bags added in place: done 11-25 by carrying each array's
-   slopes so far instead. Tensors (`contracted`) once C302 stores them as
-   one array.
+   slopes so far instead. Tensors (11-25): `contracted` gone back
+   through by its meaning, as JAX's `dot_general` transpose is: a's slopes
+   are the result's slopes contracted with b over b's free axes, the axes
+   then put back in a's order (`transposed by`), b's alike. Two
+   contractions, where going through its sums would add each product's
+   slope in at its place. A tensor's slopes are an array of its items'.
 6. **value and gradient** (11-25): f(p) with its slopes, the value taken
    where the pass back starts, inside the lets the run forward bound.
    mnist's `reverse` no longer runs `loss at` again for its loss: 10000

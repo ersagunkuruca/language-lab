@@ -1562,9 +1562,32 @@ export function buildPrelude(): Module {
   // Axis order[k] of the tensor becomes axis k.
   const transposedBy = def("transposed by", ["tensor", "order"], (t, order) => tenOf(t, (sa, xs) => k.let("rank", k.call(length, sa), (r) =>
     k.if(k.call(S.and, iSame(k.call(length, order), r), k.call(S.and, axesInRange(order, r), once(order))),
-      k.let("shape", lengthsAt(sa, order), (shape) => T(shape, k.call(map, k.call(indicesOf, shape), k.fn(["at"], (nix) =>
-        itemFitting(sa, xs, k.call(map, k.call(INT_OPS.range, r), k.fn(["axis"], (p) => k.call(itemAt, nix, k.call(placeOf, order, p, k.int(0)), k.int(0))))))))),
+      // Each new axis's stride among the items, each item read in an
+      // array (as contracted reads them).
+      k.let("shape", lengthsAt(sa, order), (shape) => k.let("moved strides", lengthsAt(k.call(stridesOf, sa), order), (st) => k.let("items", k.call(ARRAY_OPS.of, xs), (xa) =>
+        T(shape, k.call(map, k.call(indicesOf, shape), k.fn(["at"], (nix) => first(k.call(ARRAY_OPS.at, xa, k.call(strided, nix, st, k.int(0))), k.lit(0)))))))),
       k.call(ABORT_OP, texts(k.lit("transposed by: the order doesn't name each axis of a "), k.call(shapeText, sa), k.lit(" tensor once")))))));
+  // The slopes of contracted(a, b, pairs)'s inputs, for a pass back
+  // (L285): given its result's slopes (its items, row-major), a's are
+  // they contracted with b over b's free axes, and b's they contracted
+  // with a over a's, each then put in its input's axis order. As arrays
+  // of the input's items.
+  const pairOf = (x: Id, y: Id) => k.call(PAIR_V, x, y);
+  const contractedSlopes = (ofFirst: boolean) => def(ofFirst ? "contracted slopes of first" : "contracted slopes of second", ["first", "second", "pairs", "slopes"], (a, b, ps, ys) => tenOf(a, (sa) => tenOf(b, (sb) =>
+    k.let("a axes", firsts(ps), (as) => k.let("b axes", seconds(ps), (bs) =>
+      k.let("a free", k.call(axesBut, k.call(INT_OPS.range, k.call(length, sa)), as), (fa) => k.let("b free", k.call(axesBut, k.call(INT_OPS.range, k.call(length, sb)), bs), (fb) =>
+        k.let("result slopes", T(k.call(append, lengthsAt(sa, fa), lengthsAt(sb, fb)), k.call(ARRAY_OPS.items, ys)), (yb) => {
+          // The result's slopes contracted with the other input over its
+          // free axes; what is left of the other input's axes (paired
+          // ones, in its order) stands for this input's partners.
+          const [mine, other, mineAxes, otherAxes, mineFree, otherFree, mineShape, otherShape] = ofFirst ? [a, b, as, bs, fa, fb, sa, sb] : [b, a, bs, as, fb, fa, sb, sa];
+          void mine;
+          const start = ofFirst ? () => k.call(length, fa) : () => k.int(0);
+          return k.let("pairs back", k.call(map, k.call(INT_OPS.range, k.call(length, otherFree)), k.fn(["i"], (i) => pairOf(iAdd(start(), i), k.call(itemAt, otherFree, i, k.int(0))))), (pb) =>
+            k.let("axes", k.call(append, mineFree, k.call(map, k.call(axesBut, k.call(INT_OPS.range, k.call(length, otherShape)), otherFree), k.fn(["axis"], (y) => k.call(itemAt, mineAxes, k.call(placeOf, otherAxes, y, k.int(0)), k.int(0))))), (ax) =>
+              k.call(ARRAY_OPS.of, k.call(tensorItems, k.call(transposedBy, k.call(contracted, yb, other, pb), k.call(map, k.call(INT_OPS.range, k.call(length, mineShape)), k.fn(["axis"], (q) => k.call(placeOf, ax, q, k.int(0)))))))));
+        }))))))));
+  const contractedSlopesOfFirst = contractedSlopes(true), contractedSlopesOfSecond = contractedSlopes(false);
   // The sum over the diagonal of two axes of the same length.
   const traced = def("traced", ["tensor", "first axis", "second axis"], (t, i, j) => tenOf(t, (sa, xs) => k.let("rank", k.call(length, sa), (r) =>
     k.let("both", k.call(CONS, i, k.call(CONS, j, k.x(NIL))), (ij) =>
@@ -2611,6 +2634,8 @@ export function buildPrelude(): Module {
     [piped]: "Runs the consumer with each receive() answered by the producer's next send(item): some(item), or none once the producer has finished. The producer runs only as far as the consumer asks.",
     [pipeOf]: "A helper of piped: the producer run to its first send. Not offered.",
     ...Object.fromEntries(matrixHelpers.map((d) => [d, "A helper of the matrix operations. Not offered."])),
+    [contractedSlopesOfFirst]: "A helper of gradient: contracted's first input's slopes. Not offered.",
+    [contractedSlopesOfSecond]: "A helper of gradient: contracted's second input's slopes. Not offered.",
     [priorityQueueItems]: "The queue's (priority, item) pairs, soonest first.",
     [smallestKey]: "The map's smallest key, in compare's order; no answer when the map is empty. value at(m, smallest key(m)) is what it holds.",
     [largestKey]: "The map's largest key, in compare's order; no answer when the map is empty.",
@@ -2658,9 +2683,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, addedAtEnd, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, pipeOf, onGrid, ...gridHelpers, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, addedAtEnd, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addedAtEnd, ...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, pipeOf, onGrid, ...gridHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addedAtEnd, ...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
 }

@@ -77,3 +77,56 @@ test("gradient of a function of an array: one pass back, in the evaluator and co
   assert.equal(built.status, 0, built.stderr);
   check("ters native", spawnSync(join(dir, "n"), [], { encoding: "utf8" }).stdout);
 });
+
+// Through tensors (L285): contracted, + − · item by item and tensor map,
+// each gone back through by what it means (contracted's slopes are two
+// contractions), against central differences; over dual numbers, a
+// Hessian times a vector against one worked out by hand.
+test("gradient through tensors: contracted, + − ·, tensor map (L285)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "tensor-gradient-")), folder = join(dir, "p");
+  mkdirSync(folder);
+  writeFileSync(join(folder, "code.json"), JSON.stringify({ defs: [], nodes: {} }));
+  writeFileSync(join(folder, "names.default.json"), "{}");
+  const s = new Session(folder);
+  const fill = (name: string, params: string[], text: string) => { s.define(name, "function", params); s.replace(/□#(\w+)/.exec(s.view(name))![1], text); };
+  fill("w", [], "tensor of(list of(3, 2), list of(1.0, −0.5, 0.25, 2.0, −1.5, 0.75))");
+  fill("x", ["p"], "tensor of(list of(2, 3), map(range(6), (i) => first(item at(p, i), else 0.0)))");
+  // A product, one with the axes paired the other way (its slopes put
+  // back in x's order), and + − · and a map of them.
+  fill("f", ["p"], "sum(tensor items(tensor map((v) => v · v, contracted(x(p), w(), list of((1, 0))))))");
+  fill("g", ["p"], "((a) => sum(tensor items(tensor map((v) => v / (1.0 + v · v), a − (−a) · a + contracted(w(), x(p), list of((0, 1)))))))(contracted(x(p), w(), list of((1, 0))))");
+  const point = [1, -0.5, 2, 0.25, 1.5, -1];
+  const arr = (xs: number[]) => `array of(list of(${xs.map((v) => v.toFixed(6)).join(", ")}))`;
+  fill("shown", ["g"], "show(g)");
+  fill("main", [], `print(${["f", "g"].map((f) => `shown(first(gradient(${f})(${arr(point)}), else array of(list of())))`).join(' ++ "\\n" ++ ')})`);
+  assert.equal(s.errors(), "ok");
+  // f and g in JavaScript, and their slopes by central differences.
+  const W = [1, -0.5, 0.25, 2, -1.5, 0.75];
+  const xw = (p: number[]) => [0, 1].flatMap((r) => [0, 1].map((c) => [0, 1, 2].reduce((acc, j) => acc + p[r * 3 + j] * W[j * 2 + c], 0)));
+  const wx = (p: number[]) => [0, 1].flatMap((c) => [0, 1].map((r) => [0, 1, 2].reduce((acc, j) => acc + W[j * 2 + c] * p[r * 3 + j], 0)));
+  const fs = [(p: number[]) => xw(p).reduce((acc, v) => acc + v * v, 0), (p: number[]) => { const a = xw(p), b = wx(p); return a.map((v, i) => v + v * v + b[i]).reduce((acc, v) => acc + v / (1 + v * v), 0); }];
+  const want = fs.map((f) => point.map((_, i) => (f(point.map((v, j) => (j === i ? v + 1e-6 : v))) - f(point.map((v, j) => (j === i ? v - 1e-6 : v)))) / 2e-6));
+  const check = (how: string, out: string) => {
+    const got = out.trim().split("\n").map((l) => [...l.matchAll(/-?[\d.]+(?:e-?\d+)?/g)].map((m) => +m[0]));
+    assert.equal(got.length, 2, `${how}: ${out}`);
+    got.forEach((g, i) => { assert.equal(g.length, 6, out); g.forEach((v, j) => assert.ok(Math.abs(v - want[i][j]) < 1e-5 * Math.max(1, Math.abs(want[i][j])), `${how} line ${i}, ${j}: ${v} against ${want[i][j]}`)); });
+  };
+  // Over dual numbers: f = Σ (x w)³'s gradient at p + εv is 3 Σ_c y² w
+  // and its ε part the Hessian times v.
+  fill("xd", ["p"], "tensor of(list of(2, 3), map(range(6), (i) => first(item at(p, i), else dual(0.0, 0.0))))");
+  fill("wd", [], "tensor of(list of(3, 2), map(range(6), (i) => dual(as float64(i) · 0.5 − 1.0, 0.0)))");
+  fill("cubes", ["p"], "sum(tensor items(tensor map((v) => v · v · v, contracted(xd(p), wd(), list of((1, 0))))))");
+  fill("hv", ["p"], "items of array(first(gradient(cubes)(p), else array of(list of())))");
+  assert.equal(s.eval("hv(array of(list of(dual(1.0, 1.0), dual(−0.5, 0.0), dual(2.0, 0.5), dual(0.25, 0.0), dual(1.5, −1.0), dual(−1.0, 0.0))))"),
+    "= [dual(-10.59375, 1.3125), dual(7.59375, 1.6875), dual(25.78125, 2.0625), dual(-5.8359375, -1.3125), dual(1.1484375, 1.3125), dual(8.1328125, 3.9375)] : List Dual");
+  s.save();
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
+  for (const how of [[], ["--evaluator"]]) {
+    const r = spawnSync(process.execPath, [lab, "run", folder, ...how], { encoding: "utf8" });
+    check(`ters run ${how.join(" ")} ${r.stderr}`, r.stdout);
+  }
+  if (skip) return;
+  const built = spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "n")], { encoding: "utf8" });
+  assert.equal(built.status, 0, built.stderr);
+  check("ters native", spawnSync(join(dir, "n"), [], { encoding: "utf8" }).stdout);
+});
