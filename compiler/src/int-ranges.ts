@@ -36,8 +36,12 @@ export function intRanges(ir: CoreIR, roots: Set<number>): number {
   // Functions handed out as values or called from outside take anything.
   const open = new Set<number>(roots);
   const called = new Set<number>();
-  const scan = (e: SExpr) => { if (e.k === "closure") { open.add(e.fn); if (e.d !== undefined) open.add(e.d); } if (e.k === "call") { called.add(e.fn); if (e.cps) open.add(e.fn); } kids(e).forEach(scan); };
-  ir.funcs.forEach((f) => scan(f.body));
+  // And who calls whom, so a round reads again only a function whose
+  // inputs or callees' results changed: the same rounds, in less time.
+  const callers: Set<number>[] = ir.funcs.map(() => new Set());
+  let at = 0;
+  const scan = (e: SExpr) => { if (e.k === "closure") { open.add(e.fn); if (e.d !== undefined) open.add(e.d); } if (e.k === "call") { called.add(e.fn); callers[e.fn].add(at); if (e.cps) open.add(e.fn); } kids(e).forEach(scan); };
+  ir.funcs.forEach((f, i) => { at = i; scan(f.body); });
   ir.funcs.forEach((f, i) => { if (!called.has(i) || f.multi || f.piece) open.add(i); });
   const params: R[][] = ir.funcs.map((f, i) => f.params.map(() => (open.has(i) ? null : undefined)));
   const results: R[] = ir.funcs.map(() => undefined);
@@ -72,21 +76,32 @@ export function intRanges(ir: CoreIR, roots: Set<number>): number {
       default: kids(e).forEach(v); return null;
     }
   };
+  // (A call's inputs are joined into its callee's each round: one not
+  // read again gives what it gave, which they hold already.)
+  let dirty = new Set<number>(ir.funcs.keys());
   for (let round = 0; round < 12; round++) {
     next = params.map((p) => [...p]);
     let changed = false;
+    const later = new Set<number>();
     ir.funcs.forEach((f, fi) => {
+      if (!dirty.has(fi)) return;
       const env = new Map<number, R>();
       f.params.forEach((_, j) => env.set(j, params[fi][j]));
       const r = value(fi, f.body, env);
       const w = join(results[fi], r);
-      if (!same(w, results[fi])) { results[fi] = round > 6 ? null : w; changed = true; }
+      if (!same(w, results[fi])) {
+        results[fi] = round > 6 ? null : w; changed = true;
+        // A caller after it reads the new result this round, one before
+        // it the next, as when every function is read each round.
+        for (const c of callers[fi]) (c > fi ? dirty : later).add(c);
+      }
       locals[fi] = env;
     });
     for (let i = 0; i < n; i++) for (let j = 0; j < params[i].length; j++) {
       const w = join(params[i][j], next[i][j]);
-      if (!same(w, params[i][j])) { params[i][j] = round > 6 ? null : w; changed = true; }
+      if (!same(w, params[i][j])) { params[i][j] = round > 6 ? null : w; changed = true; later.add(i); }
     }
+    dirty = later;
     if (!changed) break;
     if (round === 11) return 0;
   }

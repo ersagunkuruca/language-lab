@@ -180,6 +180,17 @@ const zeroOf = (t: LType): SExpr => (t === "f64" ? { k: "num", v: 0 } : t === "i
 // pushed onto; any empty array is columns with room to grow.
 export function columns(ir: CoreIR, roots: number[], opts: { plain?: boolean; whole?: boolean; grow?: boolean } = {}): number {
   let n = 0;
+  // The runtime's functions each function calls (read again once columns
+  // change the functions), so an array no function reads an item of
+  // costs no walk.
+  let rts: Map<string, Set<number>> | null = null, live: Set<number> | null = null;
+  const rtsOf = () => {
+    if (rts) return rts;
+    rts = new Map();
+    live = reached(ir, roots);
+    ir.funcs.forEach((f, i) => { const w = (e: SExpr) => { if (e.k === "rt") { let s = rts!.get(e.fn); if (!s) rts!.set(e.fn, (s = new Set())); s.add(i); } kids(e).forEach(w); }; w(f.body); });
+    return rts;
+  };
   for (const a of ir.arrays) {
     const r = a.item;
     // An array of a case of one record, whole and growing (G1b4: a pool's
@@ -188,21 +199,20 @@ export function columns(ir: CoreIR, roots: number[], opts: { plain?: boolean; wh
     const slots = opts.whole && opts.grow ? slotOf(r) : null;
     if (!slots && (!isRecord(r) || !r.fields.length)) continue;
     if (opts.plain && isRecord(r) && r.fields.some((x) => !["f64", "int", "text", "i32"].includes(x.t as string))) continue;
-    if (stored(ir, a, r as RType | DType, roots, !!opts.whole, !!opts.grow)) n++;
+    if (stored(ir, a, r as RType | DType, roots, !!opts.whole, !!opts.grow, rtsOf(), live!)) { n++; rts = null; }
   }
   return n;
 }
 
-function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: boolean, grow: boolean): boolean {
+function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: boolean, grow: boolean, rts: Map<string, Set<number>>, live: Set<number>): boolean {
   const leaves = isRecord(r) ? leavesOf(r, whole) : slotLeaves(r);
   const leafAt = (path: number[]) => leaves.findIndex((l) => l.path.length === path.length && l.path.every((x, k) => x === path[k]));
   const suffix = `.a${a.index}`;
   const ofA = (fn: string) => fn.endsWith(suffix) && /^array\./.test(fn);
-  if (!ir.funcs.some((f) => found(f.body, (e) => e.k === "rt" && e.fn === `array.get${suffix}`))) return false;
+  if (!rts.get(`array.get${suffix}`)?.size) return false;
   // A copy to work on: nothing changes unless every use is one columns keep.
   const funcs = ir.funcs.map((f) => ({ ...f, locals: [...f.locals], ...(f.binders ? { binders: [...f.binders] } : {}) }));
   const work: CoreIR = { ...ir, funcs };
-  const live = reached(work, roots);
 
   // Maps that may share on workers run in turn: over one of these arrays,
   // or making one (pack's `code tree`, mapping a map's entries to pairs: the
@@ -215,8 +225,9 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
   let inLoops: Set<number> | undefined;
   const arrayOf = (e: SExpr | undefined): boolean =>
     !!e && ((e.k === "local" && isArray(fnNow.locals[e.i], a)) || (e.k === "call" && isArray(funcs[e.fn].result, a)) || (e.k === "rt" && ofA(e.fn) && !e.fn.startsWith("array.get") && !e.fn.startsWith("array.length")) || (e.k === "let" && arrayOf(e.body)));
-  for (const i of live) { fnNow = funcs[i]; funcs[i].body = inTurn(funcs[i].body); }
-  const now = reached(work, roots);
+  const worth = rts.get("map.worth");
+  for (const i of live) if (worth?.has(i)) { fnNow = funcs[i]; funcs[i].body = inTurn(funcs[i].body); }
+  const now = [...live].some((i) => worth?.has(i)) ? reached(work, roots) : live;
 
   // Small functions given an item, or making one to put, put in place.
   for (const i of now) {
