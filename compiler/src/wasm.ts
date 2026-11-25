@@ -964,7 +964,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // naming gives a new one, as one-holder.ts reads it (G3f: the moths'
   // `empty grid`, filed into every tick).
   const written = new Set<number>();
-  const writes = (e: SExpr): void => { if (e.k === "rt") { const m = /^array\.(replaceOwned|pushFrontOwned)\.a(\d+)$/.exec(e.fn); if (m) written.add(Number(m[2])); } kids(e).forEach(writes); };
+  const writes = (e: SExpr): void => { if (e.k === "rt") { const m = /^array\.(replaceOwned|pushFrontOwned|pushOwned)\.a(\d+)$/.exec(e.fn); if (m) written.add(Number(m[2])); } kids(e).forEach(writes); };
   funcs.forEach((f) => writes(f.body));
   const kept = new Map<number, number>();
   funcs.forEach((f, i) => { if (f.value && !f.params.length && !f.partial && !f.spends && (f.result === "text" || isRecord(f.result) || isData(f.result) || (isArray(f.result) && (!written.has(f.result.index) || emptyArray(f.body))))) kept.set(i, randG + (rand ? 4 : 0) + kept.size); });

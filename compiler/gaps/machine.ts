@@ -76,7 +76,7 @@ export async function wasmModule(): Promise<{ module: WebAssembly.Module; chosen
   try {
     const c = chosenFor(p, own, main, false);
     const lowered = lowerScalar(c.code, c.info, c.names, own, { data: true });
-    ownedArrays(lowered, c.code, c.info, c.names, main);
+    ownedArrays(lowered, main);
     if (!process.env.NO_OWN_RECORDS) { ownedRecords(lowered, c.code, c.info, c.names, main); intoAsSets(lowered); }
     const m = emitWasm(lowered, { wasi: true });
     return { module: await WebAssembly.compile(m.bytes), chosen: c.chosen };

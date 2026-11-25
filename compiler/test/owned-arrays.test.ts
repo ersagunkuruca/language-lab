@@ -42,7 +42,7 @@ function both(body: (k: Lang, a: Id, zeros: Id) => Id): { evaluator: string[]; c
   const ir = lowerCore(code, info, names, [main]);
   runCoreMain(ir, "main", [], { print: (s) => compiled.push(s) });
   const lowered = lowerScalar(code, info, names, [main], { data: true });
-  const ownedInWasm = ownedArrays(lowered, code, info, names, main) > 0;
+  const ownedInWasm = ownedArrays(lowered, main) > 0;
   const io = mkdtempSync(join(tmpdir(), "owned-")), out = openSync(join(io, "out"), "w");
   const wasi = new WASI({ version: "preview1", args: ["main"], stdout: out, returnOnExit: true });
   wasi.start(new WebAssembly.Instance(new WebAssembly.Module(emitWasm(lowered, { wasi: true, main }).bytes), wasiImports(wasi)));

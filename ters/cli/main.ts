@@ -378,7 +378,7 @@ function nativeLoweredNow(main: Id, wasm: boolean, page: boolean, from: Program)
     // (deep-loops.ts).
     if (!process.env.NO_CONS_LOOPS) consLoops(lowered);
     if (!process.env.NO_DEEP_LOOPS) deepLoops(lowered);
-    ownedArrays(lowered, q.code, q.info, q.names, root, true);
+    ownedArrays(lowered, root, true);
     // And each other replace or push whose array has one holder, decided
     // per value (holders.ts, C327f), as on JavaScript.
     const roots = lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : []));

@@ -3,82 +3,53 @@
 // replaced at every step, where a version note for the old array and the
 // GC's keeping it cost a third of primes' time (BACKLOG C93's measures).
 //
-// one-holder.ts says, from the program alone, whether every array of an
-// item type has one holder: changed by `replace in array` and nothing else
-// may read it after. Then that type's replaces are the runtime's
-// replaceOwned, which writes the slot in place unless another view shares
-// the buffer (a rest, a push into its room: std.ts marks the version), and
-// otherwise is replaceIn. Ints, Float64s and Texts as items.
+// holders.ts says, per value, whether the array a replace is given has
+// one holder and the replace is the last to use it (C327f: it decided by
+// type before, one-holder.ts over the program's source). Then the replace
+// is the runtime's replaceOwned, which writes the slot in place unless
+// another view shares the buffer (a rest, a push into its room: std.ts
+// marks the version), and otherwise is replaceIn.
 //
 // With `maps` (JavaScript, C60), an `array map` whose items keep their
-// type, of an array whose every value has one holder (the map counting
-// as a change of it), writes each item's answer into the slot it came
-// from: drift's motes, moved a hundred times, each step making no new
-// array. The map's fold walks from the back, reading slot i before it
-// writes it and never after, so the items it reads are the ones given.
+// type, of an array with one holder that the map is the last to use,
+// writes each item's answer into the slot it came from: drift's motes,
+// moved a hundred times, each step making no new array. The map's fold
+// walks from the back, reading slot i before it writes it and never
+// after, so the items it reads are the ones given.
 
-import type { Code, Id } from "../../ters/src/model.ts";
-import type { Info } from "../../ters/src/lang/infer.ts";
-import { oneHolder } from "../../ters/src/lang/one-holder.ts";
-import { ARRAY_OPS } from "../../ters/src/lang/std.ts";
+import type { Id } from "../../ters/src/model.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
-import { ARRAY, INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
+import { holders } from "./holders.ts";
 import { isArray, kids, type CoreIR, type SExpr } from "./scalar.ts";
 
-const REPLACE = /^array\.replaceAt\.a(\d+)$/;
+// The program's functions called from outside: main's own.
+const rootsOf = (ir: CoreIR, main: Id) => ir.funcs.flatMap((g, i) => (g.def === main && !g.inner ? [i] : []));
 
-export function ownedArrays(ir: CoreIR, code: Code, info: Info, names: Record<Id, string>, main: Id, maps = false): number {
-  const n = maps ? mapsInPlace(ir, code, info, names, main) : 0;
-  // The array types a replace is made in.
-  const used = new Set<number>();
-  const scan = (e: SExpr) => { if (e.k === "rt") { const m = REPLACE.exec(e.fn); if (m) used.add(Number(m[1])); } kids(e).forEach(scan); };
-  ir.funcs.forEach((f) => scan(f.body));
-  if (!used.size) return n;
-  const ops = ARRAY_OPS as Record<string, Id>;
-  const jobs = new Set(Object.values(ops)), changes = new Map([[ops.replaceAt, 0]]);
-  const owned = new Set<number>();
-  for (const a of used) {
-    const t = ir.arrays[a]?.item;
-    // Arrays as items too: the moths' cells, an array of each cell's moth
-    // numbers, filed into every tick (G3f).
-    const item = t === "int" || t === "int32" ? INT : t === "f64" ? NUMBER : t === "text" ? STRING : t && isArray(t) ? ARRAY : undefined;
-    if (item && oneHolder(code, info, main, new Set([ARRAY]), jobs, changes, names, item, false, undefined, true).ok) owned.add(a);
-  }
-  if (!owned.size) return n;
-  let total = n;
-  const put = (e: SExpr) => {
-    if (e.k === "rt") { const m = REPLACE.exec(e.fn); if (m && owned.has(Number(m[1]))) { e.fn = `array.replaceOwned.a${m[1]}`; total++; } }
-    kids(e).forEach(put);
-  };
-  ir.funcs.forEach((f) => put(f.body));
-  return total;
+export function ownedArrays(ir: CoreIR, main: Id, maps = false): number {
+  const roots = rootsOf(ir, main);
+  let n = maps ? mapsInPlace(ir, roots) : 0;
+  for (const e of holders(ir, roots).owned) if (e.k === "rt" && REPLACE.test(e.fn)) { e.fn = e.fn.replace(REPLACE, "array.replaceOwned.a$1"); n++; }
+  return n;
 }
+
+const REPLACE = /^array\.replaceAt\.a(\d+)$/;
 
 // An `array map` as lowered: `map(a, by)` calls its fold with the array,
 // its length, an empty array and `by`; the fold, given (a, i, made, by),
 // is `if i = 0 then made else let j = i - 1; let x = a[j]; fold(a, j,
 // push front(made, by(x)), by)`. When the array read and the array made
-// are of one type, and every array of it has one holder, the map gives
-// the fold its own array to make, and each push front becomes the
-// replace of slot j.
-function mapsInPlace(ir: CoreIR, code: Code, info: Info, names: Record<Id, string>, main: Id): number {
+// are of one type, and the array given has one holder and the map is the
+// last to use it (holders.ts, the map counted as giving it away), the
+// map gives the fold its own array to make, and each push front becomes
+// the replace of slot j: the fold reads slot j before it writes it.
+function mapsInPlace(ir: CoreIR, roots: number[]): number {
   const found = mapFolds(ir);
   if (!found.length) return 0;
-  const def = preludeDef("array map")!;
-  const ops = ARRAY_OPS as Record<string, Id>;
-  const jobs = new Set([...Object.values(ops), def]), changes = new Map([[ops.replaceAt, 0], [def, 0]]);
-  const owned = new Map<number, boolean>();
-  const ownedOf = (a: number): boolean => {
-    if (!owned.has(a)) {
-      const t = ir.arrays[a]?.item;
-      const item = t === "int" || t === "int32" ? INT : t === "f64" ? NUMBER : t === "text" ? STRING : typeof t === "object" && t !== null && "def" in t ? (t as { def: Id }).def : undefined;
-      owned.set(a, !!item && oneHolder(code, info, main, new Set([ARRAY]), jobs, changes, names, item, false, undefined, true).ok);
-    }
-    return owned.get(a)!;
-  };
+  const maps = new Set(found.map((m) => m.map));
+  const h = holders(ir, roots, maps);
   let n = 0;
   for (const m of found) {
-    if (!ownedOf(m.a)) continue;
+    if (!h.one(m.map, 0)) continue;
     m.entry.args[2] = { k: "local", i: 0 };
     Object.assign(m.push, { fn: `array.replaceOwned.a${m.a}`, args: [m.push.args[0], { k: "local", i: m.j }, m.push.args[1]] });
     n++;
@@ -108,8 +79,8 @@ export function mapsInPlaceCounted(ir: CoreIR): number {
 function mapFolds(ir: CoreIR) {
   const def = preludeDef("array map");
   if (!def) return [];
-  const found: { entry: Extract<SExpr, { k: "call" }>; push: Extract<SExpr, { k: "rt" }>; get: Extract<SExpr, { k: "rt" }>; j: number; a: number }[] = [];
-  for (const f of ir.funcs) {
+  const found: { map: number; entry: Extract<SExpr, { k: "call" }>; push: Extract<SExpr, { k: "rt" }>; get: Extract<SExpr, { k: "rt" }>; j: number; a: number }[] = [];
+  for (const [fi, f] of ir.funcs.entries()) {
     const b = f.body;
     if (f.def !== def || b.k !== "call" || b.args.length !== 4) continue;
     const [a, len, empty, by] = b.args;
@@ -132,7 +103,7 @@ function mapFolds(ir: CoreIR) {
     if (push.k !== "rt" || at(push, "pushFront") === null || push.args[0]?.k !== "local" || (push.args[0] as { i: number }).i !== 2) continue;
     const t = at(get, "get");
     if (t !== at(push, "pushFront") || t !== at(empty, "empty")) continue;
-    found.push({ entry: b, push, get, j: lj.i, a: t! });
+    found.push({ map: fi, entry: b, push, get, j: lj.i, a: t! });
   }
   return found;
 }
