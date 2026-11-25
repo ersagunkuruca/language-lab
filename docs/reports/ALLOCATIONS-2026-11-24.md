@@ -482,6 +482,29 @@ above, one thread (`kinds.py`), and the best of five times:
 | scan 800 | 19.7 M | 17.6 M: **-11%** | 490 ms | 483 ms |
 | mini 2,000 | 5.26 M | 5.19 M: -1% | 80 ms | 78 ms |
 
+### C327d on WebAssembly, built (2026-11-25)
+
+`compiler/src/wasm.ts` does the same with GC types: a fold's frames type
+becomes `done` and `stack` (a growable array of its values, and how
+many), pushed, read and popped by three runtime functions. The stack a
+fold emptied waits in a global for the next fold of its type and `done`
+is made once, so the frame structs go as C's frame cells went (the same
+lowering, the same counts as the table above). Under Node's WASI, best
+of three:
+
+| program | time before | after |
+|---|---|---|
+| strings 32 | 4.46 s | 4.23 s |
+| scan 3,200 | 2.07 s | 2.13 s |
+| typeset 1,000 | 1.20 s | 1.29 s |
+| mini 8,000 | 358 ms | 378 ms |
+| bazaar 10,000 | 79 ms | 76 ms |
+| pack 3,200 | 53 ms | 51 ms |
+
+V8's young generation made these structs nearly free, so the times move
+within noise either way; the point is the engines whose collectors are
+slower (Ersagun 2026-11-25). Every benchmark prints the same.
+
 ## How this was measured
 
 On this container (4 cores), gcc 13 at `ters native`'s flags. Cells by

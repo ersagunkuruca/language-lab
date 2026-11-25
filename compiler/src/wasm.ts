@@ -112,6 +112,8 @@ const INT32_RT: Op[] = ["iadd", "isub", "imul", "ineg", "iabs", "iquot", "irem",
 // A program's own handlers (L213c8): their runtime names, and the stack's
 // frames, each an effect's number and up to FRAME - 1 cases.
 const STACK = /^(hpush|hpop|handler|hhas|htake|hgive|hdepth|hcut|hoff|hon):([^:]+)(?::(\d+))?$/;
+// A fold's stack's own functions (C327d), by the data type's place.
+const FSTACK = /^fstack\.(push|top|pop)\.(\d+)$/;
 const FRAME = 17, FRAMES = 4096;
 // A frame whose case runs while it may perform its own operation (pig's
 // `recorded into`, C325) is busy: its effect's number + BUSY, so `hhas`
@@ -438,6 +440,31 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       .replace(/struct\.get \$arr 0/g, `call $array.cur.a${a}\nstruct.get $arr 0`).replace(/struct\.new \$arr/g, "ref.null $note\nstruct.new $arr");
     return { ...g, body, locals: noted ? [...g.locals, ["b", "array"]] : g.locals, uses: body.includes(`call $array.cur.a${a}`) ? [...g.uses, `array.cur.a${a}`] : g.uses };
   };
+  // A fold's stack's push, top and pop (C327d), on its frame case's struct
+  // S.c1: field 1 its items, field 2 how many.
+  const fstackRt = (name: string): RtFn => {
+    const [, op, k] = FSTACK.exec(name)!;
+    const d = lowered.data[Number(k)], v = d.cases[1].fields[0].t as DType, j = stacks.indexOf(d);
+    // (Got when it's written: the structs and globals are laid out later.)
+    const types = { S: d, V: v, get SF() { return caseIndex(d, 1); }, get SI() { return stackItems.get(d.key)!; }, get "global spare"() { return stackGlobals + 2 * j; }, get "global done"() { return stackGlobals + 2 * j + 1; } };
+    const lines = (xs: string[]) => xs.join("\n");
+    if (op === "top") return { name, params: [["s", "S" as VT]], result: "V" as VT, locals: [], uses: [], types, body: lines([
+      "local.get $s", "ref.cast $SF", "struct.get $SF 1", "local.get $s", "ref.cast $SF", "struct.get $SF 2", "i32.const 1", "i32.sub", "array.get $SI"]) };
+    // Popped: the slot let go, and an emptied stack kept for the next fold.
+    if (op === "pop") return { name, params: [["s", "S" as VT]], result: "S" as VT, locals: [["f", "SF" as VT], ["n", "i32"], ["r", "S" as VT]], uses: [], types, body: lines([
+      "local.get $s", "ref.cast $SF", "local.tee $f", "local.get $f", "struct.get $SF 2", "i32.const 1", "i32.sub", "local.tee $n", "struct.set $SF 2",
+      "local.get $f", "struct.get $SF 1", "local.get $n", "ref.null $V", "array.set $SI",
+      "local.get $n", "i32.eqz", "if void", "local.get $f", "global.set $spare", "global.get $done", "local.set $r", "else", "local.get $f", "local.set $r", "end", "local.get $r"]) };
+    return { name, params: [["x", "V" as VT], ["s", "S" as VT]], result: "S" as VT, locals: [["f", "SF" as VT], ["a", "SI" as VT], ["b", "SI" as VT], ["n", "i32"]], uses: [], types, body: lines([
+      "local.get $s", "struct.get $S 0", "if void", "local.get $s", "ref.cast $SF", "local.set $f",
+      "else", "global.get $spare", "local.tee $f", "ref.is_null", "if void", "i32.const 1", "i32.const 8", "array.new_default $SI", "i32.const 0", "struct.new $SF", "local.set $f",
+      "else", "ref.null $SF", "global.set $spare", "end", "end",
+      "local.get $f", "struct.get $SF 2", "local.tee $n", "local.get $f", "struct.get $SF 1", "local.tee $a", "array.len", "i32.eq", "if void",
+      "local.get $n", "i32.const 2", "i32.mul", "array.new_default $SI", "local.tee $b", "i32.const 0", "local.get $a", "i32.const 0", "local.get $n", "array.copy $SI $SI",
+      "local.get $f", "local.get $b", "struct.set $SF 1", "local.get $b", "local.set $a", "end",
+      "local.get $a", "local.get $n", "local.get $x", "array.set $SI",
+      "local.get $f", "local.get $n", "i32.const 1", "i32.add", "struct.set $SF 2", "local.get $f"]) };
+  };
   const rt = (name: string): RtFn => {
     const vm = VERSION_FN.exec(name);
     if (vm) { const v = versionRt(name, vm); return byteArray(lowered.arrays[v.array!]) ? byteSlots(v) : v; }
@@ -451,6 +478,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   };
   const rt0 = (name: string): RtFn => {
     if (STACK.test(name)) return stackRt(name);
+    if (FSTACK.test(name)) return fstackRt(name);
     if (TABLE_RT.test(name)) { const f = tableRt(name, lowered.tables); return f.array !== undefined && byteArray(lowered.arrays[f.array]) ? byteSlots(f) : f; }
     if (name === "wasi.stop") return { ...wasiStop(lowered.stops ?? []), name };
     // Bytes, the module's own record (C291).
@@ -471,9 +499,27 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (name.startsWith("wasi_")) { if (!wasiImports.includes(name)) wasiImports.push(name); return; }
     if (/^(Text(List|Option)|Int(List|Option)|Bytes)\./.test(name)) return;
     rtNames.push(name);
-    rt(name).uses.forEach(need);
+    // (A fold's stack's use nothing, and its types are laid out below.)
+    if (!FSTACK.test(name)) rt(name).uses.forEach(need);
   };
+  // A fold's stack (scalar.ts framesOf, C327d), as C's (c.ts stackOf):
+  // one struct a fold, its values in a growable array, pushed on the way
+  // down and popped on the way up, not a frame struct each. The stack a
+  // fold emptied waits in a global for the next fold of its type, and
+  // `done` is one struct made once, so a shallow fold makes nothing. Its
+  // frame case is the stack (case 1, its items and how many), the empty
+  // one `done` (case 0). Not where a function giving several answers
+  // takes it, as core-js.ts's.
+  const several = new Set<string>();
+  const framesIn = (e: SExpr) => { const t = (e as { t?: LType }).t; if (t && isData(t) && t.inner && t.key.endsWith(".frames")) several.add(t.key); kids(e).forEach(framesIn); };
+  for (const g of funcs0) if (g.multi) framesIn(g.body);
+  const noStacks = typeof process !== "undefined" && !!process.env.NO_FOLD_STACKS;
+  const stackOf = (t: LType): boolean => isData(t) && !!t.inner && t.key.endsWith(".frames") && t.cases.length === 2 && !t.cases[0].fields.length && t.cases[1].fields.length === 2 && t.cases[1].fields[1].t === t && isData(t.cases[1].fields[0].t) && !several.has(t.key) && !noStacks;
+  const stacks = lowered.data.filter(stackOf);
+  const fstack = (op: "push" | "top" | "pop", t: DType) => `fstack.${op}.${lowered.data.findIndex((x) => x.key === t.key)}`;
   const rtCalls = (e: SExpr): void => {
+    if (e.k === "new" && stackOf(e.t) && e.c === 1) need(fstack("push", e.t));
+    if (e.k === "field" && stackOf(e.t)) need(fstack(e.i === 0 ? "top" : "pop", e.t));
     // (derivative(f) carried by f is printed in place, I245.)
     if (e.k === "rt" && e.fn !== "derived") { if (STACK.test(e.fn)) stackArity.set(e.fn, e.args.length); need(e.fn); if (stepped(e)) need("i64.box"); }
     if (e.k === "op" && e.op === "mod") need("number.mod");
@@ -567,7 +613,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // `bytes`: Text's array.
   // `items`: an Array's items (C66), a mutable array of the item type;
   // a field with `ref` holds a (nullable) reference to that type.
-  const structs: { name: string; fields: { name: string; t: MType; code?: number; ref?: number; narrow?: true }[]; sup?: number; final: boolean; func?: FType; maker?: { self: FType; result: FType }; bytes?: true; i64s?: true; u32s?: true; refs?: true; mutable?: true; items?: MType }[] = [];
+  const structs: { name: string; fields: { name: string; t: MType; code?: number; ref?: number; narrow?: true; mut?: true }[]; sup?: number; final: boolean; func?: FType; maker?: { self: FType; result: FType }; bytes?: true; i64s?: true; u32s?: true; refs?: true; mutable?: true; items?: MType }[] = [];
   if (texty) structs.push({ name: "bytes", fields: [], final: true, bytes: true });
   // A Text (I222): its bytes' array, where in it the text starts, its
   // size, its characters (-1 till counted), and the array's fill when it
@@ -590,10 +636,19 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // demoted where it is made and promoted where it is read, exactly.
   for (const r of recs) { recIndex.set(r.key, structs.length); structs.push({ name: `${ident(r.name)}${structs.length}`, fields: isFloat32(r) ? [{ ...r.fields[0], narrow: true }] : r.fields, final: true, ...(r.mutable ? { mutable: true as const } : {}) }); }
   const CASE = { name: "case", t: "i32" as const };
+  const stackItems = new Map<string, number>();
   for (const d of datas) {
     const b = structs.length, name = `${ident(d.name)}${b}`;
     baseIndex.set(d.key, b);
     structs.push({ name, fields: [CASE], final: false });
+    if (stackOf(d)) {
+      // A fold's stack: done, then the stack itself, then its items.
+      structs.push({ name: `${name}.done`, fields: [CASE], sup: b, final: true });
+      structs.push({ name: `${name}.stack`, fields: [CASE, { name: "items", t: "i32", ref: b + 3, mut: true }, { name: "n", t: "i32", mut: true }], sup: b, final: true });
+      stackItems.set(d.key, b + 3);
+      structs.push({ name: `${name}.items`, fields: [], final: true, items: d.cases[1].fields[0].t });
+      continue;
+    }
     for (const c of d.cases) structs.push({ name: `${name}.${ident(c.name)}`, fields: [CASE, ...c.fields], sup: b, final: true });
   }
   // A function type: its closure's struct, holding the code, then the
@@ -668,14 +723,14 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     return d;
   };
   const resolver = (f?: RtFn) => ({
-    type: (n: string) => (f?.table !== undefined && TBL[n] !== undefined ? tblIndex.get(f.table)! + TBL[n] : f?.types?.[n] ? refIndex(f.types[n] as RType) : /\.c\d+$/.test(n) && f?.types?.[n.replace(/\.c\d+$/, "")] ? caseIndex(f.types[n.replace(/\.c\d+$/, "")] as DType, Number(n.slice(n.lastIndexOf(".c") + 2))) : n === "arr" ? arrIndex.get(arrayOf(f).key)! : n === "buf" ? arrIndex.get(arrayOf(f).key)! - 1 : n === "items" ? arrIndex.get(arrayOf(f).key)! - 2 : n === "note" ? arrIndex.get(arrayOf(f).key)! + 1 : n === "bytes" ? bytesIndex : n === "text" ? textIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "u32s" ? u32sIndex : n === "huge" ? hugeIndex : n === "hstack" ? hstackIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
+    type: (n: string) => (typeof f?.types?.[n] === "number" ? f.types[n] as number : f?.table !== undefined && TBL[n] !== undefined ? tblIndex.get(f.table)! + TBL[n] : f?.types?.[n] ? refIndex(f.types[n] as RType) : /\.c\d+$/.test(n) && f?.types?.[n.replace(/\.c\d+$/, "")] ? caseIndex(f.types[n.replace(/\.c\d+$/, "")] as DType, Number(n.slice(n.lastIndexOf(".c") + 2))) : n === "arr" ? arrIndex.get(arrayOf(f).key)! : n === "buf" ? arrIndex.get(arrayOf(f).key)! - 1 : n === "items" ? arrIndex.get(arrayOf(f).key)! - 2 : n === "note" ? arrIndex.get(arrayOf(f).key)! + 1 : n === "bytes" ? bytesIndex : n === "text" ? textIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "u32s" ? u32sIndex : n === "huge" ? hugeIndex : n === "hstack" ? hstackIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
     func: (n: string) => {
       if (n.startsWith("wasi_")) return worldBase + wasiImports.indexOf(n);
       if (n === "main") return fnIndex(funcs.indexOf(main!));
       const h = helpers.findIndex((x) => x.name === n);
       return h >= 0 ? fnIndex(funcs.length + h) : rtIndex(n);
     },
-    global: (n: string) => (n === "reason" ? reasonG : n === "pow5" ? pow5G : n === "msp" ? mspG : n === "none" ? noneG : n === "hs" ? stackG : n === "hn" ? stackG + 1 : /^r[0-3]$/.test(n) ? randG + Number(n[1]) : 0),
+    global: (n: string) => (typeof f?.types?.[`global ${n}`] === "number" ? f.types[`global ${n}`] as number : n === "reason" ? reasonG : n === "pow5" ? pow5G : n === "msp" ? mspG : n === "none" ? noneG : n === "hs" ? stackG : n === "hn" ? stackG + 1 : /^r[0-3]$/.test(n) ? randG + Number(n[1]) : 0),
     memory: (n: string) => ({ index: 0, base: n === "math" ? MATH_AT : 0 }),
     at: (n: string) => { if (n !== "buf") throw new Error(`no address @${n}`); return math ? MATH_AT + 65536 : MATH_AT; },
     valtype: (t: VT) => {
@@ -683,7 +738,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       if (t === "option") return { bytes: typeOf(optionOf()), text: `(ref null $${structs[baseIndex.get(OPTION_TEXT)!].name})` };
       if (t === "void") throw new Error("nothing isn't a value type");
       // A type the function names itself (a data type a table's key walks, C243).
-      if (f?.types?.[t] && isRec(f.types[t] as MType)) { const m = f.types[t] as MType; return { bytes: typeOf(m), text: `(ref null $${structs[refIndex(m as RType)].name})` }; }
+      if (f?.types?.[t] && typeof f.types[t] !== "number" && isRec(f.types[t] as MType)) { const m = f.types[t] as MType; return { bytes: typeOf(m), text: `(ref null $${structs[refIndex(m as RType)].name})` }; }
+      if (typeof f?.types?.[t] === "number") { const k = f.types[t] as number; return { bytes: [0x63, ...s(k)], text: `(ref null $${structs[k].name})` }; }
       if (f?.table !== undefined && TBL[t] !== undefined) { const k = tblIndex.get(f.table)! + TBL[t]; return { bytes: [0x63, ...s(k)], text: `(ref null $${structs[k].name})` }; }
       if (t === "key" || t === "value") {
         const m = t === "key" ? lowered.tables[f!.table!].keyT : lowered.tables[f!.table!].value;
@@ -785,6 +841,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const kept = new Map<number, number>();
   funcs.forEach((f, i) => { if (f.value && !f.params.length && !f.partial && !f.spends && (f.result === "text" || isRecord(f.result) || isData(f.result) || (isArray(f.result) && (!written.has(f.result.index) || emptyArray(f.body))))) kept.set(i, randG + (rand ? 4 : 0) + kept.size); });
   const stackG = randG + (rand ? 4 : 0) + kept.size;
+  // Each fold stack's two (C327d): the one waiting, and done.
+  const stackGlobals = stackG + (stack ? 2 : 0);
   if (aborts) helpers.push({ name: "Abort.reason", key: "", params: [], result: "text", code: [0x23, ...u(reasonG)], wat: ["global.get $reason"] });
   // For the world's host: lists and optionals of texts, by fixed names
   // (TextList.cons, TextOption.some), whatever else the module has; for
@@ -849,7 +907,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (x.items) return [0x5e, ...typeOf(x.items), 0x01];
     if (x.func) return [0x60, ...vec([x.func, ...x.func.params].map(typeOf)), ...vec([typeOf(x.func.result), ...(x.func.partial ? [[0x7f]] : [])])];
     if (x.maker) return [0x60, ...vec([typeOf(x.maker.self)]), ...vec([typeOf(x.maker.result)])];
-    const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : y.ref !== undefined ? [0x63, ...s(y.ref)] : y.narrow ? [0x7d] : typeOf(y.t)), x.mutable ? 0x01 : 0x00]))];
+    const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : y.ref !== undefined ? [0x63, ...s(y.ref)] : y.narrow ? [0x7d] : typeOf(y.t)), x.mutable || y.mut ? 0x01 : 0x00]))];
     return x.final && x.sup === undefined ? body : [x.final ? 0x4f : 0x50, ...vec(x.sup === undefined ? [] : [u(x.sup)]), ...body];
   };
   const typeSec = vec([
@@ -887,6 +945,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...(rand ? [0, 1, 2, 3].map(() => [0x7f, 0x01, 0x41, 0x00, 0x0b]) : []),
     ...[...kept.keys()].map((i) => { const t = funcs[i].result as MType; return [...typeOf(t), 0x01, 0xd0, ...s(t === "text" ? textIndex : refIndex(t as RType)), 0x0b]; }),
     ...(stack ? [[0x64, ...s(hstackIndex), 0x00, 0x41, ...s(SLOTS), 0xfb, 0x07, ...u(hstackIndex), 0x0b], [0x7f, 0x01, 0x41, 0x00, 0x0b]] : []),
+    ...stacks.flatMap((d) => { const k = caseIndex(d, 1), z = caseIndex(d, 0); return [[0x63, ...s(k), 0x01, 0xd0, ...s(k), 0x0b], [0x64, ...s(z), 0x00, 0x41, 0x00, 0xfb, 0x00, ...u(z), 0x0b]]; }),
   ]);
   const zero = (t: MType) => (t === "text" ? [0xd0, ...s(textIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" || t === "host" ? [0xd0, 0x6d] : t === "mag" ? [0xd0, ...s(u32sIndex)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
@@ -1020,7 +1079,9 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       }
       case "make": return [...e.args.flatMap(code1), ...(isFloat32(e.t) ? [0xb6] : []), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!)];
       case "get": return [...code1(e.rec), 0xfb, 0x02, ...u(recIndex.get(e.t.key)!), ...u(e.i), ...(isFloat32(e.t) ? [0xbb] : [])];
-      case "new": return [0x41, ...s(e.c), ...e.args.flatMap(code1), 0xfb, 0x00, ...u(caseIndex(e.t, e.c))];
+      case "new":
+        if (stackOf(e.t)) return e.c === 0 ? [0x23, ...u(stackGlobals + 2 * stacks.findIndex((x) => x.key === e.t.key) + 1)] : [...e.args.flatMap(code1), 0x10, ...u(rtIndex(fstack("push", e.t)))];
+        return [0x41, ...s(e.c), ...e.args.flatMap(code1), 0xfb, 0x00, ...u(caseIndex(e.t, e.c))];
       // The items in order on the stack, then from the last: each into
       // `item`, made into a cons onto `acc` (L181b).
       case "list": {
@@ -1029,7 +1090,10 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         return [...e.items.flatMap(code1), ...code1(nil), 0x21, ...u(e.acc), ...e.items.flatMap(() => step), 0x20, ...u(e.acc)];
       }
       // ref.cast to the case, then its field (after the case's number).
-      case "field": { const k = caseIndex(e.t, e.c); return [...code1(e.rec), 0xfb, 0x16, ...s(k), 0xfb, 0x02, ...u(k), ...u(e.i + 1)]; }
+      case "field": {
+        if (stackOf(e.t)) return [...code1(e.rec), 0x10, ...u(rtIndex(fstack(e.i === 0 ? "top" : "pop", e.t)))];
+        const k = caseIndex(e.t, e.c); return [...code1(e.rec), 0xfb, 0x16, ...s(k), 0xfb, 0x02, ...u(k), ...u(e.i + 1)];
+      }
       case "tag": return [...code1(e.rec), 0xfb, 0x02, ...u(baseIndex.get(e.t.key)!), 0x00];
       case "closure": {
         const maker = !derived.has(e.t.key) ? [] : e.d !== undefined ? [0xd2, ...u(fnIndex(e.d))] : [0xd0, ...s(cloIndex.get(e.t.key)! + 2)];
@@ -1152,7 +1216,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
     // WASI's memory, with the math functions' page when they're used.
     ...(wasi ? section(5, vec([[0x00, math ? 0x02 : 0x01]])) : []),
-    ...(fuel || aborts || ryu || math || escapes || flags || rand || kept.size || stack ? section(6, globalSec) : []), ...section(7, exportSec),
+    ...(fuel || aborts || ryu || math || escapes || flags || rand || kept.size || stack || stacks.length ? section(6, globalSec) : []), ...section(7, exportSec),
     // ref.func needs the functions declared: one declarative segment.
     ...(declared.length ? section(9, vec([[0x03, 0x00, ...vec(declared.map((i) => u(fnIndex(i))))]])) : []),
     ...section(10, codeSec),
@@ -1207,13 +1271,18 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       }
       case "make": return [...e.args.map(w), ...(isFloat32(e.t) ? [`${d}f32.demote_f64`] : []), `${d}struct.new ${recName(e.t)}`].join("\n");
       case "get": return `${w(e.rec)}\n${d}struct.get ${recName(e.t)} ${e.i}${isFloat32(e.t) ? `\n${d}f64.promote_f32` : ""}`;
-      case "new": return [`${d}i32.const ${e.c}`, ...e.args.map(w), `${d}struct.new ${sname(caseIndex(e.t, e.c))}`].join("\n");
+      case "new":
+        if (stackOf(e.t)) return e.c === 0 ? `${d}global.get $done${stacks.findIndex((x) => x.key === e.t.key)}` : [...e.args.map(w), `${d}call $${fstack("push", e.t)}`].join("\n");
+        return [`${d}i32.const ${e.c}`, ...e.args.map(w), `${d}struct.new ${sname(caseIndex(e.t, e.c))}`].join("\n");
       case "list": {
         const [nil, cons] = listSteps(e);
         const step = [`${d}local.set ${local(f, e.item)}`, w(cons), `${d}local.set ${local(f, e.acc)}`].join("\n");
         return [...e.items.map(w), w(nil), `${d}local.set ${local(f, e.acc)}`, ...e.items.map(() => step), `${d}local.get ${local(f, e.acc)}`].join("\n");
       }
-      case "field": { const k = sname(caseIndex(e.t, e.c)); return `${w(e.rec)}\n${d}ref.cast (ref ${k})\n${d}struct.get ${k} ${e.i + 1}`; }
+      case "field": {
+        if (stackOf(e.t)) return `${w(e.rec)}\n${d}call $${fstack(e.i === 0 ? "top" : "pop", e.t)}`;
+        const k = sname(caseIndex(e.t, e.c)); return `${w(e.rec)}\n${d}ref.cast (ref ${k})\n${d}struct.get ${k} ${e.i + 1}`;
+      }
       case "tag": return `${w(e.rec)}\n${d}struct.get ${recName(e.t)} 0`;
       case "closure": {
         const maker = !derived.has(e.t.key) ? [] : [e.d !== undefined ? `${d}ref.func ${id(funcs[e.d])}` : `${d}ref.null ${sname(cloIndex.get(e.t.key)! + 2)}`];
@@ -1302,7 +1371,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       if (x.func) return `    (type $${x.name} (func (param ${[x.func, ...x.func.params].map(ty).join(" ")}) (result ${ty(x.func.result)}${x.func.partial ? " i32" : ""})))`;
       if (x.maker) return `    (type $${x.name} (func (param ${ty(x.maker.self)}) (result ${ty(x.maker.result)})))`;
       const fty = (y: (typeof x.fields)[number]) => (y.ref !== undefined ? `(ref null ${sname(y.ref)})` : y.narrow ? "f32" : ty(y.t));
-      const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${y.code !== undefined ? `(ref ${sname(y.code)})` : x.mutable ? `(mut ${fty(y)})` : fty(y)})`).join("")})`;
+      const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${y.code !== undefined ? `(ref ${sname(y.code)})` : x.mutable || y.mut ? `(mut ${fty(y)})` : fty(y)})`).join("")})`;
       return `    (type $${x.name} ${x.final && x.sup === undefined ? body : `(sub${x.final ? " final" : ""}${x.sup === undefined ? "" : ` ${sname(x.sup)}`} ${body})`})`;
     }),
     ...(structs.length ? ["  )"] : []),
@@ -1320,6 +1389,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...(rand ? [0, 1, 2, 3].map((k) => `  (global $r${k} (mut i32) (i32.const 0))`) : []),
     ...[...kept.keys()].map((i) => `  (global $kept${i} (mut ${ty(funcs[i].result as MType)}) (${zeroText(funcs[i].result as MType)}))`),
     ...(stack ? [`  (global $hs (ref $hstack) (array.new_default $hstack (i32.const ${SLOTS})))`, "  (global $hn (mut i32) (i32.const 0))"] : []),
+    ...stacks.flatMap((d, j) => { const k = sname(caseIndex(d, 1)), z = sname(caseIndex(d, 0)); return [`  (global $spare${j} (mut (ref null ${k})) (ref.null ${k}))`, `  (global $done${j} (ref ${z}) (struct.new ${z} (i32.const 0)))`]; }),
     ...(declared.length ? [`  (elem declare func${declared.map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");
