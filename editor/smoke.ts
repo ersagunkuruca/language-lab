@@ -27,6 +27,14 @@ const page = process.argv[2] ?? new URL("../index.html", import.meta.url).href;
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : { channel: "chrome" });
 const errors: string[] = [];
 let where = "loading";
+// What a step shows comes after the editor's next tasks, later on a slow
+// machine: asked again until it holds or `ms` pass, not read once.
+async function soon(holds: () => Promise<boolean>, ms = 5000): Promise<boolean> {
+  for (const end = Date.now() + ms; ; await new Promise((r) => setTimeout(r, 100))) {
+    if (await holds().catch(() => false)) return true;
+    if (Date.now() > end) return false;
+  }
+}
 let defs = 0;
 
 async function visit(saved: string | null, only?: string) {
@@ -111,20 +119,25 @@ async function visit(saved: string | null, only?: string) {
           // Each time from the menu once it shows, opened on the canvas
           // itself where nothing is drawn: the corner can be under the zoom
           // buttons or a node, whose menus have no Tidy.
+          // A place found empty can be drawn over by the time it's clicked
+          // (the graph still drawing): then the place is looked for again.
           const tidy = async () => {
-            const [x, y] = await svg.evaluate((s) => {
-              const r = s.getBoundingClientRect();
-              for (let y = r.bottom - 8; y > r.top; y -= 12) for (let x = r.left + 8; x < r.right; x += 12) if (document.elementFromPoint(x, y) === s) return [x, y];
-              return [r.left + 8, r.bottom - 8];
-            });
-            await p.mouse.click(x, y, { button: "right" });
             const item = p.locator('.ctx-item[data-menu="tidy-all"]').first();
-            if (!(await item.waitFor({ timeout: 5000 }).then(() => true, () => false))) { errors.push(`${where}: the graph's menu has no Tidy everything`); await p.keyboard.press("Escape"); return false; }
-            await item.click();
-            return true;
+            for (let tries = 0; tries < 3; tries++) {
+              const [x, y] = await svg.evaluate((s) => {
+                const r = s.getBoundingClientRect();
+                for (let y = r.bottom - 8; y > r.top; y -= 12) for (let x = r.left + 8; x < r.right; x += 12) if (document.elementFromPoint(x, y) === s) return [x, y];
+                return [r.left + 8, r.bottom - 8];
+              });
+              await p.mouse.click(x, y, { button: "right" });
+              if (await item.waitFor({ timeout: 5000 }).then(() => true, () => false)) { await item.click(); return true; }
+              await p.keyboard.press("Escape");
+            }
+            errors.push(`${where}: the graph's menu has no Tidy everything`);
+            return false;
           };
           // Tidy everything is one layout: doing it again moves nothing (BACKLOG E106).
-          if (await tidy() && await tidy() && !/^Already tidy/.test(await p.locator(".status").innerText())) errors.push(`${where}: tidying twice moved nodes: ${await p.locator(".status").innerText()}`);
+          if (await tidy() && await tidy() && !(await soon(async () => /^Already tidy/.test(await p.locator(".status").innerText())))) errors.push(`${where}: tidying twice moved nodes: ${await p.locator(".status").innerText()}`);
           // The map, when part of the graph is out of the window.
           if (await p.locator(".p-graph .minimap").isVisible().catch(() => false)) {
             // Drawn with the graph's own colours: a frame there was once black.
@@ -142,7 +155,8 @@ async function visit(saved: string | null, only?: string) {
           if (await p.locator(".p-graph [data-fold]").count()) {
             const toggles = () => p.locator(".p-graph [data-fold]").evaluateAll((es) => es.map((e) => [e.getAttribute("data-fold")!, e.querySelector("title")?.textContent ?? ""] as const));
             const isOpen = async (id: string) => (await toggles()).some(([f, t]) => f === id && t.startsWith("Fold"));
-            const toggle = (id: string) => p.locator(`.p-graph [data-fold="${id}"]`).first().dispatchEvent("click");
+            // A toggle gone is said, not thrown: a throw ended the whole smoke.
+            const toggle = (id: string) => p.locator(`.p-graph [data-fold="${id}"]`).first().dispatchEvent("click", undefined, { timeout: 5000 }).catch(() => errors.push(`${where}: frame ${id}'s fold toggle went away`));
             let id = (await toggles()).find(([, t]) => t.startsWith("Fold"))?.[0];
             if (!id) { id = (await toggles())[0][0]; await toggle(id); }
             if (!(await isOpen(id))) errors.push(`${where}: unfolding a folded frame left it folded`);
@@ -298,7 +312,7 @@ async function looseValue() {
   if (/_1/.test(text) || !titles.some((t) => /^loose : /.test(t))) errors.push(`${where}: the loose part reads as _1: ${JSON.stringify(titles)}`);
   // Its hole takes no effects, and a search for one says why (BACKLOG E123).
   await p.locator("#f-query").fill('print("hi")'); await p.waitForTimeout(400);
-  if (!/loose part .* can't have effects/.test(await p.locator(".side .palette").innerText())) errors.push(`${where}: a search for print in a loose hole doesn't say why nothing fits`);
+  if (!(await soon(async () => /loose part .* can't have effects/.test(await p.locator(".side .palette").innerText())))) errors.push(`${where}: a search for print in a loose hole doesn't say why nothing fits`);
   // A function is found by what other languages call it, and by its
   // comment (BACKLOG E136).
   await p.locator("#f-query").fill("insert"); await p.waitForTimeout(400);
@@ -575,6 +589,8 @@ async function dotOnWire() {
     const at = await hits.nth(i).evaluate((e: any) => { const q = e.getPointAtLength(e.getTotalLength() / 2), m = e.getScreenCTM(); return { x: q.x * m.a + m.e, y: q.y * m.d + m.f }; });
     await p.mouse.click(at.x, at.y);
     if (!/^Put a dot/.test(await p.locator(".status").innerText())) continue;
+    const near = (d: { x: number; y: number }) => Math.hypot(d.x - at.x, d.y - at.y) <= 8;
+    await soon(async () => (await dots()).some((d) => !had.has(d.id) && near(d)), 3000);
     const dot = (await dots()).find((d) => !had.has(d.id));
     if (!dot || Math.hypot(dot.x - at.x, dot.y - at.y) > 8) errors.push(`${where}: wire ${i}: the dot is ${dot ? Math.round(Math.hypot(dot.x - at.x, dot.y - at.y)) : "?"}px from the click`);
     const now = await places();
@@ -714,8 +730,8 @@ async function phone() {
   await p.locator('[data-act="new-program"]').first().tap();
   if (!(await p.locator("#f-query").isVisible())) errors.push(`${where}: + New program left the palette out of sight`);
   await p.locator('.panes [data-pane="text"]').tap();
-  await p.locator(".blocks-wrap .hole").first().tap({ timeout: 2000 }).catch(() => errors.push(`${where}: no hole to tap in the new program`));
-  if (!(await p.locator("#f-query").isVisible())) errors.push(`${where}: tapping the new program's hole didn't bring the palette`);
+  await p.locator(".blocks-wrap .hole").first().tap({ timeout: 10000 }).catch(() => errors.push(`${where}: no hole to tap in the new program`));
+  if (!(await soon(() => p.locator("#f-query").isVisible()))) errors.push(`${where}: tapping the new program's hole didn't bring the palette`);
   await p.locator('.panes [data-pane="graph"]').tap();
   // A program's graph is drawn a task after it opens, fitted and measured
   // for its map in the frames after (E319k): the map's button settles then.
@@ -865,7 +881,7 @@ async function pagePreview() {
   const field = f.locator("input").first();
   await field.fill("100");
   await field.press("Enter");
-  if (!(await p.locator(".status[role=status]").innerText()).includes("Typed 100 in")) errors.push(`${where}: the status bar says nothing of typing 100 in the converter`);
+  if (!(await soon(async () => (await p.locator(".status[role=status]").innerText()).includes("Typed 100 in")))) errors.push(`${where}: the status bar says nothing of typing 100 in the converter`);
   // A function that reads files doesn't offer to run backwards: the search
   // would read once per guess (BACKLOG E150).
   await p.locator("[data-def]", { hasText: /^quantity$/ }).click();
