@@ -71,7 +71,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E319k | A large definition opened is drawn in tasks of 60 to 200 ms (spacetime's `rapidity picture`, 1,229 nodes); on this machine one is sometimes just over the probe's 200 ms: the graph's render, which makes its 10,000 elements in one task (120 to 200 ms), could make them a part a frame too. Also: a first visit's checks stored in IndexedDB take an idle task of 150 to 190 ms (checkStore.ts, one put of a large check). The probe's "opening a large definition" place shows it. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 

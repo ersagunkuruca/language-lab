@@ -26,7 +26,7 @@ import { Namer } from "../ters/src/render/namer.ts";
 import { BOOL, CHECK, CONS, SOME, TRUE } from "../ters/src/lang/std.ts";
 import { readSaved } from "../ters/src/saved.ts";
 import { CHOICE, DIVERGE, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
-import { renderBlocks, type Shape } from "../ters/src/lang/render.ts";
+import { renderBlocks, type Blk, type Shape } from "../ters/src/lang/render.ts";
 import { needsHandling, OutOfSteps, type Data, type Value } from "../ters/src/lang/run.ts";
 import type { Profile, StopAt, Stuck } from "./runWorker.ts";
 import { hostSkeleton } from "../ters/src/lang/hosts.ts";
@@ -1093,6 +1093,20 @@ function openDef(d: Id, draw = true) {
 // graph). A redraw after draws it at once, its layout kept.
 const GRAPH_LATER = 400;
 let graphLater = false;
+// A big definition's pieces still to draw after its first render, and
+// whether values came meanwhile (its seeds): those redraw once the pieces
+// are in, its graph in a task of its own (E319k: the values on its
+// graph's wires drawn with the whole page, 250 to 370 ms).
+let laterDrawing: { left: number } | null = null, laterRender: { code: Code; def: Id } | null = null;
+function renderWhenDrawn() {
+  if (laterDrawing) { laterRender = { code: doc.code, def: ui.def }; return; }
+  graphKeep = subtree(doc.code, ui.def).length > GRAPH_LATER;
+  render();
+}
+// The graph as drawn kept on the page while the rest draws, and drawn
+// again with the values in the next task (E319k): a big definition's
+// values, come after it opened.
+let graphKeep = false;
 
 // ---------------------------------------------------------------- gestures
 
@@ -1161,7 +1175,7 @@ const returnsBool = (info: T.Info, d: Id) => {
 
 // The values a definition opens with (editor/seeds.ts, E228j).
 const { mainCopies, pixelSeed, readPort, seeded, warmCalls } = seeds({
-  doc: () => doc, ui, pres: () => pres(), ownDefs: () => ownDefs(), defBody: (d) => defBody(d), defNamed, render: () => render(),
+  doc: () => doc, ui, pres: () => pres(), ownDefs: () => ownDefs(), defBody: (d) => defBody(d), defNamed, render: () => renderWhenDrawn(),
 });
 
 // Run backwards (editor/backwards.ts, E228k).
@@ -1309,13 +1323,26 @@ function setShape(id: Id, to: Shape | null) {
   if (to) shape[id] = to; else delete shape[id];
   commit({ layout: { ...doc.layout, shape } }, ["layout.json"], `${to === "hidden" ? "Hidden" : to === "shown" ? "Shown" : to === "line" ? "On one line" : to === "lines" ? "Indented" : "Laid out as it fits"}. Only the layout changed.`);
 }
+// What the blocks are laid out from; the marks only drawn.
+const blocksFrom = (info: T.Info, p: Presentation): unknown[] => [doc.code, info, ui.def, p.names, p.comments, p.hints, p.style, doc.layout.shape, ui.fit, blocksChars];
+// A big definition's blocks laid out in a task of their own, before
+// blocksOf draws them in the next (E319k: Spacetime's `rapidity picture`,
+// 250 ms as one).
+let laidKept: { from: unknown[]; laid: Blk[] } | null = null;
+function layBlocks(info: T.Info): void {
+  const p = typedPres(), from = blocksFrom(info, p);
+  watchBlocks();
+  if (!laidKept || from.some((x, i) => x !== laidKept!.from[i])) laidKept = { from, laid: T.layTyped(doc.code, p, info, ui.def, undefined, blockShapes()) };
+}
 function blocksOf(info: T.Info): HTMLElement {
   const p = typedPres();
   const marks = choiceMarks(choicesNow()), marked = [...marks].join("\n");
-  const from = [doc.code, info, ui.def, p.names, p.comments, p.hints, p.style, doc.layout.groups, doc.layout.folded, doc.layout.shape, ui.fit, blocksChars, marked];
+  const laidFrom = blocksFrom(info, p), from = [...laidFrom, doc.layout.groups, doc.layout.folded, marked];
   watchBlocks();
   if (!blocksKept || from.some((x, i) => x !== blocksKept!.from[i])) {
-    const el = T.renderTyped(doc.code, p, info, ui.def, ui.selected, undefined, doc.layout.groups, doc.layout.folded, blockShapes());
+    const laid = laidKept && laidFrom.every((x, i) => x === laidKept!.from[i]) ? laidKept.laid : undefined;
+    laidKept = null;
+    const el = T.renderTyped(doc.code, p, info, ui.def, ui.selected, undefined, doc.layout.groups, doc.layout.folded, blockShapes(), laid);
     // A badge after each part a choice is about (E292), as in the graph.
     for (const [id, text] of marks) el.querySelector(`[data-id="${CSS.escape(id)}"]`)?.append(h("button", { class: "choice-badge", type: "button", "data-act": "open-choice", "data-target": id, title: text, "aria-label": "Decisions" }));
     return (blocksKept = { from, el }).el;
@@ -2611,6 +2638,9 @@ function render() {
 const SCROLLERS = [".graph-wrap", ".p-text .body", ".blocks-wrap", ".side", ".nav-list"];
 
 function draw() {
+  // Kept for this drawing only, whether or not it draws the graph.
+  const keep = graphKeep;
+  graphKeep = false;
   const app = document.getElementById("app")!;
   const p = pres();
   const namer = new Namer(doc.code, p, ui.def);
@@ -2624,6 +2654,7 @@ function draw() {
   const later = graphLater && !EMBED;
   graphLater = false;
   if (later) graph = null;
+  const kept = !later && keep && !EMBED && graph?.el.isConnected ? graph : null;
 
   // Open definitions are tabs; the one shown is always among them. Past
   // MAX_TABS, opening one closes the one looked at longest ago, so the strip
@@ -2694,7 +2725,7 @@ function draw() {
       h("div", { class: "center" },
         h("section", { class: "panel p-graph", "aria-label": "Graph" },
           h("div", { class: "tabs" }, ...ui.tabs.map(tab), ...gesturesTip(GRAPH_HINT)),
-          h("div", { class: "graph-host", tabindex: "0", "aria-label": GRAPH_KEYS }, later ? null : graphOf(info))),
+          h("div", { class: "graph-host", tabindex: "0", "aria-label": GRAPH_KEYS }, later ? null : kept ? kept.el : graphOf(info))),
         h("div", { class: "gutter row", "data-gutter": "text-h", "aria-hidden": "true" }),
         h("section", { class: "panel p-text", "aria-label": "Text" },
           h("div", { class: "text-head" }, h("h2", {}, "Text"),
@@ -2712,21 +2743,39 @@ function draw() {
   );
   restore();
   changes.markChanges(app);
+  // Its graph kept while the rest drew (renderWhenDrawn): drawn again next.
+  if (kept) {
+    const code = doc.code, def = ui.def, host = app.querySelector<HTMLElement>(".p-graph .graph-host");
+    setTimeout(() => { if (graph === kept && typesOf() === info && doc.code === code && ui.def === def && host?.contains(kept.el)) { host.replaceChildren(graphOf(info)); changes.markChanges(host); } }, 0);
+  }
   // A big definition opened: the side column, its blocks, then its graph,
   // each in a task of its own after the rest (E319k: Spacetime's
   // `rapidity picture` in one task of 428 ms, its blocks 120 of it, the
   // side column 110).
   if (later) {
     const code = doc.code, def = ui.def, same = () => typesOf() === info && doc.code === code && ui.def === def;
-    setTimeout(() => { if (same() && !document.querySelector("#app aside.side")?.firstChild) renderSide(); }, 0);
     const blocks = app.querySelector<HTMLElement>(".p-text .blocks-wrap"), host = app.querySelector<HTMLElement>(".p-graph .graph-host");
-    if (blocks) setTimeout(() => { if (same() && blocks.isConnected && !blocks.firstChild) { blocks.append(blocksOf(info), ...looseBlocks(info)); changes.markChanges(blocks); } }, 0);
+    const mine = (laterDrawing = { left: 1 + (blocks ? 1 : 0) + (host ? 1 : 0) });
+    const ended = () => {
+      if (laterDrawing !== mine || --mine.left > 0) return;
+      laterDrawing = null;
+      const was = laterRender;
+      laterRender = null;
+      // Only for what is still open.
+      if (was) setTimeout(() => { if (doc.code === was.code && ui.def === was.def) renderWhenDrawn(); }, 0);
+    };
+    setTimeout(() => { if (same() && !document.querySelector("#app aside.side")?.firstChild) renderSide(); ended(); }, 0);
+    if (blocks) setTimeout(() => {
+      if (!same() || !blocks.isConnected || blocks.firstChild) return ended();
+      layBlocks(info);
+      setTimeout(() => { if (same() && blocks.isConnected && !blocks.firstChild) { blocks.append(blocksOf(info), ...looseBlocks(info)); changes.markChanges(blocks); } ended(); }, 0);
+    }, 0);
     // Its graph laid out in one, then drawn and put in the page in the
     // next: nothing to click on in between.
-    setTimeout(() => {
-      if (!same() || !host?.isConnected || host.firstChild) return;
+    if (host) setTimeout(() => {
+      if (!same() || !host.isConnected || host.firstChild) return ended();
       const el = graphOf(info, true), g = graph;
-      setTimeout(() => { if (graph === g && same() && host.isConnected && !host.firstChild) { g?.drawNow(); host.append(el); changes.markChanges(host); } }, 0);
+      setTimeout(() => { if (graph === g && same() && host.isConnected && !host.firstChild) { g?.drawNow(); host.append(el); changes.markChanges(host); } ended(); }, 0);
     }, 0);
   }
 }

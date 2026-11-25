@@ -108,7 +108,11 @@ export function tookType(code: Code, info: Info | null, names: Names, id: Id): s
 // The pane draws what the blocks text prints (render.ts blocksOf), so the
 // two can't drift apart: a piece that stands for a node is a span you can
 // click, with its type on hover; a group of lines is a box.
-export function renderTyped(code: Code, pres: Presentation, info: Info | null, defId: Id, selected: Id | null, loose?: Record<Id, Id>, groups: Groups = {}, folded: Id[] = [], shapes: { shape?: Record<Id, Shape>; depth?: number; width?: number } = {}): HTMLElement {
+type Shapes = { shape?: Record<Id, Shape>; depth?: number; width?: number };
+// The blocks a definition's pane draws, laid out: a big one's in a task of
+// its own before they're drawn (E319k), given to renderTyped as `laid`.
+export const layTyped = (code: Code, pres: Presentation, info: Info | null, defId: Id, loose?: Record<Id, Id>, shapes: Shapes = {}): Blk[] => blocksOf(code, pres, info, defId, { pane: true, loose, ...shapes });
+export function renderTyped(code: Code, pres: Presentation, info: Info | null, defId: Id, selected: Id | null, loose?: Record<Id, Id>, groups: Groups = {}, folded: Id[] = [], shapes: Shapes = {}, laid?: Blk[]): HTMLElement {
   const errorAt = new Map((info?.errors ?? []).map((e) => [e.id, e.message]));
   const cls = (id: Id | undefined, c: string | undefined) => (id ? `x ${c ?? ""}${selected === id ? " sel" : ""}${errorAt.has(id) ? " err" : ""}` : c);
   const title = (id: Id | undefined, more?: string) => {
@@ -145,7 +149,7 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
     return h("div", { class: c || undefined, "data-id": b.id, style: b.pad && b.pad !== 2 ? `padding-left: ${b.pad * 11}px` : undefined }, ...b.kids.map(draw));
   };
   const grouped = new WeakMap<Blk, Id>();
-  return h("div", { class: "typed" }, ...groupBlocks(blocksOf(code, pres, info, defId, { pane: true, loose, ...shapes }), groups, grouped).map(draw));
+  return h("div", { class: "typed" }, ...groupBlocks(laid ?? layTyped(code, pres, info, defId, loose, shapes), groups, grouped).map(draw));
 }
 
 // A group the graph draws (BACKLOG E111) is bracketed in the blocks too
