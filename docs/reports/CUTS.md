@@ -80,6 +80,7 @@ which also has how they compound per benchmark.
 | L280b | machine | caching | per-definition summaries: 0.2 of 4.5 s, under 5% | BACKLOG |
 | L266 | machine | spread | 4.1 s over about twenty passes, none over 10% | BACKLOG |
 | stage 4 | machine recompile | spread | "lowering 650 ms flat, none 10%", stopped 11-24 | memory |
+| L266af | machine recompile | spread | after #3301 the steady 0.33 s over the IR passes, none 10%; their literal reads (Int ranges, kept arrays, keys) not replayable, so not built 11-25 | BACKLOG |
 
 ### Editor and tooling
 
