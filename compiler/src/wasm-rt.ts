@@ -7249,6 +7249,9 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       i32.const 0
       struct.new $arr`,
   },
+  // A Bytes's items as an Int array (C345): only its shape here; wasm.ts
+  // writes it (bytesRt).
+  "array.ofBytes": { params: [["b", "Bytes" as VT]], result: "array", locals: [], uses: [], native: true, body: "unreachable" },
   "array.of": {
     params: [["l", "list"]], result: "array", locals: [["n", "i32"], ["p", "list"], ["it", "items"], ["i", "i32"], ["room", "i32"]], uses: [],
     body: `
@@ -9564,12 +9567,15 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
   },
   // A file's bytes as they are, and bytes written as a file (C291, as C's
   // world.readBytes): Bytes the module's record of a List Int (its type
-  // given by wasm.ts as \$Bytes), made and read by the helpers the kept
-  // files' host uses (IntList.cons, Bytes.make …).
+  // given by wasm.ts as \$Bytes), its bytes beside the list on WASI (C345):
+  // a file's are read into a $bytes, its list left to bytes.list.
+  // A Bytes's list (C345), made from its bytes when first read: only its
+  // shape here; wasm.ts writes it (bytesRt).
+  "bytes.list": { params: [["b", "Bytes" as VT]], result: "list", list: "std.list<type.int<>>", locals: [], uses: [], native: true, body: "unreachable" },
   "wasi.readBytes": {
     params: [["path", "text"]], result: "Bytes" as VT, partial: true, list: "std.list<type.int<>>",
-    locals: [["fd", "i32"], ["n", "i32"], ["e", "i32"], ["acc", "list"]],
-    uses: ["wasi.kind", "wasi.open", "wasi.fail", "wasi.readAll", "wasi_fd_close", "int.of", "IntList.nil", "IntList.cons", "Bytes.make"],
+    locals: [["fd", "i32"], ["n", "i32"], ["e", "i32"], ["y", "raw"], ["i", "i32"]],
+    uses: ["wasi.kind", "wasi.open", "wasi.fail", "wasi.readAll", "wasi_fd_close"],
     body: `
       ${open(0, RIGHT.READ | RIGHT.SEEK | RIGHT.FILESTAT, 0, "ref.null $Bytes")}
       local.get $fd
@@ -9588,36 +9594,37 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
         call $wasi.fail
         return
       end
-      call $IntList.nil
-      local.set $acc
-      ${loopTo("local.get $n\ni32.eqz", `
       local.get $n
-      i32.const 1
-      i32.sub
-      local.tee $n
+      array.new_default $bytes
+      local.set $y
+      ${loopTo("local.get $i\nlocal.get $n\ni32.ge_u", `
+      local.get $y
+      local.get $i
+      local.get $i
       i32.const @buf
       i32.add
       i32.load8_u
-      i64.extend_i32_u
-      call $int.of
-      local.get $acc
-      call $IntList.cons
-      local.set $acc`)}
-      local.get $acc
-      call $Bytes.make
+      array.set $bytes
+      local.get $i
+      i32.const 1
+      i32.add
+      local.set $i`)}
+      ref.null $list
+      local.get $y
+      struct.new $Bytes
       i32.const 0`,
   },
   "wasi.writeBytes": {
     params: [["path", "text"], ["b", "Bytes" as VT]], result: "i32", list: "std.list<type.int<>>",
     locals: [["fd", "i32"], ["e", "i32"], ["n", "i32"], ["nil", "i32"], ["l", "list"], ["p", "i32"], ["w", "i32"]],
-    uses: ["wasi.kind", "wasi.open", "wasi.fail", "wasi.room", "wasi_fd_write", "wasi_fd_close", "int.small", "IntList.nil", "IntList.case", "IntList.cons.head", "IntList.cons.tail", "Bytes.items"],
+    uses: ["wasi.kind", "wasi.open", "wasi.fail", "wasi.room", "wasi_fd_write", "wasi_fd_close", "int.small", "IntList.nil", "IntList.case", "IntList.cons.head", "IntList.cons.tail", "bytes.list"],
     body: `
       ${open(1 | 8, RIGHT.WRITE | RIGHT.SEEK, 0, "")}
       call $IntList.nil
       call $IntList.case
       local.set $nil
       local.get $b
-      call $Bytes.items
+      call $bytes.list
       local.set $l
       ${loopTo("local.get $l\ncall $IntList.case\nlocal.get $nil\ni32.eq", `
       local.get $n

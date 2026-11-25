@@ -206,7 +206,27 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     for (const c of x.v) { const b = textBytes(c).length; if (n + b > TEXT_PIECE) { parts.push(""); n = 0; } parts[parts.length - 1] += c; n += b; }
     return parts.map((v): SExpr => ({ k: "text", v })).reduce((a, b) => ({ k: "rt", fn: "text.concat", args: [a, b] }));
   };
-  const funcs = funcs0.map((f) => onlyRead(longIn(f.body) ? { ...f, body: pieces(f.body) } : f));
+  // An Array of Ints, which keeps a byte a slot when it can (L189f2b).
+  const byteArray = (a?: AType) => !!a && a.item === "int" && !lowered.int32;
+  // Bytes read from a file kept as the bytes they are (C345, as C321 in
+  // JavaScript): on WASI a Bytes holds a $bytes beside its list, and the
+  // list is made from it only when something reads the list (bytes.list,
+  // once). `array of` over a file's byte items (the library's `byte array
+  // of bytes`) takes the bytes as they are, a byte a slot, without the
+  // list: mnist's 55 M bytes were 55 M list cells.
+  const rawBytes = wasi && lowered.records.some((r) => r.key === BYTES_T);
+  const named = (e: SExpr): SExpr => (e.k === "let" && e.body.k === "local" && e.body.i === e.i ? e.value : e);
+  const byteItems = new Set(funcs0.flatMap((f, i) => { const g = named(f.body); return f.params.length === 1 && g.k === "get" && g.t.key === BYTES_T && g.i === 0 && g.rec.k === "local" && g.rec.i === 0 ? [i] : []; }));
+  const bytesIn = (e: SExpr): SExpr => {
+    if (e.k === "rt" && e.args.length === 1) {
+      const m = /^array\.of\.a(\d+)$/.exec(e.fn), x = e.args[0];
+      const b = x.k === "call" && byteItems.has(x.fn) && x.args.length === 1 ? x.args[0] : x.k === "get" && x.t.key === BYTES_T && x.i === 0 ? x.rec : null;
+      if (m && b && byteArray(lowered.arrays[Number(m[1])])) return { k: "rt", fn: `array.ofBytes.a${m[1]}`, args: [bytesIn(b)] };
+    }
+    if (e.k === "get" && e.t.key === BYTES_T && e.i === 0) return { k: "rt", fn: "bytes.list", args: [bytesIn(e.rec)] };
+    return mapKids(e, bytesIn);
+  };
+  const funcs = funcs0.map((f) => rawBytes ? { ...f, body: bytesIn(f.body) } : f).map((f) => onlyRead(longIn(f.body) ? { ...f, body: pieces(f.body) } : f));
   // Host functions used, in a fixed order: they take the first indices.
   // A WASI host has no Math: there sin and the rest are V8's fdlibm,
   // compiled to WebAssembly (wasm-math.ts), their tables and stack in
@@ -315,8 +335,6 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       ].join("\n"),
     };
   };
-  // An Array of Ints, which keeps a byte a slot when it can (L189f2b).
-  const byteArray = (a?: AType) => !!a && a.item === "int" && !lowered.int32;
   // Arrays of records kept as columns (C60 w2, columns.ts): the buffer
   // holds, past its own fields, one array per field of the item (its
   // items left null), and an item is only read and written field by
@@ -493,6 +511,25 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (op === "push" || op === "pushOwned" || op === "pushFront") return { ...g, name, params: [...three, ...g.params.slice(1)], result: "buf", body: body.replace(/struct\.new \$arr\b/g, "drop\ndrop"), uses: g.uses.map((x) => x.replace(/^array\.(\w+)\.a(\d+)/, "view.$1.a$2")) };
     return { ...g, name, params: [...three, ...g.params.slice(1)], body, uses: g.uses.map((x) => x.replace(/^array\.(\w+)\.a(\d+)/, "view.$1.a$2")) };
   };
+  // A Bytes's list, made from its bytes the first time it's read (C345),
+  // and an Int array of a Bytes's items, a byte a slot on its bytes as
+  // they are (array.narrow's layout; nothing writes them, a write widens
+  // first) when it has them and they are 16 or more.
+  const bytesRt = (name: string): RtFn => {
+    const b = lowered.records.find((r) => r.key === BYTES_T)!;
+    const loop = (n: string, body: string) => `block void\nloop void\n${n}\ni32.eqz\nbr_if 1\n${body}\nbr 0\nend\nend`;
+    if (name === "bytes.list") return { name, params: [["b", "Bytes" as VT]], result: "list", list: LIST_INT, locals: [["y", "raw"], ["n", "i32"], ["acc", "list"]], uses: ["int.of", "IntList.nil", "IntList.cons"], types: { Bytes: b }, body: [
+      "local.get $b", "struct.get $Bytes 0", "ref.is_null", "i32.eqz", "if void", "local.get $b", "struct.get $Bytes 0", "return", "end",
+      "local.get $b", "struct.get $Bytes 1", "local.tee $y", "array.len", "local.set $n", "call $IntList.nil", "local.set $acc",
+      loop("local.get $n", ["local.get $y", "local.get $n", "i32.const 1", "i32.sub", "local.tee $n", "array.get_u $bytes", "i64.extend_i32_u", "call $int.of", "local.get $acc", "call $IntList.cons", "local.set $acc"].join("\n")),
+      "local.get $b", "local.get $acc", "struct.set $Bytes 0", "local.get $acc"].join("\n") };
+    const a = Number(name.slice(name.lastIndexOf(".a") + 2)), of = `array.of.a${a}`;
+    const listed = ["local.get $b", "call $bytes.list", `call $${of}`, "return"].join("\n");
+    return { name, array: a, params: [["b", "Bytes" as VT]], result: "array", locals: [["y", "raw"], ["n", "i32"]], uses: ["bytes.list", of], types: { Bytes: b }, body: [
+      "local.get $b", "struct.get $Bytes 1", "local.tee $y", "ref.is_null", "if void", listed, "end",
+      "local.get $y", "array.len", "local.tee $n", "i32.const 16", "i32.lt_u", "if void", listed, "end",
+      "ref.null $items", "i32.const 0", "local.get $n", "i32.const 0", "local.get $y", "struct.new $buf", "i32.const 0", "local.get $n", "struct.new $arr"].join("\n") };
+  };
   // With TERS_COUNT_VIEWS (wasi), each view made is counted in memory at
   // 120, an i64 a runner reads after (C327c2: structs made, not time).
   // (Its value a pattern: only the runtime functions it matches; 1 all.)
@@ -524,6 +561,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       const i64 = info.fields[1].t === "i64";
       return { ...f, name, uses: i64 ? f.uses.filter((x) => x !== "int.of") : f.uses, body: i64 ? f.body.replace("i64.load\n      call $int.of", "i64.load") : f.body, types: { Info: info, Instant: info.fields[2].t, Kind: kind } };
     }
+    if (name === "bytes.list" || /^array\.ofBytes\.a\d+$/.test(name)) return bytesRt(name);
     if (/^wasi\.(read|write)Bytes(\.raw)?$/.test(name)) { const b = lowered.records.find((r) => r.key === BYTES_T); if (!b) throw new Error(`${name}: the module has no Bytes`); return { ...runtime(name), name, types: { Bytes: b } }; }
     const f = runtime(name);
     return f.array !== undefined && byteArray(lowered.arrays[f.array]) ? byteSlots(f) : f;
@@ -673,7 +711,9 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const ident = (x: string) => x.replace(/[^\w]+/g, "_");
   // A Float32's value is held as an f32 (C309): a binary32 already, so
   // demoted where it is made and promoted where it is read, exactly.
-  for (const r of recs) { recIndex.set(r.key, structs.length); structs.push({ name: `${ident(r.name)}${structs.length}`, fields: isFloat32(r) ? [{ ...r.fields[0], narrow: true }] : r.fields, final: true, ...(r.mutable ? { mutable: true as const } : {}) }); }
+  // (A Bytes on WASI: its list, made when first read, and its bytes, C345.)
+  const rawField = rawBytes && texty;
+  for (const r of recs) { recIndex.set(r.key, structs.length); structs.push({ name: `${ident(r.name)}${structs.length}`, fields: isFloat32(r) ? [{ ...r.fields[0], narrow: true }] : rawField && r.key === BYTES_T ? [{ ...r.fields[0], mut: true }, { name: "raw", t: "i32", ref: bytesIndex }] : r.fields, final: true, ...(r.mutable ? { mutable: true as const } : {}) }); }
   const CASE = { name: "case", t: "i32" as const };
   const stackItems = new Map<string, number>();
   for (const d of datas) {
@@ -830,7 +870,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const helpers: { name: string; key: string; params: LType[]; result: LType; code: number[]; wat: string[] }[] = [];
   for (const r of recs) {
     const k = recIndex.get(r.key)!;
-    helpers.push({ name: `${r.name}.${r.case ?? "make"}`, key: r.key, params: r.fields.map((x) => x.t), result: r, code: [...r.fields.flatMap((_, j) => [0x20, ...u(j)]), ...(isFloat32(r) ? [0xb6] : []), 0xfb, 0x00, ...u(k)], wat: [...r.fields.map((_, j) => `local.get ${j}`), ...(isFloat32(r) ? ["f32.demote_f64"] : []), `struct.new $${structs[k].name}`] });
+    helpers.push({ name: `${r.name}.${r.case ?? "make"}`, key: r.key, params: r.fields.map((x) => x.t), result: r, code: [...r.fields.flatMap((_, j) => [0x20, ...u(j)]), ...(isFloat32(r) ? [0xb6] : []), ...(rawField && r.key === BYTES_T ? [0xd0, ...s(bytesIndex)] : []), 0xfb, 0x00, ...u(k)], wat: [...r.fields.map((_, j) => `local.get ${j}`), ...(isFloat32(r) ? ["f32.demote_f64"] : []), ...(rawField && r.key === BYTES_T ? ["ref.null $bytes"] : []), `struct.new $${structs[k].name}`] });
   }
   for (const r of recs) r.fields.forEach((x, j) => helpers.push({ name: `${r.name}.${x.name}`, key: r.key, params: [r], result: x.t, code: [0x20, 0x00, 0xfb, 0x02, ...u(recIndex.get(r.key)!), ...u(j), ...(isFloat32(r) ? [0xbb] : [])], wat: ["local.get 0", `struct.get $${structs[recIndex.get(r.key)!].name} ${j}`, ...(isFloat32(r) ? ["f64.promote_f32"] : [])] }));
   for (const d of datas) {
@@ -903,7 +943,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const bytesRec = recs.find((r) => r.key === BYTES_T);
   if (bytesRec) {
     const k = recIndex.get(bytesRec.key)!;
-    helpers.push({ name: "Bytes.make", key: bytesRec.key, params: [bytesRec.fields[0].t], result: bytesRec, code: [0x20, 0x00, 0xfb, 0x00, ...u(k)], wat: ["local.get 0", `struct.new $${structs[k].name}`] });
+    helpers.push({ name: "Bytes.make", key: bytesRec.key, params: [bytesRec.fields[0].t], result: bytesRec, code: [0x20, 0x00, ...(rawField ? [0xd0, ...s(bytesIndex)] : []), 0xfb, 0x00, ...u(k)], wat: ["local.get 0", ...(rawField ? ["ref.null $bytes"] : []), `struct.new $${structs[k].name}`] });
     helpers.push({ name: "Bytes.items", key: bytesRec.key, params: [bytesRec], result: bytesRec.fields[0].t, code: [0x20, 0x00, 0xfb, 0x02, ...u(k), 0x00], wat: ["local.get 0", `struct.get $${structs[k].name} 0`] });
   }
   // File info (C310), for the host's file info: made from its kind, its
@@ -1120,7 +1160,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         if (looped && e.tail && e.fn === self) { const to = (f as ViewFunc).viewSlots ?? e.args.map((_, j) => j); return [...e.args.flatMap(code1), ...e.args.flatMap((_, j) => [0x21, ...u(to[e.args.length - 1 - j])]), 0x0c, ...u(d - 1)]; }
         return [...e.args.flatMap(code1), tail ? 0x12 : 0x10, ...u(fnIndex(e.fn)), ...(g.partial && !tail ? check(d, fl) : [])];
       }
-      case "make": return [...e.args.flatMap(code1), ...(isFloat32(e.t) ? [0xb6] : []), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!)];
+      case "make": return [...e.args.flatMap(code1), ...(isFloat32(e.t) ? [0xb6] : []), ...(rawField && e.t.key === BYTES_T ? [0xd0, ...s(bytesIndex)] : []), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!)];
       case "get": return [...code1(e.rec), 0xfb, 0x02, ...u(recIndex.get(e.t.key)!), ...u(e.i), ...(isFloat32(e.t) ? [0xbb] : [])];
       case "new":
         if (stackOf(e.t)) return e.c === 0 ? [0x23, ...u(stackGlobals + 2 * stacks.findIndex((x) => x.key === e.t.key) + 1)] : [...e.args.flatMap(code1), 0x10, ...u(rtIndex(fstack("push", e.t)))];
@@ -1315,7 +1355,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         if (kept.has(e.fn)) return [`${d}global.get $kept${e.fn}`, `${d}ref.is_null`, `${d}(if (then call ${id(g)} global.set $kept${e.fn}))`, `${d}global.get $kept${e.fn}`].join("\n");
         return [...e.args.map(w), `${d}${tail ? "return_call" : "call"} ${id(g)}`, ...(g.partial && !tail ? check(ld) : [])].join("\n");
       }
-      case "make": return [...e.args.map(w), ...(isFloat32(e.t) ? [`${d}f32.demote_f64`] : []), `${d}struct.new ${recName(e.t)}`].join("\n");
+      case "make": return [...e.args.map(w), ...(isFloat32(e.t) ? [`${d}f32.demote_f64`] : []), ...(rawField && e.t.key === BYTES_T ? [`${d}ref.null $bytes`] : []), `${d}struct.new ${recName(e.t)}`].join("\n");
       case "get": return `${w(e.rec)}\n${d}struct.get ${recName(e.t)} ${e.i}${isFloat32(e.t) ? `\n${d}f64.promote_f32` : ""}`;
       case "new":
         if (stackOf(e.t)) return e.c === 0 ? `${d}global.get $done${stacks.findIndex((x) => x.key === e.t.key)}` : [...e.args.map(w), `${d}call $${fstack("push", e.t)}`].join("\n");
