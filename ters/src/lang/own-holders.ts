@@ -120,6 +120,23 @@ export function ownLibraryHolders(code: Code, info: Info, names: Names, main: Id
   // array) then changes what the copies call, which the originals would
   // call wrongly (L271c: sound of wav's `bytes as 16 bits`).
   const gone = new Set(types.some((d) => plain.has(d)) ? [...copiedDefs].filter((d) => LIBRARY.code.nodes[d]) : []);
+  // So do the library's definitions the program doesn't reach that name
+  // what is gone (sound of wav, where only wav of is called), and those
+  // that name them, as their types would be gone from under them.
+  if (gone.size) {
+    const goneIds = new Set([...gone].flatMap((d) => subtree(code, d)));
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const d of code.defs) {
+        if (gone.has(d) || reached.has(d) || !LIBRARY.code.nodes[d]) continue;
+        if (subtree(code, d).some((id) => { const n = code.nodes[id]; const t = n.kind === "ref" || n.kind === "tref" ? n.target : n.kind === "arm" ? n.variant : null; return !!t && goneIds.has(t); })) {
+          gone.add(d);
+          for (const id of subtree(code, d)) goneIds.add(id);
+          grew = true;
+        }
+      }
+    }
+  }
   let out: Code = { nodes, defs: [...code.defs.filter((d) => !gone.has(d)), ...copies] };
   let outNames: Names = { ...names };
   for (const [from, to] of fresh) { const n = names[from] ?? LIBRARY.names[from]; if (n !== undefined) outNames[to] = n; }

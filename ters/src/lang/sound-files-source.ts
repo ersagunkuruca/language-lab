@@ -75,10 +75,11 @@ export function buildSoundFiles(pre: Module): Module {
         k.let("guess", wholeOf(k.call(S.first, k.thunk(() => f.div(k.call(B.log, a), k.lit(Math.LN2))), k.thunk(() => k.lit(0)))), (g) =>
           k.let("e", k.if(k.call(S.less, a, pow(table, g)), i.sub(g, n(1)), k.if(k.call(S.less, a, pow(table, i.add(g, n(1)))), g, i.add(g, n(1)))), (e) =>
             i.add(sign, i.add(i.mul(i.add(e, n(127)), n(2 ** 23)), wholeOf(f.mul(f.sub(f.div(a, pow(table, e)), k.lit(1)), k.lit(2 ** 23))))))))))));
-  // 32 bits as the Float32 they are.
-  const float32 = def("float of bits", ["bits", "powers"], (w, table) => k.let("e", i.and(i.down(w, n(23)), n(255)), (e) => k.let("m", i.and(w, n(2 ** 23 - 1)), (m) =>
+  // 32 bits as the Float32 they are, given as their high and low 16: no
+  // whole number past 2^23 made (an Int past 2^28 is a BigInt in JS).
+  const float32 = def("float of bits", ["high", "low", "powers"], (hi, lo, table) => k.let("e", i.and(i.down(hi, n(7)), n(255)), (e) => k.let("m", i.add(i.mul(i.and(hi, n(127)), n(65536)), lo), (m) =>
     k.let("size", k.if(k.equal(e, n(0)), f.mul(i.float(m), pow(table, n(-149))), f.mul(i.float(i.add(m, n(2 ** 23))), pow(table, i.sub(e, n(150))))), (v) =>
-      k.if(k.equal(i.down(w, n(31)), n(1)), k.call(B.neg, v), v)))));
+      k.if(k.equal(i.down(hi, n(15)), n(1)), k.call(B.neg, v), v)))));
 
   const wav = def("wav of", ["sound", "bits"], (s, bits) => soundOf(s, (rate, chans) => k.let("float", k.equal(bits, n(32)), (fl) => {
     const bps = () => k.if(fl, n(4), n(2));
@@ -120,7 +121,7 @@ export function buildSoundFiles(pre: Module): Module {
     return d;
   };
   const fmtFrom = chunkFrom("fmt "), dataFrom = chunkFrom("data");
-  const sample = def("sample at", ["bytes", "at", "float", "powers"], (b, p, fl, table) => k.if(fl, k.call(float32, k.call(le32, b, p), table),
+  const sample = def("sample at", ["bytes", "at", "float", "powers"], (b, p, fl, table) => k.if(fl, k.call(float32, k.call(le16, b, i.add(p, n(2))), k.call(le16, b, p), table),
     // −32767 to 32767 as −1 to 1, as they were written; −32768, which
     // wav of never writes, as −1.
     k.let("word", k.call(le16, b, p), (w) => k.if(k.equal(w, n(32768)), k.lit(-1), f.div(i.float(k.if(i.less(w, n(32768)), w, i.sub(w, n(65536)))), k.lit(32767))))));
@@ -133,7 +134,9 @@ export function buildSoundFiles(pre: Module): Module {
               k.let("frames", i.quot(k.if(i.less(k.call(byteCount, b), i.add(d, size)), i.sub(k.call(byteCount, b), d), size), i.mul(ch, bps)), (frames) =>
                 k.let("powers", k.call(powers), (table) =>
                   k.call(SV, i.float(k.call(le32, b, i.add(fm, n(4)))), k.call(map, k.call(INT_OPS.range, ch), k.fn(["c"], (c) =>
-                    k.call(map, k.call(INT_OPS.range, frames), k.fn(["frame"], (fr) => k.call(sample, b, i.add(d, i.mul(i.add(i.mul(fr, ch), c), bps)), fl, table)))))))))))))))))));
+                    // Each channel's samples filled into an array where they're made
+                    // (fill-arrays.ts), its items the list: no list of frames made.
+                    k.call(ARRAY_OPS.items, k.call(ARRAY_OPS.of, k.call(map, k.call(INT_OPS.range, frames), k.fn(["frame"], (fr) => k.call(sample, b, i.add(d, i.mul(i.add(i.mul(fr, ch), c), bps)), fl, table)))))))))))))))))))));
 
   const offered = [T.def, wav, read];
   const helpers = [doubled, powers, le16, le32, word16, word32, float32, fmtFrom, dataFrom, sample];
