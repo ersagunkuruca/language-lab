@@ -152,13 +152,11 @@ of text; they were these cells logging every finished row).
   new row, which has to earn its place by priority like any other. A row
   says only what is left; what was done is its rows in DONE.md, not a
   history in the row.
-- **A row with no example gets one written** (Ersagun 2026-11-14: "Write
-  programs that need them then"). A row is never closed, or left waiting,
-  for lack of a program that needs it: the lane writes a real, original
-  program that needs the feature, adds it under `examples/` (credited as
-  any example), and then builds the feature, with that program as the
-  row's example. The program comes first, in its own PR, and shows the
-  workaround it needs today; the feature's PR removes the workaround.
+- **No new examples** (Ersagun 2026-11-25: "Stop adding new examples").
+  Lanes add no new programs under `examples/`. A row whose
+  example would be a new program waits; a row that an existing example
+  shows is built and judged against that example. (This replaces the
+  2026-11-14 rule that a row with no example gets one written.)
 - Measure an idea by hand before building it (a scratch script, a profile,
   a timing of the slow path), and build it only if it buys at least 10%
   of what it targets. Speed work stops when the next stage buys less (the

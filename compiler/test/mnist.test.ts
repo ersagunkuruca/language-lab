@@ -2,7 +2,8 @@
 // network learning digits by Adam, or by damped Newton steps whose
 // Hessian-vector products come from running the backward pass on dual
 // numbers, or by Adam with its gradient from `gradient` (reverse, L285
-// R4) where the ideal's is hand-written. The core IR's module and the hand-written ideal (whose
+// R4) where the ideal's is hand-written, or Newton from `gradient`
+// (reverse-newton, natively). The core IR's module and the hand-written ideal (whose
 // Hessian times a vector is the R-operator written out) must print the
 // same and exit the same way, and so must `ters native` and `ters wasi`.
 // Made-up digits (mnist.ts `madeUp`), so the test needs no download.
@@ -41,11 +42,6 @@ test("mnist: a Newton step from dual numbers gives the R-operator's step", () =>
   assert.equal(r.out[1], "epoch 1: loss 2.2962, damping 0.6667");
 });
 
-test("mnist: Newton with gradient's gradient and Hessian times a vector prints what the hand-written one does (L285)", () => {
-  const files = madeUp(100, 100), r = same(["d", "reverse-newton", "100", "1"], files);
-  assert.deepEqual(r.out.slice(1), w.ideal(["d", "newton", "100", "1"], files).out.slice(1));
-});
-
 test("mnist: usage and files that aren't MNIST's", () => {
   const usage = ["usage: mnist <folder> [adam|reverse|newton|reverse-newton] [training digits, at least 100] [passes]"];
   for (const args of [[], ["d", "sgd"], ["d", "adam", "50"], ["d", "adam", "100", "0"]]) assert.deepEqual(same(args, {}), { out: [], err: usage, code: 2 });
@@ -75,4 +71,11 @@ test("mnist through ters wasi and ters native prints what the ideal prints", asy
   assert.equal(built.status, 0, built.stderr);
   assert.equal(spawnSync(join(dir, "p"), ["d", "adam", "200", "1"], { cwd: dir, encoding: "utf8" }).stdout, want, "ters native");
   assert.equal(spawnSync(join(dir, "p"), ["d", "reverse", "200", "1"], { cwd: dir, encoding: "utf8" }).stdout, want.replace("tanh, adam", "tanh, reverse"), "ters native, reverse");
+  // Newton with gradient's gradient and Hessian times a vector (L285)
+  // prints what the hand-written Newton does. Natively: in the core IR's
+  // JavaScript each `replace at` of its pass back makes a version (C334),
+  // and a pass over 100 digits took 4.8 GB, more than CI's runner gives a
+  // file running beside three others.
+  const newton = w.ideal(["d", "newton", "100", "1"], files).out;
+  assert.deepEqual(spawnSync(join(dir, "p"), ["d", "reverse-newton", "100", "1"], { cwd: dir, encoding: "utf8" }).stdout.trimEnd().split("\n").slice(1), newton.slice(1), "ters native, reverse-newton");
 });
