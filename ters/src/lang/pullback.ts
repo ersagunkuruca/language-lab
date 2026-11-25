@@ -34,7 +34,7 @@
 // there (`table of`'s f).
 
 import { FN } from "../../../invertible/src/expr.js";
-import type { Code, Id, NodeData, NodeOf } from "../model.ts";
+import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
 import { children, copyNodes, freshId, isCall, nodeIds, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
@@ -275,7 +275,27 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
   }
 
   // ---- going back ----
-  function back(id: Id, seed: Seed, ctx: Ctx, acc: Res, k: (r: Res) => Id): Id {
+  // `want`: the value of `id` too, as the slopes of VAL. Lets, calls put
+  // in place and branches give their body's; anything else is worked out
+  // once where the way back starts, its lets in scope.
+  const VAL = binder();
+  function passesValue(n: Node, ctx: Ctx): boolean {
+    if (n.kind === "match") return !n.otherwise;
+    if (!isCall(n)) return false;
+    const head = nodes[n.fn];
+    if (head.kind === "lambda") return true;
+    if (head.kind !== "ref") return false;
+    const t = head.target;
+    if (ctx.lams.has(t)) return true;
+    if (OPS[t] || t === S.float32 || t === ARRAY_AT || t === S.first || t === ARRAY_OF || is(t, "sum")) return false;
+    const d = nodes[t];
+    return d?.kind === "def" && !!d.body && nodes[d.body].kind === "lambda" && !recursive(t);
+  }
+  function back(id: Id, seed: Seed, ctx: Ctx, acc: Res, k: (r: Res) => Id, want = false): Id {
+    if (want && (!moves(id, ctx) || !passesValue(nodes[id], ctx))) {
+      const v = binder();
+      return letIn([v], [copy(id, ctx)], back(id, seed, ctx, put(acc, VAL, { k: "s", parts: [() => ref(v)] }), k));
+    }
     if (!moves(id, ctx)) return k(acc);
     const n = nodes[id];
     switch (n.kind) {
@@ -294,11 +314,11 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
       case "call": {
         if (!isCall(n)) return cant("a relation used backwards");
         const head = nodes[n.fn];
-        if (head.kind === "lambda") return letBack(n.args, head, ctx, seed, ctx, acc, k);
+        if (head.kind === "lambda") return letBack(n.args, head, ctx, seed, ctx, acc, k, want);
         if (head.kind !== "ref") return cant("a call of a function worked out there");
         const target = head.target;
         const lam = ctx.lams.get(target);
-        if (lam) return letBack(n.args, nodes[lam.lam] as NodeOf<"lambda">, ctx, seed, lam.ctx, acc, k);
+        if (lam) return letBack(n.args, nodes[lam.lam] as NodeOf<"lambda">, ctx, seed, lam.ctx, acc, k, want);
         if (OPS[target]) return chain(OPS[target], n.args, seed, ctx, acc, k);
         if (target === S.float32) return back(n.args[0], seed, ctx, acc, k);
         if (target === ARRAY_AT) return readBack(n.args[0], n.args[1], seed, ctx, acc, k, true);
@@ -311,11 +331,11 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
           // itself the same way (as forward mode's g′ calls g′).
           if (recursive(target)) return recursiveBack(n.args, target, seed, ctx, acc, k);
           const inner: Ctx = { bind: new Map(), moving: new Set(), lams: new Map(), inlining: new Set([...ctx.inlining, target]) };
-          return letBack(n.args, nodes[t.body] as NodeOf<"lambda">, ctx, seed, inner, acc, k);
+          return letBack(n.args, nodes[t.body] as NodeOf<"lambda">, ctx, seed, inner, acc, k, want);
         }
         return cant(`the slope goes through ${nm(target)}, which isn't arithmetic`);
       }
-      case "match": return matchBack(n, seed, ctx, acc, k);
+      case "match": return matchBack(n, seed, ctx, acc, k, want);
       default: return cant(`can't go back through a ${n.kind}`);
     }
   }
@@ -471,7 +491,7 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
   // gone back through, then each value with the slopes its binder got,
   // last binder first. `outer` reads the values, `inner` the body (the
   // definition's own, for a call put in place).
-  function letBack(args: Id[], lam: NodeOf<"lambda">, outer: Ctx, seed: Seed, inner: Ctx, acc: Res, k: (r: Res) => Id): Id {
+  function letBack(args: Id[], lam: NodeOf<"lambda">, outer: Ctx, seed: Seed, inner: Ctx, acc: Res, k: (r: Res) => Id, want = false): Id {
     const ctx = scope(inner, lam.params);
     const bs: Id[] = [], vs: Id[] = [], going: { p: Id; a: Id }[] = [];
     lam.params.forEach((p, i) => {
@@ -503,7 +523,7 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
         return bound(() => total(c.parts), (at) => back(going[j].a, { k: "s", at }, outer, rest, then));
       };
       return step(0, r);
-    });
+    }, want);
     return bs.length ? letIn(bs, vs, body) : body;
   }
 
@@ -624,20 +644,21 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
 
   // if / match on what doesn't move (or on a comparison of what does: the
   // slope doesn't go through a choice): each arm gone back through.
-  function matchBack(n: NodeOf<"match">, seed: Seed, ctx: Ctx, acc: Res, k: (r: Res) => Id): Id {
+  function matchBack(n: NodeOf<"match">, seed: Seed, ctx: Ctx, acc: Res, k: (r: Res) => Id, want = false): Id {
     if (n.otherwise) return cant("a handler");
     const arms = n.arms.map((a) => nodes[a] as NodeOf<"arm">);
     const inners = arms.map((arm) => scope(ctx, [...arm.binds, ...arm.results.filter((r): r is Id => r !== null)]));
     if (arms.some((arm) => arm.binds.length && moves(n.scrutinee, ctx))) return cant("taking apart data that moves");
-    return branching(arms.map((arm, i) => (given: Res, finish: (r: Res) => Id) => back(arm.body, seed, inners[i], given, finish)), (codes) => add({
+    return branching(arms.map((arm, i) => (given: Res, finish: (r: Res) => Id) => back(arm.body, seed, inners[i], given, finish, want)), (codes) => add({
       kind: "match", scrutinee: copy(n.scrutinee, ctx), otherwise: null,
       arms: arms.map((arm, i) => add({ kind: "arm", variant: arm.variant, binds: arm.binds.map((b) => inners[i].bind.get(b)!), results: arm.results.map((r) => (r === null ? null : inners[i].bind.get(r)!)), body: codes[i] })),
     }), acc, k);
   }
 
   // gradient(f) of f : (Array Float64) -> Float64, as a lambda: the
-  // input's slopes, from n zeros, each added in where it is found.
-  function gradient(lamId: Id): Id {
+  // input's slopes, from n zeros, each added in where it is found. With
+  // `value`, value and gradient's: f's value and the slopes, a pair.
+  function gradient(lamId: Id, value = false): Id {
     const lam = nodes[lamId] as NodeOf<"lambda">;
     if (lam.kind !== "lambda" || lam.params.length !== 1) return cant("gradient of a function of more than one input");
     const ctx = scope({ bind: new Map(), moving: new Set(), lams: new Map(), inlining: new Set() }, lam.params);
@@ -647,12 +668,15 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     const body = letIn([one], [num(1)], back(lam.body, { k: "s", at: () => ref(one) }, ctx, new Res(), (r) => {
       const c = r.get(np);
       if (c && c.k !== "a") cant("the input read as a number");
-      return c?.k === "a" ? c.cur() : zerosLike(np);
-    }));
+      const slopes = c?.k === "a" ? c.cur() : zerosLike(np);
+      if (!value) return slopes;
+      const v = r.get(VAL);
+      return v?.k === "s" ? call(tupleVariant(2), total(v.parts), slopes) : cant("the value not found on the way back");
+    }, value));
     return add({ kind: "lambda", params: [np], body });
   }
 
-  return { gradient, defs };
+  return { gradient, defs, copied: (id: Id): Id => copy(id, { bind: new Map(), moving: new Set(), lams: new Map(), inlining: new Set() }) };
 }
 
 // For the evaluator: gradient(f) at an array, as a lambda (kept, as
@@ -667,12 +691,19 @@ export function arrayGradientLambda(code: Code, lambda: Id, origin?: (id: Id) =>
 
 // gradient(f) over an array, of a function written right there, made
 // ahead as code (as derive.ts expandDerivatives makes forward mode's), so
-// every target runs it with nothing of its own. `overArray(call)`: whether
-// the checker typed that gradient's function over an Array Float64.
-export function expandArrayGradients(code: Code, names: Names, overArray: (call: Id) => boolean): { code: Code; names: Names; expanded: Id[] } {
+// every target runs it with nothing of its own; value and gradient(f) too,
+// its value from the same run forward. Over a record or a Float64, value
+// and gradient(f) is written as (q) ↦ (f(q), gradient(f)(q)), whose
+// gradient forward mode makes later (over a Float64, derivative(f)).
+// `over(call)`: the type the checker gave that call's function's input.
+export function expandArrayGradients(code: Code, names: Names, over: (call: Id) => Id | null): { code: Code; names: Names; expanded: Id[] } {
+  const overArray = (call: Id) => over(call) === ARRAY;
+  const asked = (n: Node | undefined) => isCall(n) && n.args.length === 1 && code.nodes[n.fn]?.kind === "ref" ? (code.nodes[n.fn] as NodeOf<"ref">).target : null;
   const calls = nodeIds(code.nodes).filter((id) => {
-    const n = code.nodes[id];
-    return isCall(n) && n.args.length === 1 && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === S.gradient && lambdaOf(code, n.args[0]) && overArray(id);
+    const n = code.nodes[id], t = asked(n);
+    if (t !== S.gradient && t !== S.valueAndGradient) return false;
+    const f = (n as Call).args[0];
+    return t === S.valueAndGradient ? !!lambdaOf(code, f) || code.nodes[f]?.kind === "ref" : !!lambdaOf(code, f) && overArray(id);
   });
   if (!calls.length) return { code, names, expanded: [] };
   const out: Code = { nodes: copyNodes(code.nodes), defs: [...code.defs] };
@@ -680,8 +711,19 @@ export function expandArrayGradients(code: Code, names: Names, overArray: (call:
   const expanded: Id[] = [];
   for (const id of calls) {
     const pb = pullbacker(out, outNames);
+    const n = out.nodes[id] as Call, f = n.args[0], value = asked(n) === S.valueAndGradient;
     let lam: Id;
-    try { lam = pb.gradient(lambdaOf(out, (out.nodes[id] as Call).args[0])!); } catch (e) { if (e instanceof NotDifferentiable) continue; throw e; }
+    if (value && !(lambdaOf(out, f) && overArray(id))) {
+      // f(q) and gradient(f)(q), f written twice (a definition's name, or
+      // the function written there copied).
+      const add = (d: NodeData): Id => { const x = freshId(); out.nodes[x] = { id: x, ...d } as never; return x; };
+      const fn = () => (out.nodes[f]?.kind === "lambda" ? pb.copied(f) : add({ kind: "ref", target: (out.nodes[f] as NodeOf<"ref">).target }));
+      const q = add({ kind: "binder" }), at = () => add({ kind: "ref", target: q });
+      const grad = add({ kind: "call", fn: add({ kind: "call", fn: add({ kind: "ref", target: over(id) === NUMBER ? S.derivative : S.gradient }), args: [fn()] }), args: [at()] });
+      lam = add({ kind: "lambda", params: [q], body: add({ kind: "call", fn: add({ kind: "ref", target: tupleVariant(2) }), args: [add({ kind: "call", fn: fn(), args: [at()] }), grad] }) });
+    } else {
+      try { lam = pb.gradient(lambdaOf(out, f)!, value); } catch (e) { if (e instanceof NotDifferentiable) continue; throw e; }
+    }
     out.nodes[id] = { ...out.nodes[lam], id } as never;
     out.defs.push(...pb.defs);
     expanded.push(id);
@@ -697,11 +739,11 @@ function lambdaOf(code: Code, f: Id): Id | null {
   return d?.kind === "def" && d.body && code.nodes[d.body]?.kind === "lambda" ? d.body : null;
 }
 
-// Whether the checker typed gradient call `call`'s function over an
-// Array Float64.
-export function gradientOverArray(code: Code, info: Info, call: Id): boolean {
+// The type the checker gave gradient call `call`'s function's input (an
+// Array, a record, Float64), by its id.
+export function gradientOver(code: Code, info: Info, call: Id): Id | null {
   const f = (code.nodes[call] as Call | undefined)?.args?.[0];
   const t = f ? info.typeOf.get(f) : undefined;
   const z = t && info.subst.zonk(t);
-  return z?.t === "fn" && z.params.length === 1 && z.params[0].t === "con" && z.params[0].id === ARRAY;
+  return z?.t === "fn" && z.params.length === 1 && z.params[0].t === "con" ? z.params[0].id : null;
 }

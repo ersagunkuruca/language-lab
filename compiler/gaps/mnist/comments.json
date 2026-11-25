@@ -350,7 +350,7 @@
 "k18ouveqd09rgk39dg0m8mgrg9": "x + a·y, along every parameter.",
 "k1rifa0p3o8a5uth7eqnn3evaa": "The digit row r scores highest, from c on.",
 "k4vp9g1atf7so4g6chst9rvahm": "One pass of Adam over the first n digits, 100 at a time, and the losses of the batches added up.",
-"k5s0qt674v30lrdqbhgok056ce": "The loss and its gradient at p, the gradient by `gradient` (L285 R4): one pass back through loss at.",
+"k5s0qt674v30lrdqbhgok056ce": "The loss and its gradient at p, both by value and gradient (L285 R4): one run forward and one pass back through loss at.",
 "k7pi1c68v60bes9qtppdq64k86": "The last places digits of n, with zeros in front.",
 "k84rrrlfhf4io48og9498s19m7": "One damped Newton step on b digits from start on (truncated Newton, Hessian-free as Martens did it): the step from conjugate gradients on the exact Hessian plus λI, taken only if it lowers the loss; λ grows by half when the quadratic model promised much more than the step gave, and shrinks by a third when it held (Levenberg-Marquardt).",
 "k9k342rrnpmpaorpa2a1baos1u": "Where the output biases start, one a digit.",

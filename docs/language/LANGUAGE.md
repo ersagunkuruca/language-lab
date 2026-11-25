@@ -380,6 +380,9 @@ program.
 It goes back through lets, arithmetic, `if` and `match`, `sum` and
 `array of` of a `map` over a list that doesn't move, definitions, and a
 definition calling itself. Over an array its result keeps the `Choice`.
+`value and gradient(f)(p)` is the pair (f(p), gradient(f)(p)); over an
+array both come from the one run forward the pass back starts from, so a
+training step's loss costs nothing more (JAX's `value_and_grad`).
 
 ### Whole numbers and text, at real sizes
 

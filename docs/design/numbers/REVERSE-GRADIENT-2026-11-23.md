@@ -93,3 +93,7 @@ this today with its hand-written pass, and it would keep doing it with
 5. **R5.** Bags added in place: done 11-25 by carrying each array's
    slopes so far instead. Tensors (`contracted`) once C302 stores them as
    one array.
+6. **value and gradient** (11-25): f(p) with its slopes, the value taken
+   where the pass back starts, inside the lets the run forward bound.
+   mnist's `reverse` no longer runs `loss at` again for its loss: 10000
+   digits natively 7.7 s to 6.6 s.

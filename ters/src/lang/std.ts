@@ -454,6 +454,12 @@ export const S = {
     const r = s.fresh(false, true), e = s.freshRow();
     return fn([fn([r], num, e)], fn([r], r, { effs: [CHOICE], tail: e.tail }), s.freshRow());
   }),
+  // f(p) and gradient(f)(p) together, from one run forward (JAX's
+  // value_and_grad): over an array, the pass back's lets are the run's.
+  valueAndGradient: builtin("valueAndGradient", "value and gradient", (s) => {
+    const r = s.fresh(false, true), e = s.freshRow();
+    return fn([fn([r], num, e)], fn([r], { t: "con", id: PAIR, args: [num, r] }, { effs: [CHOICE], tail: e.tail }), s.freshRow());
+  }),
   // Parts: a record of Float64s (Float64 itself, or one case whose fields are
   // all Float64s: a point, a colour) taken part by part, so arithmetic on
   // points and colours is written once, for all of them (the prelude's

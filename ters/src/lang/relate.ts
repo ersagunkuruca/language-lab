@@ -1842,6 +1842,7 @@ export function interpreter(given: Code, opts: Options = {}) {
     if (WORLD_OPS.has(id)) throw new NotInvertible(`${stdNames[id] ?? id} touches the world (the console, files): that can't be undone, and a search would do it once per guess`);
     if (id === S.supports) throw new NotInvertible(`${stdNames[id] ?? id} asks about the platform the program runs on, answered before it runs: it relates no values`);
     if (CELL_IDS.has(id)) throw new NotInvertible(`${stdNames[id] ?? id} works on cells, the runtime's state, which only runs forward`);
+    if (id === S.valueAndGradient) throw new NotInvertible(`${stdNames[id] ?? id} is f(p) with gradient(f)(p): write those two, which a search runs`);
     throw new NotInvertible(`${id} has no backwards reading`);
   }
 

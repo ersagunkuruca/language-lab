@@ -110,6 +110,7 @@ export const TARGETS: Record<Id, Target> = {
   [S.exists]: { js: written("`$exists`: the relational interpreter, on the module's node table"), scalar: LOOKS },
   [S.derivative]: { js: written("`$derivative`, or the derivative's code when the function is written in place"), scalar: LOOKS },
   [S.gradient]: { js: written("`$derivative` over the record's fields, as derivative"), scalar: LOOKS },
+  [S.valueAndGradient]: { js: written("the evaluator's, f(p) with gradient(f)(p), or the code of its pass back when the function is written in place (pullback.ts)"), scalar: LOOKS },
   [SET]: { js: written("setCall(): `$setPath` along the field written in place"), scalar: written("setField(): the record made again along the field path, the rest kept (C106)") },
   // Cases print with the names the program was compiled with ($names).
   [SHOW_ANY]: { js: op(([a]) => `$showAny(${a}, $names, $shown)`), scalar: DATA },
