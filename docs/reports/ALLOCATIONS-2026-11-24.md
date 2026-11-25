@@ -454,6 +454,17 @@ So C327c2 is closed as measured: views by value on WebAssembly would
 mean multi-value lowering in every function that takes an array, for
 4% at the hottest site.
 
+## Reopened (2026-11-25)
+
+Ersagun, on the closes above: an engine's collector may hide what an
+allocation costs, "but I feel like we shouldn't rely on that. Because we
+can do more analysis and JIT compiler has very little time budget to do
+the same." The browser is not Ters's first target either; it shows the
+demos. So C327c2 (views by value on WebAssembly) and C327d (a fold's
+frames as one stack) are open again, judged by the cells and structs a
+run makes as well as its time, and C327b (the analysis) no longer waits
+for a reader that buys 10% of V8's time.
+
 ## How this was measured
 
 On this container (4 cores), gcc 13 at `ters native`'s flags. Cells by
