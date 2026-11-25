@@ -67,6 +67,7 @@ const { deepLoops } = compiles ? await import("../../compiler/src/deep-loops.ts"
 const { ownedTables } = compiles ? await import("../../compiler/src/owned-tables.ts") : ({} as typeof import("../../compiler/src/owned-tables.ts"));
 const { itemReads } = compiles ? await import("../../compiler/src/item-reads.ts") : ({} as typeof import("../../compiler/src/item-reads.ts"));
 const { columns } = compiles ? await import("../../compiler/src/columns.ts") : ({} as typeof import("../../compiler/src/columns.ts"));
+const { checkedOnce } = compiles ? await import("../../compiler/src/checked-once.ts") : ({} as typeof import("../../compiler/src/checked-once.ts"));
 const { untaggedLoops, untaggedFunctions } = compiles ? await import("../../compiler/src/untagged-ints.ts") : ({} as typeof import("../../compiler/src/untagged-ints.ts"));
 const { earlyAnd } = compiles ? await import("../../compiler/src/early-and.ts") : ({} as typeof import("../../compiler/src/early-and.ts"));
 const { rangeChoices, rangeArrays } = compiles ? await import("../../compiler/src/range-choices.ts") : ({} as typeof import("../../compiler/src/range-choices.ts"));
@@ -356,6 +357,8 @@ function nativeLoweredNow(main: Id, wasm: boolean, page: boolean, from: Program)
     untaggedLoops(lowered);
     // And a function only computing on Ints, called (round 13 P4).
     if (!process.env.NO_UNTAGGED_FNS) untaggedFunctions(lowered);
+    // And an array walk's range checked once as it starts (C336).
+    if (!process.env.NO_CHECKED_ONCE) checkedOnce(lowered, lowered.funcs.map((_, i) => i));
     // And a loop folding a Bool with `and` stopping once it's false (C207m).
     if (!process.env.NO_EARLY_AND) earlyAnd(lowered);
     // And a choice over a range's items as one int64, no list (C207p).

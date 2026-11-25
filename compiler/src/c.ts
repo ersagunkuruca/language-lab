@@ -113,11 +113,19 @@ const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
 // its slot.
 const COL_FN = /^array\.c(new|length|get(\d+)|set([\d_]+))\.a(\d+)$/;
 // untagged-ints.ts's ops on a loop's counts (C207e).
-const I64_FN = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit|range|rangeSplit|muladdv|mod)$/;
+const I64_FN = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit|range|rangeSplit|muladdv|mod|walkIn)$/;
 // A count stepped past the small Ints: some 2^62 steps, never in practice.
 const I64_C = `static void lab__i64_past(void) { fflush(stdout); fputs("a count went past 2^62\\n", stderr); exit(1); }
 static inline int64_t lab__i64_add(int64_t a, int64_t b) { int64_t r = a + b; if (r < lab__min || r > lab__max) lab__i64_past(); return r; }
-static inline int64_t lab__i64_sub(int64_t a, int64_t b) { int64_t r = a - b; if (r < lab__min || r > lab__max) lab__i64_past(); return r; }`;
+static inline int64_t lab__i64_sub(int64_t a, int64_t b) { int64_t r = a - b; if (r < lab__min || r > lab__max) lab__i64_past(); return r; }
+// An array walk from p by s for n rounds all in an array of length m (C336,
+// checked-once.ts): its first index and its last, none when n <= 0.
+static inline int lab__walk_in(int64_t m, int64_t p, int64_t s, int64_t n) {
+  int64_t last;
+  if (n <= 0) return 1;
+  if (__builtin_mul_overflow(s, n - 1, &last) || __builtin_add_overflow(p, last, &last)) return 0;
+  return p >= 0 && p < m && last >= 0 && last < m;
+}`;
 // A loop's value stepped (C207i): whether it left the small range.
 const I64V_C = `static inline int lab__i64_addv(int64_t a, int64_t b, int64_t *r) { *r = a + b; return *r < lab__min || *r > lab__max; }
 static inline int lab__i64_subv(int64_t a, int64_t b, int64_t *r) { *r = a - b; return *r < lab__min || *r > lab__max; }
@@ -1106,7 +1114,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const small = (i: number) => leaf.get(i) ?? leaf.set(i, ((es) => es.length <= SMALL_LEAF && !es.some((e) => e.k === "call" || e.k === "apply"))(walk(funcs[i].body))).get(i)!;
   const header = (i: number, lending = false) => {
     const f = funcs[i];
-    return `static ${lending && small(i) ? "inline " : ""}${ty(f.result)} ${lending ? bnames.get(i) : names.get(i)}(${f.params.map((t, j) => `${ty(t)} p${j}`).join(", ") || "void"})`;
+    return `static ${f.apart ? "LAB_APART " : lending && small(i) ? "inline " : ""}${ty(f.result)} ${lending ? bnames.get(i) : names.get(i)}(${f.params.map((t, j) => `${ty(t)} p${j}`).join(", ") || "void"})`;
   };
   const fuel = kept.some((i) => funcs[i].spends || walk(funcs[i].body).some((e) => e.k === "budget"));
   const math = opts.math === "fdlibm" && kept.some((i) => walk(funcs[i].body).some((e) => e.k === "op" && e.op in FDLIBM));
@@ -1352,8 +1360,12 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     // loops otherwise.
     "#if defined(__GNUC__)",
     "#define LAB_INLINE inline __attribute__((always_inline))",
+    // And a loop kept apart (C336): put into its caller, gcc kept its sum
+    // in memory, not a register.
+    "#define LAB_APART __attribute__((noinline))",
     "#else",
     "#define LAB_INLINE inline",
+    "#define LAB_APART",
     "#endif",
     ...(world ? [WORLD_H] : []),
     ...(entry || threads ? ["#include <pthread.h>", PTHREAD_STACK] : []),
@@ -2774,7 +2786,7 @@ int main(int argc, char **argv) {
               if (isCounted(a.i) && !after.has(a.i) && !e.args.slice(k + 1).some((b) => b.k === "local" && b.i === a.i)) gone.push(a.i);
               return local(a.i);
             });
-            if (i64[1] === "add" || i64[1] === "sub") i64Used = true;
+            if (i64[1] === "add" || i64[1] === "sub" || i64[1] === "walkIn") i64Used = true;
             // A value leaving the small range: the round again as written
             // (C207i, untagged-ints.ts valueLoop).
             if (i64[1] === "muladdv") {
@@ -2790,7 +2802,7 @@ int main(int argc, char **argv) {
               pre.push(`${d}if (lab__i64_${i64[1]}(${xs[0]}, ${xs[1]}, &${v})) goto lab_bail;`);
               return v;
             }
-            const c = ({ eq: `(${xs[0]} == ${xs[1]})`, less: `(${xs[0]} < ${xs[1]})`, add: `lab__i64_add(${xs[0]}, ${xs[1]})`, sub: `lab__i64_sub(${xs[0]}, ${xs[1]})`, and: `(${xs[0]} & ${xs[1]})`, mod: `(((${xs[0]} % ${xs[1]}) + ${xs[1]}) % ${xs[1]})`, shr: `(${xs[0]} >> ${xs[1]})`, toNumber: `((double)${xs[0]})`, box: `LAB_SMALL(${xs[0]})`, unbox: `LAB_VAL(${xs[0]})`, small: `LAB_IS_SMALL(${xs[0]})`, lit: xs[0] } as Record<string, string>)[i64[1]];
+            const c = ({ eq: `(${xs[0]} == ${xs[1]})`, less: `(${xs[0]} < ${xs[1]})`, add: `lab__i64_add(${xs[0]}, ${xs[1]})`, sub: `lab__i64_sub(${xs[0]}, ${xs[1]})`, and: `(${xs[0]} & ${xs[1]})`, mod: `(((${xs[0]} % ${xs[1]}) + ${xs[1]}) % ${xs[1]})`, shr: `(${xs[0]} >> ${xs[1]})`, toNumber: `((double)${xs[0]})`, box: `LAB_SMALL(${xs[0]})`, unbox: `LAB_VAL(${xs[0]})`, small: `LAB_IS_SMALL(${xs[0]})`, lit: xs[0], walkIn: `lab__walk_in((int64_t)${xs[0]}.n, ${xs[1]}, ${xs[2]}, ${xs[3]})` } as Record<string, string>)[i64[1]];
             if (!gone.length) return c;
             const v = stated(c, rtType(e.fn), pre, d);
             pre.push(...gone.map((j) => `${d}${drop(f.locals[j], local(j))}`));
