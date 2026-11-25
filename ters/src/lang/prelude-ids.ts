@@ -44,6 +44,9 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "added at end": "@clvlk6m2ke027pdc01b5rs0rqv",
  // Two lists side by side, a fold over which reads both arrays in place (compiler/src/scalar.ts zippedItems, C275).
  "zipped": "@u6ulqtprp7t04gefhq2qrf9fqi",
+ // A map over a list numbered that replaces one item, read as replace at (compiler/src/replace-reads.ts, C330).
+ "numbered": "@ssemhlqkj8mqo139vtu32vk2ji",
+ "replace at": "@35sedp97bd5r0h3hrka4eg489k",
 };
 
 // A definition copied by a pass (library-reps.ts copies the library's list
