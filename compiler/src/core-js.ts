@@ -626,8 +626,11 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
           // program, was a quarter of the flock page's time, its calls
           // seeing every kind of array.
           {
-            const m = /^array\.(get|length)\.a\d+$/.exec(e.fn);
-            if (m && xs.length === (m[1] === "get" ? 2 : 1)) {
+            // And `item at` on a kept array (C343: the prelude's strided
+            // contraction sum reads through it): past the end, the
+            // runtime's, which has no answer there.
+            const m = /^array\.(get|length|at)\.a\d+$/.exec(e.fn);
+            if (m && xs.length === (m[1] === "length" ? 1 : 2) && (m[1] !== "at" || keptOfArg(e.args[0]))) {
               const named = (x: string) => { if (/^[\w$]+$/.test(x)) return x; const t = temp(); pre.push(`${d}const ${t} = ${x};`); return t; };
               const a = named(xs[0]), w = keptOfArg(e.args[0]);
               if (w && m[1] === "length") return `${w}n`;
