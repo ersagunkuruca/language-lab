@@ -456,8 +456,21 @@ static inline lab_int lab__int_bits(lab_int x, lab_int y, int op) {
 }
 static inline lab_int lab_int_shiftDown(lab_int a, lab_int n) { return LAB_IS_SMALL(a) && LAB_IS_SMALL(n) && LAB_VAL(n) >= 0 ? LAB_SMALL(LAB_VAL(a) >> (LAB_VAL(n) < 63 ? LAB_VAL(n) : 63)) : lab__shift_big(a, n); }`,
   },
-  "int.quotient": { uses: [], c: `static lab_int lab_int_quotient(lab_int x, lab_int y) { lab_int q; if (y == LAB_SMALL(0)) { lab_int_drop(x); lab_st = 1; return LAB_SMALL(0); } lab__floordiv(x, y, &q, 0); lab_int_drop(x); lab_int_drop(y); return q; }` },
-  "int.remainder": { uses: [], c: `static lab_int lab_int_remainder(lab_int x, lab_int y) { lab_int r; if (y == LAB_SMALL(0)) { lab_int_drop(x); lab_st = 1; return LAB_SMALL(0); } lab__floordiv(x, y, 0, &r); lab_int_drop(x); lab_int_drop(y); return r; }` },
+  // Two small ones divided where they're used (C337): pack's codes and
+  // checksums by a literal took a call each, 14% of its instructions; cc
+  // turns a division by a literal into a multiply there.
+  "int.quotient": { uses: [], c: `static lab_int lab__int_quotient(lab_int x, lab_int y);
+static LAB_INLINE lab_int lab_int_quotient(lab_int x, lab_int y) {
+  if (LAB_IS_SMALL(x) && LAB_IS_SMALL(y) && y != LAB_SMALL(0) && y != LAB_SMALL(-1)) { int64_t a = LAB_VAL(x), b = LAB_VAL(y), d = a / b, m = a % b; if (m != 0 && (m < 0) != (b < 0)) d--; return LAB_SMALL(d); }
+  return lab__int_quotient(x, y);
+}
+static lab_int lab__int_quotient(lab_int x, lab_int y) { lab_int q; if (y == LAB_SMALL(0)) { lab_int_drop(x); lab_st = 1; return LAB_SMALL(0); } lab__floordiv(x, y, &q, 0); lab_int_drop(x); lab_int_drop(y); return q; }` },
+  "int.remainder": { uses: [], c: `static lab_int lab__int_remainder(lab_int x, lab_int y);
+static LAB_INLINE lab_int lab_int_remainder(lab_int x, lab_int y) {
+  if (LAB_IS_SMALL(x) && LAB_IS_SMALL(y) && y != LAB_SMALL(0)) { int64_t a = LAB_VAL(x), b = LAB_VAL(y), m = a % b; if (m != 0 && (m < 0) != (b < 0)) m += b; return LAB_SMALL(m); }
+  return lab__int_remainder(x, y);
+}
+static lab_int lab__int_remainder(lab_int x, lab_int y) { lab_int r; if (y == LAB_SMALL(0)) { lab_int_drop(x); lab_st = 1; return LAB_SMALL(0); } lab__floordiv(x, y, 0, &r); lab_int_drop(x); lab_int_drop(y); return r; }` },
   // A negative power has no answer; 0, 1 and −1 to any power are small.
   "int.power": {
     uses: ["int.mul", "int.less"],
