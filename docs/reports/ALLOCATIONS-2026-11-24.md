@@ -609,3 +609,37 @@ turns it off.
 
 Next are C327f (one holder decided per value, which C334 waits on) and
 C327g (WebAssembly's frame-local records as locals).
+
+## C327f part 1 and C334, one holder per value on core JavaScript (2026-11-25)
+
+holders.ts decides, per value, whether an array has one holder where it
+is replaced or pushed onto: where it came from (a new array, what a
+replace or push gave back, a record's field, a call's answer, a
+parameter every caller gives one), and whether the local holding it is
+used once (read any number of times, then given away once; a call's
+inputs are worked out before it gives a local away, so `replace(a, i,
+item at(a, i))` is one use). Parameters and answers are summed over the
+program's functions to a fixpoint, through direct calls and through the
+applies of closure codes the runtime is never handed. It runs after
+one-holder.ts's rule by type, and takes what that rule can't: mnist's
+gradient shares the parameters' type, and the parameters have two
+holders.
+
+A push onto an array with one holder is `pushOwned`: it grows the buffer
+as `push` does, but doesn't mark it shared, which had made every later
+owned replace a version anyway (the gradient is made by pushes). It is
+named after columns.ts has run, so an array built by pushes can still
+become columns (Newton's Dual arrays).
+
+mnist, 300 digits, one epoch, core JavaScript:
+
+| run | Versions made before | after | time before | after |
+|---|---|---|---|---|
+| reverse | 7,738,331 | 6,431 | 1.94 s | 0.69 to 0.81 s |
+| adam | 0 | 0 | 0.39 s | 0.33 to 0.41 s |
+| newton | 0 | 0 | 1.2 to 1.5 s | 1.2 to 1.4 s |
+
+Same output each way. Of the other 20 benchmarks in compiler/gaps, only
+typeset's code changes (one more replace in place). Not done here: C and
+WebAssembly still decide by type, and the owned-* passes stay (C327f's
+rest).

@@ -32,6 +32,7 @@ import { intRanges } from "./int-ranges.ts";
 import { loopRecords } from "./loop-records.ts";
 import { boundedReads, countedInts, keptArraysOf, keptColumns } from "./kept-arrays.ts";
 import { ownedArrays } from "./owned-arrays.ts";
+import { ownPushes, ownedPerValue } from "./holders.ts";
 import { columns } from "./columns.ts";
 import { linearCalls } from "./linear-calls.ts";
 import { arrayOffsets } from "./array-offsets.ts";
@@ -117,7 +118,7 @@ useFloats(floats);
 const BUILTIN = new Map<string, Id>([...Object.entries(RT), ...Object.entries(ARRAY_RT), [ARRAY_OPS.replaceAt, "array.replaceAt"]].map(([id, n]) => [n, id]));
 function builtinOf(name: string): BuiltinOf | undefined {
   // An owned replace (C93 s4) is the replace's builtin, written in place.
-  const plain = name.replace(/^array\.replaceOwned\./, "array.replaceAt.").replace(/^array\.pushFrontOwned\./, "array.pushFront.");
+  const plain = name.replace(/^array\.replaceOwned\./, "array.replaceAt.").replace(/^array\.pushFrontOwned\./, "array.pushFront.").replace(/^array\.pushOwned\./, "array.push.");
   const base = plain.replace(/\.a\d+$/, "");
   const id = BUILTIN.get(base === "array.get" ? "array.at" : base);
   return id ? [id, runtime(plain).result === "i32"] : undefined;
@@ -887,6 +888,9 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   // A replace in an array of a type whose every value has one holder,
   // written in place (owned-arrays.ts, C93 s4).
   if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, code, info, names, roots[0], true);
+  // And each other replace whose array has one holder, decided per value
+  // (holders.ts, C327f).
+  if (!envSet("NO_OWN") && !envSet("NO_HOLDERS")) ownedPerValue(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
   // And puts and removes on tables nobody else holds (owned-tables.ts).
   if (!envSet("NO_OWN") && !envSet("NO_OWN_TABLES") && roots.length === 1) ownedTables(ir, code, info, names, roots[0]);
   // A push onto an array a call just made, on its view (C196).
@@ -899,6 +903,9 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   // Arrays of records whose loops read and write them field by field, as
   // an array per field (columns.ts, C60).
   if (!envSet("NO_COLUMNS")) columns(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])), { whole: !envSet("NO_WHOLE_COLUMNS"), grow: !envSet("NO_GROW_COLUMNS") });
+  // The pushes holders.ts found onto arrays nobody else holds, as columns
+  // left them.
+  ownPushes(ir);
   // Then calls put in place for the printed code: a function called from
   // one place, or a small one, whatever it does (inline-small.ts).
   if (!envSet("NO_INLINE_CALLS")) inlineCalls(ir, (i) => ir.info.divergent.has(ir.funcs[i].def));
