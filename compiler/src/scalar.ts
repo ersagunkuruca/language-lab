@@ -581,7 +581,7 @@ export function endsAsBefore(before: Info, after: Info): Info {
 // `piece`: a part of another function's body, made for its search (the
 // rest of a search, a choice's arm), not a call of its definition, so it
 // takes no step of a page's budget (core-js.ts, I291).
-export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; piece?: true; partial?: boolean; multi?: true; answer?: LType; value?: true; binders?: Id[]; bail?: number }
+export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; piece?: true; partial?: boolean; multi?: true; answer?: LType; value?: true; binders?: Id[]; bail?: number; apart?: true }
 // `code` and `info` are the program that was lowered: the one given, or
 // a copy with its derivatives generated, where funcs[i].def lives.
 // rounded: definitions with a call worked out when compiled (stage.ts) that

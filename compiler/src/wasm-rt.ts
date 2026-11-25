@@ -8784,9 +8784,12 @@ export const runtime = (name: string): RtFn => {
   // a $huge; a value stepped past an i64 gives i64's least, which wasm.ts
   // takes as the round to start again as written. (Counts, i64.add and
   // i64.sub, aren't untagged on WebAssembly.)
-  const i64 = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit|range|rangeSplit|muladdv|mod)$/.exec(name);
+  const i64 = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit|range|rangeSplit|muladdv|mod|walkIn)$/.exec(name);
   if (i64) {
     const op = i64[1];
+    // An array walk in range (C336, checked-once.ts): on C only, c.ts
+    // prints it; its shape here.
+    if (op === "walkIn") return { name, params: [["a", "array"], ["p", "i64"], ["s", "i64"], ["n", "i64"]], result: "i32", locals: [], uses: [], native: true, body: "unreachable" };
     // A range's items as one int64 (C207p; C207u on WebAssembly, which
     // splits no choice): its end in the 31 bits above the next item's,
     // and a range whose list wouldn't fit in memory a trap.
