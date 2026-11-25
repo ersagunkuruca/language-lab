@@ -738,3 +738,35 @@ All eight print the same. Times, five runs each: scan 3,200 2.21 to 2.32 s
 before, 2.12 to 2.20 s after; bazaar 200,000 1.18 to 1.45 s both; strings
 32 4.61 to 5.27 s, 4.60 to 4.87 s; flock 100 × 5,000 5.34 to 5.79 s,
 4.90 to 5.90 s.
+
+## C327g part 2b, a deep loop's frames kept spare on WebAssembly (2026-11-25)
+
+deep-loops.ts makes non-tail recursion two loops: `$down` makes a frame
+a call (a case a call site, holding the locals what comes after it
+reads and the frame under it), and `$up` reads each frame once, as its
+case's scrutinee. Once `$up` has read a frame's locals and the frame
+under it, nothing names the frame again. So `frame.take` now puts it on
+its case's spare list, linked through its own `next`, and `frame.new`
+in `$down` writes a spare frame's fields again when there is one
+(frame-spares.ts). A run makes frames only as deep as it goes. This is
+only done where `$up`'s case is the one place a frame is read.
+`NO_FRAME_SPARES=1` turns it off.
+
+| program | structs before | after |
+|---|---|---|
+| flock 100 × 5,000 | 166.8 M | 69.8 M (−58%) |
+| pack 3,200 | 388 k | 254 k (−35%) |
+| bazaar 200,000 | 15.02 M | 14.20 M (−5%) |
+| strings 8 | 86.6 M | 86.3 M |
+| mnist reverse 300 | 767 k | 767 k |
+
+scan, mini and typeset make the same structs. All eight print the same.
+
+Under Node it costs time. In nine runs, flock 100 × 5,000 took 5.06 to
+5.59 s before and 5.37 to 5.91 s after, about 4% slower. A build that
+took frames but never kept them ran as fast as before, so the cost is
+in writing the kept frames again, not in the extra tests. A kept frame
+outlives V8's young generation, so each write of a young value into it
+goes through the write barrier and the remembered set. scan, bazaar
+and strings took the same time. It stays on: allocations are judged by
+the structs a run makes, not by one engine's collector (2026-11-25).
