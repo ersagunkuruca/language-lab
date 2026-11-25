@@ -440,7 +440,9 @@ export type SExpr =
   | { k: "int"; v: bigint }
   | { k: "text"; v: string }
   // A function of the runtime (wasm-rt.ts) by name.
-  | { k: "rt"; fn: string; args: SExpr[]; host?: { t: LType; partial: boolean; always?: true; runs?: number } }
+  // own: a push onto an array nobody else holds (holders.ts), made
+  // `pushOwned` once the passes reading pushes have run.
+  | { k: "rt"; fn: string; args: SExpr[]; host?: { t: LType; partial: boolean; always?: true; runs?: number }; own?: true }
   | { k: "bool"; v: boolean }
   | { k: "local"; i: number }
   | { k: "op"; op: Op; args: SExpr[] }

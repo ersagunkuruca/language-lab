@@ -7,7 +7,7 @@
 import { bordered } from "../../ters/src/lang/border.ts";
 import { ARRAY_OPS, CELL_OPS, CONS, FALSE, LOCALE_V, NIL, NONE, SOME, TICKET_V, TRUE } from "../../ters/src/lang/std-ids.ts";
 import { madeItem } from "../../ters/src/lang/over.ts";
-import { ArrayView, arrayOf, arrayOfItems, rangeArray, arrayView, pushFrontOwned, replaceOwned } from "../../ters/src/lang/array-view.ts";
+import { ArrayView, arrayOf, arrayOfItems, rangeArray, arrayView, pushFrontOwned, pushOwned, replaceOwned } from "../../ters/src/lang/array-view.ts";
 import { hashset$items, show as showFloat, table$empty, table$entries, table$has, table$keys, table$put, table$remove, table$size } from "../../ters/src/lang/std-run.ts";
 import { directRead, directTable, tableRead, tablePutOwned, tableRemoveOwned, type Table } from "../../ters/src/lang/table.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
@@ -263,6 +263,8 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   if (name.startsWith("array.replaceOwned.")) return replaceOwned as (...xs: unknown[]) => unknown;
   // A push to the front of a view nobody else holds (owned-pushes.ts, C196).
   if (name.startsWith("array.pushFrontOwned.")) return pushFrontOwned as (...xs: unknown[]) => unknown;
+  // A push to the back of a view nobody else holds (holders.ts, C327f).
+  if (name.startsWith("array.pushOwned.")) return pushOwned as (...xs: unknown[]) => unknown;
   // A program's own effect whose cases answer in place (scalar.ts
   // handleOps, C137): a handler pushes its cases while the code it handles
   // runs, and a perform calls the nearest one's, with it popped while the
