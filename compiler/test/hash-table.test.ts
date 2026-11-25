@@ -210,7 +210,7 @@ test("WebAssembly changes a map nobody else holds in place, and keeps the versio
     const c = chosen(p, false, true);
     const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
     const lowered = lowerScalar(c.code, info, c.names, [p.main], { data: true });
-    assert.equal(ownedTables(lowered, c.code, info, c.names, p.main) > 0, !old);
+    assert.equal(ownedTables(lowered, p.main) > 0, !old);
     const got: string[] = [], m = emitWasm(lowered);
     assert.equal(/call \$table\.changeOwned\.t0/.test(m.wat), !old);
     await runWasm(lowered, m, lowered.funcs.find((g) => g.def === p.main && !g.inner)!.name, [], { print: (x) => got.push(x) });
