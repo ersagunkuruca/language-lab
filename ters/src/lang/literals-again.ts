@@ -18,6 +18,7 @@ import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { optionsText } from "./class-key.ts";
 import { keptMap } from "../kept.ts";
+import { valueRead } from "./value-reads.ts";
 
 type Stage = { code: Code; info: Info; names: Names };
 type Made = { copies: Map<Id, Id[]>; unknown: Set<string> };
@@ -84,7 +85,10 @@ function madeAgain(was: Kept, q: Stage): Stage | null {
   if (!changed?.length) return null;
   const made = (was.made ??= madeLiterals(p.code, out.code));
   const into: Record<Id, Node> = {};
+  // (Not a literal some pass reads the value of: value-reads.ts.)
+  const readP = valueRead(p.code), readQ = valueRead(q.code);
   for (const id of changed) {
+    if (readP(id) || readQ(id)) return null;
     const a = p.code.nodes[id], b = q.code.nodes[id];
     if (a?.kind !== "lit" || b?.kind !== "lit" || !numeric(a.value) || !numeric(b.value) || classOf(a.value) !== classOf(b.value) || !sameValue({ ...a, value: b.value }, b)) return null;
     if (made.unknown.has(litText(a.value)) || was.reads?.has(id)) return null;
@@ -125,7 +129,10 @@ export function onlyLiteralValues(a: Code, b: Code): boolean {
   if (a === b) return true;
   if (a.defs.length !== b.defs.length || a.defs.some((d, i) => d !== b.defs[i])) return false;
   // (A node made again as it was, other object or not, is the same.)
-  return differing(a.nodes, b.nodes).every((id) => { const x = a.nodes[id], y = b.nodes[id]; return x !== undefined && y !== undefined && (sameValue(x, y) || (x.kind === "lit" && y.kind === "lit" && sameValue({ ...x, value: y.value }, y))); });
+  // (A literal some pass reads the value of is no edit of a value alone:
+  // value-reads.ts.)
+  const ra = valueRead(a), rb = valueRead(b);
+  return differing(a.nodes, b.nodes).every((id) => { const x = a.nodes[id], y = b.nodes[id]; return x !== undefined && y !== undefined && (sameValue(x, y) || (x.kind === "lit" && y.kind === "lit" && sameValue({ ...x, value: y.value }, y) && !ra(id) && !rb(id))); });
 }
 
 // The literals the step made: copies of the program's (model.ts

@@ -7,13 +7,17 @@
 // an edit of a number (the editor's drag) finds it again.
 import { nodeValues, type Code, type Node } from "../model.ts";
 import { LIBRARY } from "./library.ts";
+import { valueRead } from "./value-reads.ts";
 
 export function classKey(code: Code, also: unknown): string {
   const own: Node[] = [];
   // Listed as model.ts lists a version's nodes (TERS_CHECK_NODES refuses `in`).
   for (const n of nodeValues(code.nodes)) if (LIBRARY.code.nodes[n.id] !== n) own.push(n);
-  return JSON.stringify([code.defs, own, also], function (this: { kind?: string }, k, v) {
+  // (A literal a pass reads the value of, by its value: value-reads.ts.)
+  const read = valueRead(code);
+  return JSON.stringify([code.defs, own, also], function (this: { kind?: string; id?: string }, k, v) {
     if (k !== "value" || this.kind !== "lit") return v;
+    if (this.id !== undefined && read(this.id)) return v;
     if (typeof v === "number") return Object.is(v, -0) ? "-0" : `${Number.isInteger(v) ? "i" : "f"}${Math.sign(v)}`;
     return typeof v;
   });
