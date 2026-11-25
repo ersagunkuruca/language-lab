@@ -16,8 +16,9 @@
 //
 // Taken: a function calling itself non-tail at most once on any path, as
 // `let r = f(…)` with nothing of f after it but r's uses, its input there
-// the rest of an array input of its own (or a field of a case on it), so
-// that it goes as deep as the array is long.
+// the rest of an array input of its own (or a field of a case on it, or
+// an index into an array one on), so that it goes as deep as the array is
+// long.
 
 import { freeLocals, kids, mapLocals, type CoreIR, type DType, type LType, type SExpr, type SFunc } from "./scalar.ts";
 
@@ -53,10 +54,16 @@ function deepLoop(ir: CoreIR, fi: number): boolean {
   const cases = (e: SExpr) => { if (e.k === "case" && e.scrut.k === "local") scruts.set(e.s, e.scrut.i); kids(e).forEach(cases); };
   cases(f.body);
   const val = (e: SExpr): SExpr => (e.k === "local" && bound.has(e.i) ? val(bound.get(e.i)!) : e);
+  // Or an index into an array going up by one (C335): trek's `steepest`
+  // walked as `from` a position, an item of the array read at it.
+  const one = (e: SExpr): boolean => (e.k === "int" && e.v === 1n) || (e.k === "rt" && e.fn === "i64.lit" && e.args[0]?.k === "int" && e.args[0].v === 1n);
+  const atJ = (e: SExpr, j: number): boolean => (e.k === "local" && e.i === j) || (e.k === "rt" && e.fn === "i64.box" && atJ(e.args[0], j));
+  const indexes = (j: number): boolean => { let r = false; const go = (e: SExpr) => { if (e.k === "rt" && /^array\.(at|get|atb|getb)\.a\d+$/.test(e.fn) && e.args[1] && atJ(e.args[1], j)) r = true; kids(e).forEach(go); }; go(f.body); return r; };
   // Input j's rest: array rest of it, or a field of a case on it.
   const down = (e: SExpr, j: number): boolean => {
     const v = val(e);
     if (v.k === "rt" && /^array\.(rest|drop|slice)\.a\d+$/.test(v.fn) && v.args[0]?.k === "local" && v.args[0].i === j) return true;
+    if (v.k === "rt" && (v.fn === "int.add" || v.fn === "i64.add") && v.args[0]?.k === "local" && v.args[0].i === j && one(v.args[1]) && indexes(j)) return true;
     return v.k === "field" && v.rec.k === "local" && (v.rec.i === j || scruts.get(v.rec.i) === j) && v.t === f.params[j];
   };
   const sites: Site[] = [];

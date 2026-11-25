@@ -65,12 +65,13 @@ test("trek through ters wasi and ters native prints what ters run prints", async
   assert.equal(spawnSync(join(dir, "p"), [join(dir, "t.txt")], { encoding: "utf8" }).stdout, want.stdout, "ters native");
 });
 
-// 10,000 fixes through `ters wasi`: every function going down the fixes
+// 40,000 fixes through `ters wasi`: every function going down the fixes
 // one by one is a loop there (C222, cons-loops.ts and deep-loops.ts),
-// where WebAssembly's stack held some thousands of frames.
-test("trek: 10000 fixes through ters wasi print what the ideal prints (C222)", async () => {
+// where WebAssembly's stack held some thousands of frames; `steepest`
+// walked by its position too (C335).
+test("trek: 40000 fixes through ters wasi print what the ideal prints (C222, C335)", async () => {
   const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), dir = mkdtempSync(join(tmpdir(), "trek-"));
-  const files = { "t.txt": track(10000) };
+  const files = { "t.txt": track(40000) };
   writeFileSync(join(dir, "t.txt"), files["t.txt"]);
   const made = spawnSync(process.execPath, [lab, "wasi", folder, "-o", join(dir, "p.wasm")], { encoding: "utf8" });
   assert.equal(made.status, 0, made.stderr);
