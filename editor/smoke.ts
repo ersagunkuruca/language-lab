@@ -27,6 +27,16 @@ const page = process.argv[2] ?? new URL("../index.html", import.meta.url).href;
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : { channel: "chrome" });
 const errors: string[] = [];
 let where = "loading";
+// Where it is, each minute, and a stop that says where (I367: on a runner
+// it once used the browser job's whole 45 minutes and printed nothing, the
+// smoke's few lines only coming at its end). Here it takes about 11.
+const began = Date.now(), SMOKE_LIMIT = Number(process.env.SMOKE_LIMIT ?? 32 * 60);
+const elapsed = () => Math.round((Date.now() - began) / 1000);
+setInterval(() => console.log(`${elapsed()} s: ${where}`), 60_000).unref();
+setTimeout(() => {
+  console.error([`stopped at ${where} after ${elapsed()} s`, ...errors].join("\n\n"));
+  process.exit(1);
+}, SMOKE_LIMIT * 1000).unref();
 // What a step shows comes after the editor's next tasks, later on a slow
 // machine: asked again until it holds or `ms` pass, not read once.
 async function soon(holds: () => Promise<boolean>, ms = 5000): Promise<boolean> {
