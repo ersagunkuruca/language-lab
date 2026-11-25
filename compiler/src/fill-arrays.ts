@@ -34,7 +34,7 @@ const ARRAY_ROW = LIBRARY.reps.find((r) => r.of === LIST && r.name === "array of
 const isMap = (t: Id) => originalOf(t) === MAP || t === ARRAY_ROW?.impl[MAP];
 const isAppend = (t: Id) => originalOf(t) === APPEND || t === ARRAY_ROW?.impl[APPEND];
 
-export function fillArrays(code: Code, names: Names): { code: Code; names: Names; made: Id[] } {
+export function fillArrays(code: Code, names: Names): { code: Code; names: Names; made: Id[]; gone: Id[] } {
   const target = (id: Id | undefined) => { const n = id ? code.nodes[id] : undefined; return n?.kind === "ref" ? n.target : null; };
   const calls = (id: Id | undefined, f: (t: Id) => boolean, n: number) => { const x = id ? code.nodes[id] : undefined; if (!isCall(x) || x.args?.length !== n) return null; const t = target(x.fn); return t && f(t) ? x.args : null; };
   // map(range(n), f): n and f.
@@ -79,8 +79,9 @@ export function fillArrays(code: Code, names: Names): { code: Code; names: Names
     const a = calls(g.id, isAppend, 2), m2 = a && mapped(a[1]);
     if (a && m2) sites.push({ id, by, before: a[0], beforeArray: g.array, ...m2 });
   }
-  if (!sites.length) return { code, names, made: [] };
-  const k = new Lang(code), nodes = copyNodes(code.nodes);
+  if (!sites.length) return { code, names, made: [], gone: [] };
+  const k = new Lang(code), nodes = copyNodes(code.nodes), gone: Id[] = [];
+  const drop = (id: Id) => { dropNode(nodes, id); gone.push(id); };
   const fill = k.def("filled");
   k.define(fill, k.fn(["array", "at", "count", "f"], (a, i, n, f) =>
     k.if(k.call(INT_OPS.less, i, n), k.call(fill, k.call(ARRAY_OPS.push, a, k.call(f, i)), k.call(INT_OPS.add, i, k.int(1)), n, f), a)));
@@ -104,11 +105,11 @@ export function fillArrays(code: Code, names: Names): { code: Code; names: Names
     // The list made before taken out: the map's call, its range's, and
     // an append's, with the refs naming them.
     const was = code.nodes[s.id] as { fn: Id; args: Id[] };
-    dropNode(nodes, was.fn);
+    drop(was.fn);
     for (let x: Id | undefined = was.args[0]; x;) {
       const c = code.nodes[x] as { fn: Id; args: Id[] };
-      dropNode(nodes, x);
-      dropNode(nodes, c.fn);
+      drop(x);
+      drop(c.fn);
       const t = target(c.fn);
       if (t === INT_OPS.range) break;
       x = isAppend(t!) ? c.args[1] : c.args[0];
@@ -123,7 +124,7 @@ export function fillArrays(code: Code, names: Names): { code: Code; names: Names
     }
   }
   Object.assign(nodes, k.code.nodes);
-  return { code: { nodes, defs: [...code.defs, ...k.code.defs] }, names: { ...names, ...k.names }, made: sites.map((s) => s.id) };
+  return { code: { nodes, defs: [...code.defs, ...k.code.defs] }, names: { ...names, ...k.names }, made: sites.map((s) => s.id), gone };
 }
 
 export function withFilledArrays(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
@@ -133,7 +134,10 @@ export function withFilledArrays(code: Code, info: Info, names: Names): { code: 
   // problems its first check didn't (first-arms.ts has the same): only
   // new ones count.
   let checked: Info;
-  try { checked = inferRewritten(code, r.code, r.names, info, r.made, r.code.defs.slice(code.defs.length)); } catch { return { code, info, names }; }
+  // The nodes taken out are changed too: a recheck's scans read the
+  // program before's picks but for those (a whole check read the calls
+  // gone, threw, and the arrays were left unfilled).
+  try { checked = inferRewritten(code, r.code, r.names, info, [...r.made, ...r.gone], r.code.defs.slice(code.defs.length)); } catch { return { code, info, names }; }
   if (checked.errors.length > info.errors.length) {
     const before = new Set(infer(code, names, undefined, info.options).errors.map((e) => e.message));
     if (checked.errors.some((e) => !before.has(e.message))) return { code, info, names };

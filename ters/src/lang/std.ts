@@ -1214,11 +1214,12 @@ privateWord(16);
 // A tensor (BACKLOG L51, TENSORS-2026-11-03.md): a shape, the axis
 // lengths, and the items with the last axis changing fastest (row-major,
 // NumPy's and C's order). It means a function from an index to an item;
-// the items are how it is written down, stored as an array where `array
-// of List` pays. Made by the prelude's `tensor of`, which checks the item
-// count against the shape. After Word16, so ids above don't move.
+// the items are how it is written down, kept in one array (C302: the
+// constructor is private, so only the prelude reads them, by position).
+// Made by the prelude's `tensor of`, which checks the item count against
+// the shape. After Word16, so ids above don't move.
 export const TENSOR = typedef("std.tensor", "Tensor", ["a"], [
-  ["tensor", [["shape", () => tref(LIST, tref(INT))], ["items", ([a]) => tref(LIST, tref(a))]]],
+  ["tensor", [["shape", () => tref(LIST, tref(INT))], ["items", ([a]) => tref(ARRAY, tref(a))]]],
 ]);
 export const TENSOR_V = "std.tensor.tensor";
 SMART[TENSOR_V] = "tensor of";

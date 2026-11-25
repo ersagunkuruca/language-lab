@@ -58,8 +58,8 @@ const OPS: Record<Id, string> = {
   [DIVIDE]: "div",
 };
 // The prelude's tensor ways a pass goes back through by their meaning.
-const TENSOR_WAYS = ["contracted", "tensor of", "tensor map", "tensor sum", "tensor difference", "tensor product item by item", "tensor negated"];
-const ARRAY_AT = "builtin.array.at", ARRAY_REPLACE_AT = "builtin.array.replaceAt", ARRAY_OF = "builtin.array.of", ARRAY_LENGTH = "builtin.array.length";
+const TENSOR_WAYS = ["contracted", "tensor of", "tensor of array", "tensor items array", "tensor map", "tensor sum", "tensor difference", "tensor product item by item", "tensor negated"];
+const ARRAY_AT = "builtin.array.at", ARRAY_REPLACE_AT = "builtin.array.replaceAt", ARRAY_OF = "builtin.array.of", ARRAY_LENGTH = "builtin.array.length", ARRAY_SLICE = "builtin.array.slice";
 // The primitive table's operations that every Number has.
 const GENERIC: Record<string, Id> = { add: ARITH.add, sub: ARITH.sub, mul: ARITH.mul, neg: ARITH.neg, div: DIVIDE, ...Object.fromEntries(["sin", "cos", "tan", "exp", "log"].map((f) => [f, (TRIG_OPS as Record<string, Id>)[f]])) };
 const lib = (name: string): Id => {
@@ -393,6 +393,8 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
   function tensorBack(way: string, args: Id[], seed: Seed, ctx: Ctx, acc: Res, k: (r: Res) => Id): Id {
     if (way === "tensor sum" || way === "tensor difference" || way === "tensor product item by item" || way === "tensor negated")
       return tensorArith({ "tensor sum": "add", "tensor difference": "sub", "tensor product item by item": "mul", "tensor negated": "neg" }[way]!, args, seed, ctx, acc, k);
+    // The array's slopes are the tensor's, both ways.
+    if (way === "tensor of array" || way === "tensor items array") return seed.k === "a" ? back(args[way === "tensor of array" ? 1 : 0], seed, ctx, acc, k) : cant("a tensor read as a number");
     if (way === "tensor of") {
       // Its items: an array's, or a map over a range's.
       const xs = nodes[args[1]];
@@ -486,6 +488,7 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
         const way = TENSOR_WAYS.find((w) => is(target, w));
         if (way) return tensorBack(way, n.args, seed, ctx, acc, k);
         if (target === S.float32) return back(n.args[0], seed, ctx, acc, k);
+        if (target === ARRAY_SLICE) return sliceBack(n.args, seed, ctx, acc, k);
         if (target === ARRAY_AT) return readBack(n.args[0], n.args[1], seed, ctx, acc, k, true);
         if (target === S.first) return firstBack(n, seed, ctx, acc, k);
         const read = fieldRead(id);
@@ -795,6 +798,15 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     const i = binder(), s = binder();
     const rest = letIn([s], [seed.at()], back(arr, { k: "a", add: addAt(i, s) }, ctx, acc, k));
     return letIn([i], [copy(at, ctx)], checked ? letIn([binder()], [call(ARRAY_AT, copy(arr, ctx), ref(i))], rest) : rest);
+  }
+  // slice of array(xs, from, count): the slice's slopes added into xs's
+  // from `from` on (0 past the slice: an item of it, 0 outside it).
+  function sliceBack([arr, from, count]: Id[], seed: Seed, ctx: Ctx, acc: Res, k: (r: Res) => Id): Id {
+    if (seed.k !== "a") return cant("a slice read as a number");
+    if (moves(from, ctx) || moves(count, ctx)) return cant("a slice from a position that moves");
+    const f = binder(), c = binder();
+    return letIn([f, c], [copy(from, ctx), copy(count, ctx)], bound(() => (seed.dense ? seed.dense() : seed.add(() => zerosOf(() => ref(c)))), (d) =>
+      back(arr, { k: "a", add: (cur) => { const j = binder(); return call(ARRAY_OF, call(lib("map"), call("builtin.int.range", call(ARRAY_LENGTH, cur())), add({ kind: "lambda", params: [j], body: slot(call(op("add"), itemOr0(cur, () => ref(j)), itemOr0(d, () => call("builtin.int.sub", ref(j), ref(f))))) }))); } }, ctx, acc, k)));
   }
   // An index that always has a value: binders, numbers and + − ·.
   const sure = (id: Id): boolean => {
