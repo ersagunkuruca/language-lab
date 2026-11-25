@@ -819,12 +819,6 @@ export const SET_V: typeof Std.SET_V = "std.set.set of";
 export const SHOWN: typeof Std.SHOWN = "std.shown";
 export const SHOWN_V: typeof Std.SHOWN_V = "std.shown.shown";
 export const SHOW_ANY: typeof Std.SHOW_ANY = "builtin.showAny";
-export const SLOPES: typeof Std.SLOPES = "std.slopes";
-export const SLOPES_V: typeof Std.SLOPES_V = {
-  "none": "std.slopes.no slopes",
-  "one": "std.slopes.slope",
-  "both": "std.slopes.both slopes"
-};
 export const SMART: typeof Std.SMART = {
   "std.algebraic.algebraic": "as algebraic or square root",
   "std.map.map of": "empty map, as map or put",
@@ -1711,14 +1705,6 @@ export const stdNames: typeof Std.stdNames = {
   "std.file info.file facts.modified": "modified",
   "std.file info.file facts": "file facts",
   "std.file info": "File info",
-  "std.slopes.no slopes": "no slopes",
-  "std.slopes.slope.at": "at",
-  "std.slopes.slope.slope": "slope",
-  "std.slopes.slope": "slope",
-  "std.slopes.both slopes.left": "left",
-  "std.slopes.both slopes.right": "right",
-  "std.slopes.both slopes": "both slopes",
-  "std.slopes": "Slopes",
   "builtin.sqrt": "sqrt",
   "builtin.pow": "power"
 };
