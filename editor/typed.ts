@@ -925,22 +925,22 @@ function fieldOwners(code: Code, info: Info, names: Names) {
   return Object.assign(labels, { types });
 }
 
+// Each part's readings found once, not again for every reading of the
+// parts before it (I365: a replace of 8 lets in a row, each `x * 1.5 + n`,
+// read the rest's readings for each of the first's, 22 s).
 function readings(t: Typed): Typed[] {
+  // Every way to read the parts together, the first 16.
+  const each = (parts: Typed[]): Typed[][] => {
+    let out: Typed[][] = [[]];
+    for (const a of parts) { const rs = readings(a); out = out.flatMap((done) => rs.map((x) => [...done, x])).slice(0, 16); }
+    return out;
+  };
   if ("params" in t) return readings(t.body).map((body) => ({ ...t, body }));
-  if ("cond" in t) {
-    let out: Typed[][] = [[]];
-    for (const a of [t.cond, t.then, t.else]) out = out.flatMap((done) => readings(a).map((x) => [...done, x])).slice(0, 16);
-    return out.map(([cond, then, els]) => ({ cond, then, else: els }));
-  }
-  if ("let" in t) return readings(t.be).flatMap((be) => readings(t.rest).map((rest) => ({ ...t, be, rest }))).slice(0, 16);
-  if ("apply" in t) {
-    let out: Typed[][] = [[]];
-    for (const a of [t.apply, ...t.args]) out = out.flatMap((done) => readings(a).map((x) => [...done, x])).slice(0, 16);
-    return out.map(([apply, ...args]) => ({ apply, args }));
-  }
+  if ("cond" in t) return each([t.cond, t.then, t.else]).map(([cond, then, els]) => ({ cond, then, else: els }));
+  if ("let" in t) return each([t.be, t.rest]).map(([be, rest]) => ({ ...t, be, rest }));
+  if ("apply" in t) return each([t.apply, ...t.args]).map(([apply, ...args]) => ({ apply, args }));
   if (!("op" in t)) return [t];
-  let out: Typed[][] = [[]];
-  for (const a of t.args) out = out.flatMap((done) => readings(a).map((x) => [...done, x])).slice(0, 16);
+  const out = each(t.args);
   return (t.alts ?? [t.op]).flatMap((op) => out.map((args) => ({ op, args, ...(t.guess ? { guess: t.guess } : {}) }))).slice(0, 16);
 }
 
