@@ -289,7 +289,9 @@ export function fails(e: SExpr, funcs: SFunc[]): boolean {
     // what it runs may abort as the code it stands for may.
     // Small Ints' sums, products and remainders (int-ranges.ts) have an
     // answer: the ranges said so, and no runtime function stands for them.
-    case "rt": return !!(e.host ? e.host.partial : e.fn === "map.worth" || e.fn === "both.on" || e.fn === "both.second" || /^int\.\w+Small(Up)?$/.test(e.fn) ? false : /\.(pure|search)$/.test(e.fn) || runtime(e.fn).partial) || e.args.some((a) => fails(a, funcs));
+    // core-js.ts's own array makers (writtenArrays), which C and
+    // WebAssembly's runtime don't have: an array of the items, always.
+    case "rt": return !!(e.host ? e.host.partial : /^array\.(ofItems|concat)\.a\d+$/.test(e.fn) || e.fn === "map.worth" || e.fn === "both.on" || e.fn === "both.second" || /^int\.\w+Small(Up)?$/.test(e.fn) ? false : /\.(pure|search)$/.test(e.fn) || runtime(e.fn).partial) || e.args.some((a) => fails(a, funcs));
     case "apply": return !!e.t.partial || kids(e).some((a) => fails(a, funcs));
     // An abort goes on through first and budgets, so their bodies count.
     case "attempt": case "budget": return kids(e).some((a) => fails(a, funcs));

@@ -854,7 +854,9 @@ function zeroPartsIn(ir0: CoreIR, roots: number[], algebras: Map<Id, Algebra>): 
         scanL(f.body);
         const lr = new Map<number, RType>();
         type R = RType | null | undefined;
-        const J = (a: R, b: R): R => (a === undefined ? b : b === undefined ? a : a === null ? b : b === null ? a : a.key === b.key ? a : narrow(baseOf(a)!, maskOfT(a) | maskOfT(b)));
+        // undefined beside a record is a value of its type whose parts
+        // aren't known here (an item read from an array): all of them.
+        const J = (a: R, b: R): R => (a === undefined ? (b && baseOf(b)) || b : b === undefined ? (a && baseOf(a)) || a : a === null ? b : b === null ? a : a.key === b.key ? a : narrow(baseOf(a)!, maskOfT(a) | maskOfT(b)));
         const alg = (t: LType | null | undefined): R => (baseOf(t) ? (t as RType) : undefined);
         let memo = new WeakMap<SExpr, R>();
         const ty = (e: SExpr): R => {
@@ -910,7 +912,8 @@ function zeroPartsIn(ir0: CoreIR, roots: number[], algebras: Map<Id, Algebra>): 
         let grew = false;
         const setLet = (i: number, v: SExpr) => {
           if (!letLike.has(i)) return;
-          const now = J(lr.get(i) ?? null, ty(v));
+          const t = ty(v);
+          const now = J(lr.get(i) ?? null, t === undefined ? baseOf(locals[i]) : t);
           if (now && now.key !== lr.get(i)?.key) { lr.set(i, now); grew = true; }
         };
         // An expression with several answers (arms): each into their join.
