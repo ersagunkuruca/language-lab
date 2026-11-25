@@ -186,21 +186,29 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     if (c && c.k !== "a") cant("a value read both as a number and as an array");
     return c?.k === "a" ? c.cur : undefined;
   };
+  // Over another Number (generic), each slope in an array is kept in a
+  // pair of its own (the second part unread): the slopes are added into
+  // in place, a position at a time, and so the arrays of them can only be
+  // rows (columns.ts keeps no replace but a map's). Of a type of their
+  // own, they leave the program's arrays of that Number as it stores them
+  // (mnist's Duals as columns, read in place by Newton's dot: C304c).
+  const slot = (v: Id): Id => (generic ? call(tupleVariant(2), v, num(0)) : v);
+  const unslot = (v: Id): Id => (generic ? call(tuplePart(2, 0), v) : v);
   // n zeros, and as many as array `of` has.
-  const zerosOf = (n: () => Id): Id => call(ARRAY_OF, call(lib("map"), call("builtin.int.range", n()), add({ kind: "lambda", params: [binder()], body: num(0) })));
+  const zerosOf = (n: () => Id): Id => call(ARRAY_OF, call(lib("map"), call("builtin.int.range", n()), add({ kind: "lambda", params: [binder()], body: slot(num(0)) })));
   const zerosLike = (of: Id): Id => zerosOf(() => call(ARRAY_LENGTH, ref(of)));
   // An item of an array, 0 outside it.
-  const itemOr0 = (arr: () => Id, i: () => Id): Id => call(S.first, thunk(call(ARRAY_AT, arr(), i())), thunk(num(0)));
+  const itemOr0 = (arr: () => Id, i: () => Id): Id => call(S.first, thunk(unslot(call(ARRAY_AT, arr(), i()))), thunk(num(0)));
   // Slope s added at position i of the slopes so far: replaced, so where
   // nothing else holds them it is in place.
   const addAt = (i: Id, s: Id) => (cur: () => Id): Id => {
     const v = binder();
-    return letIn([v], [itemOr0(cur, () => ref(i))], call(ARRAY_REPLACE_AT, cur(), ref(i), call(op("add"), ref(v), ref(s))));
+    return letIn([v], [itemOr0(cur, () => ref(i))], call(ARRAY_REPLACE_AT, cur(), ref(i), slot(call(op("add"), ref(v), ref(s)))));
   };
   // Two arrays of slopes, added item by item.
   const addArrays = (cur: () => Id, more: () => Id): Id => {
     const j = binder();
-    return call(ARRAY_OF, call(lib("map"), call("builtin.int.range", call(ARRAY_LENGTH, cur())), add({ kind: "lambda", params: [j], body: call(op("add"), itemOr0(cur, () => ref(j)), itemOr0(more, () => ref(j))) })));
+    return call(ARRAY_OF, call(lib("map"), call("builtin.int.range", call(ARRAY_LENGTH, cur())), add({ kind: "lambda", params: [j], body: slot(call(op("add"), itemOr0(cur, () => ref(j)), itemOr0(more, () => ref(j)))) })));
   };
   // A dense array's slopes as a seed.
   const denseSeed = (d: () => Id): Seed => ({ k: "a", dense: d, add: (cur) => addArrays(cur, d) });
@@ -686,10 +694,16 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     const body = letIn([one], [num(1)], back(lam.body, { k: "s", at: () => ref(one) }, ctx, new Res(), (r) => {
       const c = r.get(np);
       if (c && c.k !== "a") cant("the input read as a number");
-      const slopes = c?.k === "a" ? c.cur() : zerosLike(np);
-      if (!value) return slopes;
+      const slots = c?.k === "a" ? c.cur() : zerosLike(np);
+      // Out of their pairs.
+      const plain = (): Id => {
+        if (!generic) return slots;
+        const b = binder(), j = binder();
+        return letIn([b], [slots], call(ARRAY_OF, call(lib("map"), call("builtin.int.range", call(ARRAY_LENGTH, ref(b))), add({ kind: "lambda", params: [j], body: itemOr0(() => ref(b), () => ref(j)) }))));
+      };
+      if (!value) return plain();
       const v = r.get(VAL);
-      return v?.k === "s" ? call(tupleVariant(2), total(v.parts), slopes) : cant("the value not found on the way back");
+      return v?.k === "s" ? call(tupleVariant(2), total(v.parts), plain()) : cant("the value not found on the way back");
     }, value));
     return add({ kind: "lambda", params: [np], body });
   }
