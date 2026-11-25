@@ -843,7 +843,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // The roots are called from outside: every other definition's
     // multivector inputs are what its callers give it (grades.ts valueMasks,
     // L43c), so staging multiplies only their masked parts.
-    const staged = stageProgram(code, info, names, roots);
+    // An edit of a number it didn't read takes what it staged before
+    // (literals-again.ts): its evaluator and grades.ts's runs tell what
+    // they read.
+    const staged = overLiterals(`staged ${roots.join(" ")}`, { code, info, names, rounded: [] as Id[] }, () => stageProgram(code, info, names, roots), true);
     ({ code, names, info } = staged);
     st = staged;
     // The passes so far carry the types of the nodes they made rather than

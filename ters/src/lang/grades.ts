@@ -41,6 +41,7 @@ import { ALGEBRA, ALGEBRA_V, ARITH, CONS, LIST, NIL, S, SET as S_SET, TABLE_ENTR
 import { B } from "../prelude.ts";
 import { hashes } from "../hash.ts";
 import { MASK_TYPES, NUMBER, type Type } from "./types.ts";
+import { readLit, readRuns } from "./literals-again.ts";
 
 export interface Algebra {
   // The definition whose value it is, and the record variant of its
@@ -146,12 +147,16 @@ const bits = (m: number) => { const out: number[] = []; for (let i = 0; m >> i; 
 const listOf = (v: Value): Value[] => { const out: Value[] = []; let c = v as { tag: Id; fields: Value[] }; while (c.tag === CONS) { out.push(c.fields[0]); c = c.fields[1] as never; } return out; };
 
 // The algebras a program writes down, each worked out once.
-const cache = new WeakMap<Code, Map<Id, Algebra>>();
+// (And the definitions it ran, whose literals' values it read:
+// literals-again.ts.)
+const cache = new WeakMap<Code, Map<Id, Algebra>>(), ranOf = new WeakMap<Code, Id[]>();
 export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
   let found = cache.get(code);
-  if (found) return found;
+  if (found) { readRuns(code, ranOf.get(code)!); return found; }
   found = new Map();
   cache.set(code, found);
+  const ran: Id[] = [];
+  ranOf.set(code, ran);
   // Made only for a program that has an algebra (I193: making it resolves
   // the arithmetic of the whole library, 0.9 s of every `ters check`).
   let runner: ReturnType<typeof makeRunner> | undefined;
@@ -166,6 +171,8 @@ export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
     const body = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
     const t0 = info.typeOf.get(d), t = t0 && info.subst.zonk(t0);
     if (!body || body.kind === "lambda" || body.kind === "typedef" || t?.t !== "con" || t.id !== ALGEBRA) continue;
+    ran.push(d);
+    readRuns(code, [d]);
     try {
       // One made from its signature alone, clifford algebra([1, 1, 1]),
       // is generic in its record type (L264): read the one copy arith.ts
@@ -347,6 +354,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     let v: Value | undefined;
     const def = nodes[d] as NodeOf<"def"> | undefined, t = info.typeOf.get(d), z = t && info.subst.zonk(t);
     if (def?.kind === "def" && def.body && nodes[def.body]?.kind !== "lambda" && z?.t === "con") {
+      readRuns(code, [d]);
       try { v = (runner ??= makeRunner(code, info, { print: () => {} })).value(d); } catch { v = undefined; }
     }
     ran.set(d, v);
@@ -641,6 +649,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
         case "grade": {
           const g = nodes[n.args[1]];
           const x = m(2);
+          if (g?.kind === "lit") readLit(g.id);
           return g?.kind === "lit" && typeof g.value === "number" ? mask(bits(x).filter((i) => gradeOf(alg, i) === g.value).reduce((a, i) => a | (1 << i), 0)) : mask(x);
         }
         case "part": {
@@ -734,6 +743,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
       args.push(k);
     }
     const r = (runner ??= makeRunner(code, info, { print: () => {} }));
+    readRuns(code, [n.id]);
     const values = args.map((a, i) => (nodes[n.args[i]]?.kind === "lambda" && a === n.args[i] ? undefined : (a as Value)));
     const was = runs.get(n.id)?.find((x) => x.args.every((v, i) => v === values[i]));
     if (was) return was.v;
@@ -759,7 +769,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     const items = writtenItems(nodes, id);
     if (!items) return null;
     const out: number[] = [];
-    for (const x of items) { const h = nodes[x]; if (h?.kind !== "lit") return null; out.push(Number(h.value)); }
+    for (const x of items) { const h = nodes[x]; if (h?.kind !== "lit") return null; readLit(x); out.push(Number(h.value)); }
     return out;
   };
 

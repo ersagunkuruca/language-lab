@@ -44,6 +44,7 @@ import { infer, type Info } from "./infer.ts";
 import { keepingWhole } from "./check-cache.ts";
 import { recordVariant } from "./derive.ts";
 import { valueMasks, type Algebra } from "./grades.ts";
+import { readLit } from "./literals-again.ts";
 
 class Stop extends Error {}
 const stop = (): never => { throw new Stop(); };
@@ -424,7 +425,9 @@ export function specialiseCalls(code: Code, info: Info, names: Names, calls: Id[
   for (const n of nodesOfKindIn(nodes, "typedef")) if (n.kind === "typedef" && n.effect) n.variants.forEach((v) => ctx.effectOps.add(v));
   // Data arguments are told apart by what they are made of.
   const known = (a: Id): string | null => {
-    if (!closedTree(out, a)) return null;
+    // (A literal is a number, never data with a list: its value isn't
+    // read, so an edit of it can take the staging made before.)
+    if (!closedTree(out, a) || out.nodes[a]?.kind === "lit") return null;
     try {
       const v = new Stager(ctx, LIMIT).closed(a);
       if (!plainData(v) || !numbersIn(v, lists)) return null;
@@ -770,6 +773,8 @@ class Stager {
     if (!n) return stop();
     switch (n.kind) {
       case "lit":
+        // (Its value read: literals-again.ts.)
+        readLit(id);
         // A plain number literal is a Float64 only where it was checked as one.
         if (typeof n.value === "number" && !n.unit && (n.of === NUMBER || (n.of === undefined && isNumber(this.ctx.ty(id))))) return n.value;
         return { k: "lit", node: n };

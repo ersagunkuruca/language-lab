@@ -13,7 +13,7 @@
 // have been worked into another.
 // A step that reads some values (bake.ts runs calls) says which nodes it
 // may have read (`reads`): a change to one of them makes it again.
-import { idsPlace, layerOf, moveIdsTo, nodeIds, nodesUnder, ownNodeIds, litOrigin, nodesOfKind, onLayer, sameValue, withNodes, type Code, type Id, type Node } from "../model.ts";
+import { dependenciesOfAll, subtree, subtreeKept, idsPlace, layerOf, moveIdsTo, nodeIds, nodesUnder, ownNodeIds, litOrigin, nodesOfKind, onLayer, sameValue, withNodes, type Code, type Id, type Node } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { optionsText } from "./class-key.ts";
@@ -30,8 +30,22 @@ const kept = keptMap<string, Kept>();
 // How many steps were made again so (the tests).
 export let stepsAgain = 0;
 
+// The literals whose values the step being taken has read, where it
+// tells them as it reads (`tracked`): stage.ts's evaluator, grades.ts's
+// runs.
+let reading: Set<Id> | null = null;
+export const readLit = (id: Id) => { reading?.add(id); };
+// A run of these nodes reads every literal under them and in what they
+// reach (as bake.ts tells its runs').
+export function readRuns(code: Code, ids: Id[]): void {
+  if (!reading) return;
+  for (const id of ids) for (const x of subtree(code, id)) reading.add(x);
+  for (const d of dependenciesOfAll(code, ids)) if (code.nodes[d]?.kind === "def") for (const x of subtreeKept(code, d)) reading.add(x);
+}
+
 // `place`: the step and what else it reads (its roots, its target).
-export function overLiterals<S extends Stage>(place: string, given: S, run: () => S & { reads?: ReadonlySet<Id> }): S {
+// `tracked`: the step tells the literals it reads (readLit, readRuns).
+export function overLiterals<S extends Stage>(place: string, given: S, run: () => S & { reads?: ReadonlySet<Id> }, tracked = false): S {
   const was = kept.get(place), from = idsPlace();
   const again = was && was.ids[0] === from ? madeAgain(was, given) : null;
   if (again) {
@@ -40,7 +54,12 @@ export function overLiterals<S extends Stage>(place: string, given: S, run: () =
     kept.set(place, { ...was!, given, out: again });
     return handed(again) as S;
   }
-  const { reads, ...out } = run();
+  const outer = reading, mine = tracked ? new Set<Id>() : null;
+  if (tracked) reading = mine;
+  let ran: S & { reads?: ReadonlySet<Id> };
+  try { ran = run(); } finally { if (tracked) { reading = outer; if (outer) for (const id of mine!) outer.add(id); } }
+  const { reads: told, ...out } = ran;
+  const reads = mine ? new Set([...mine, ...(told ?? [])]) : told;
   if (kept.size >= 8 && !kept.has(place)) kept.clear();
   kept.set(place, { given, out, ids: [from, idsPlace()], ...(reads ? { reads } : {}) });
   return handed(out as unknown as S);
