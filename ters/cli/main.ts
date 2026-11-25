@@ -404,7 +404,7 @@ function nativeLoweredNow(main: Id, wasm: boolean, page: boolean, from: Program)
     if (!process.env.NO_RANGE_ARRAYS) rangeArrays(lowered);
     // A table nobody else holds changed in place, no version made, as on
     // JavaScript (owned-tables.ts, C58p).
-    if (!process.env.NO_OWN_TABLES) ownedTables(lowered, q.code, q.info, q.names, root);
+    if (!process.env.NO_OWN_TABLES) ownedTables(lowered, root);
     // `item at` put in place, its stand-in made only past the end, as
     // natively (C268, item-reads.ts).
     if (!process.env.NO_ITEM_READS) itemReads(lowered);

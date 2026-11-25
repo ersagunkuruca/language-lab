@@ -59,7 +59,7 @@ import { gpuDraws, packsOf } from "./gpu-draws.ts";
 import { rangeArrays, rangeChoices } from "./range-choices.ts";
 import { originalOf, PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
 import { earlyAnd } from "./early-and.ts";
-import { ARRAY_RT, emptyArray, isArray, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, poolHeld, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, emptyArray, isArray, isTable, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, poolHeld, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import type { Type } from "../../ters/src/lang/types.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
@@ -234,11 +234,17 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
   // what to call instead; past DEPTH plain calls deep, a call runs that
   // copy, and R.drive keeps the calls waiting in an array.
   const deep = deepFuncs(ir.funcs);
-  // Arrays of a type written in place (owned-arrays.ts): a definition
-  // giving one gives a new one each time it is named, as one-holder.ts
-  // reads it (G3f).
-  const written = new Set<number>();
-  const writes = (e: SExpr): void => { if (e.k === "rt") { const m = /^array\.(replaceOwned|pushFrontOwned|pushOwned)\.a(\d+)$/.exec(e.fn); if (m) written.add(Number(m[2])); } kids(e).forEach(writes); };
+  // Arrays and tables of a type written in place (owned-arrays.ts,
+  // owned-tables.ts): a definition giving one gives a new one each time it
+  // is named, as holders.ts reads it (G3f).
+  const written = new Set<number>(), writtenTables = new Set<number>();
+  const writes = (e: SExpr): void => {
+    if (e.k === "rt") {
+      const m = /^array\.(replaceOwned|pushFrontOwned|pushOwned)\.a(\d+)$/.exec(e.fn); if (m) written.add(Number(m[2]));
+      const t = /^table\.(putOwned|removeOwned)\.t(\d+)$/.exec(e.fn); if (t) writtenTables.add(Number(t[2]));
+    }
+    kids(e).forEach(writes);
+  };
   ir.funcs.forEach((f) => writes(f.body));
   const gens = names.map((n) => `${n}$h`);
   // A closure's code with a heap copy has it as `.h`, and a heap copy's
@@ -834,7 +840,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
     // A definition that isn't a function is worked out once, at its first
     // use, as compile.ts has it (`??=`): sheet's `symbols`, a set made from
     // a written list, was made again for every character (C137d17).
-    if (f.value && !cycle && !deep.has(i) && !f.partial && !f.spends && !f.budgeted && !params.length && !(isArray(f.result) && written.has(f.result.index) && !emptyArray(f.body))) {
+    if (f.value && !cycle && !deep.has(i) && !f.partial && !f.spends && !f.budgeted && !params.length && !(isArray(f.result) && written.has(f.result.index) && !emptyArray(f.body)) && !(isTable(f.result) && writtenTables.has(f.result.index))) {
       return [`let ${names[i]}$v;`, `function ${names[i]}() { return ${names[i]}$v ??= ${names[i]}$w(); }`, `function ${names[i]}$w() {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
     }
     return [`function${cycle ? "*" : ""} ${cycle ? gens[i] : names[i]}(${params.join(", ")}) {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
@@ -911,7 +917,7 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   // (holders.ts, C327f).
   if (!envSet("NO_OWN") && !envSet("NO_HOLDERS")) ownedPerValue(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
   // And puts and removes on tables nobody else holds (owned-tables.ts).
-  if (!envSet("NO_OWN") && !envSet("NO_OWN_TABLES") && roots.length === 1) ownedTables(ir, code, info, names, roots[0]);
+  if (!envSet("NO_OWN") && !envSet("NO_OWN_TABLES") && roots.length === 1) ownedTables(ir, roots[0]);
   // A push onto an array a call just made, on its view (C196).
   if (!envSet("NO_PUSHES")) ownedPushes(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
   // And records rebuilt from their own fields (owned-records.ts, C93 s5).

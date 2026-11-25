@@ -29,7 +29,7 @@
 // Values start as having one holder and only move to more (a fixpoint, as
 // in Perceus's and Lean 4's borrow inference over a program's functions).
 
-import { isArray, isData, isFn, isRecord, kids, type CoreIR, type LType, type SExpr, type SFunc } from "./scalar.ts";
+import { isArray, isTable, isData, isFn, isRecord, kids, type CoreIR, type LType, type SExpr, type SFunc } from "./scalar.ts";
 
 // The abstract holders of a value: one ("U"), maybe more ("S"), not yet
 // known ("T", the start of the fixpoint), or a record's, field by field.
@@ -49,18 +49,30 @@ const ARRAY_OP = /^array\.(\w+)\.a\d+$/;
 // Only reading the array given first.
 // A rest, a drop or a slice is another view on the buffer, which a replace
 // in place sees (the runtime marks the buffer shared when it's made).
-const READS = new Set(["length", "lengthb", "get", "getb", "at", "atb", "first", "items", "has", "peek", "rest", "drop", "slice"]);
+const READS = new Set(["length", "lengthb", "get", "getb", "at", "atb", "first", "items", "has", "peek", "rest", "drop", "slice", "t:has", "t:size", "t:at", "t:atb", "t:atv", "t:entries", "t:keys"]);
 // The runtime's maps on the threads (core-js.ts map.worth, map.pure, and
 // c.ts's par:*) read the array they're given and make a new one.
 const READS_RT = /^(map\.(worth|pure)$|par:)/;
 // Making a new one.
-const MAKES = new Set(["empty", "of", "ofItems", "from", "range", "rangeF", "concat"]);
+const MAKES = new Set(["empty", "of", "ofItems", "from", "range", "rangeF", "concat", "t:empty"]);
 // Giving back the one given first, changed.
-const PASSES = new Set(["replaceAt", "replaceOwned", "push", "pushOwned", "pushFront", "pushFrontOwned"]);
-const op = (e: SExpr): string | null => (e.k === "rt" ? ARRAY_OP.exec(e.fn)?.[1] ?? null : null);
+const PASSES = new Set(["replaceAt", "replaceOwned", "push", "pushOwned", "pushFront", "pushFrontOwned", "t:put", "t:remove", "t:putOwned", "t:removeOwned"]);
+// A table's (a map's or a hash set's, C63h) runtime functions, as `t:…`:
+// a put or a remove gives back the table it was given, changed; the rest
+// read it (an old version read again is rerooted, std.ts, but reads as
+// it did).
+const TABLE_OP = /^table\.(\w+)\.t\d+(?:\.e\d+)?(?:\.a\d+)?$/;
+const op = (e: SExpr): string | null => {
+  if (e.k !== "rt") return null;
+  const a = ARRAY_OP.exec(e.fn);
+  if (a) return a[1];
+  const t = TABLE_OP.exec(e.fn);
+  return t ? `t:${t[1]}` : null;
+};
 
 export interface Holders {
-  // The replaces whose array has one holder.
+  // The replaces, pushes, puts and removes whose array or table has one
+  // holder, the last to use it.
   owned: Set<SExpr>;
   // Whether what function i is given as input j always has one holder.
   one: (i: number, j: number) => boolean;
@@ -228,9 +240,10 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
           const xs = e.args.map((a) => av(self, a, env, at));
           xs.forEach((x, j) => { const p = params[e.fn]; if (p && !outside.has(e.fn)) { const m = meet(p[j], reads[e.fn][j] ? "S" : x); if (!same(m, p[j])) { p[j] = m; changed = true; } } });
           // A definition with no inputs is worked out once and kept, unless
-          // it gives an array of a type something writes in place (core-js.ts
-          // and wasm.ts `written`): made again at each call.
-          return funcs[e.fn]?.params.length || (funcs[e.fn] && isArray(funcs[e.fn].result)) ? results[e.fn] : "S";
+          // it gives an array or a table of a type something writes in place
+          // (core-js.ts and wasm.ts `written`; wasm.ts keeps no table):
+          // made again at each call.
+          return funcs[e.fn]?.params.length || (funcs[e.fn] && (isArray(funcs[e.fn].result) || isTable(funcs[e.fn].result))) ? results[e.fn] : "S";
         }
         case "apply": {
           av(self, e.fn, env, at);
@@ -281,7 +294,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   funcs.forEach((_, i) => body(i, (e, v) => vals.set(e, v)));
   funcs.forEach((g) => {
     const look = (e: SExpr) => {
-      if ((op(e) === "replaceAt" || op(e) === "push") && e.k === "rt" && vals.get(e.args[0]) === "U") owned.add(e);
+      if ((op(e) === "replaceAt" || op(e) === "push" || op(e) === "t:put" || op(e) === "t:remove") && e.k === "rt" && vals.get(e.args[0]) === "U") owned.add(e);
       kids(e).forEach(look);
     };
     look(g.body);
@@ -294,7 +307,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
 // them as pushes (an array built by pushes may become columns); how many.
 export function ownedPerValue(ir: CoreIR, roots: number[]): number {
   const owned = holders(ir, roots).owned;
-  for (const e of owned) if (e.k === "rt") { if (op(e) === "push") e.own = true; else e.fn = e.fn.replace("array.replaceAt.", "array.replaceOwned."); }
+  for (const e of owned) if (e.k === "rt") { if (op(e) === "push") e.own = true; else if (op(e) === "replaceAt") e.fn = e.fn.replace("array.replaceAt.", "array.replaceOwned."); }
   return owned.size;
 }
 
