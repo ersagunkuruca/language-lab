@@ -35,7 +35,7 @@
 
 import { FN } from "../../../invertible/src/expr.js";
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, copyNodes, freshId, isCall, nodeIds, type Call } from "../model.ts";
+import { children, copyNodes, freshId, isCall, nodeIds, ownerOfTypeParts, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import { LIBRARY } from "./library.ts";
@@ -72,6 +72,9 @@ const lib = (name: string): Id => {
 // are read from when they aren't here (a map's items', the slopes so far
 // of the items gone back through before).
 type Kind = "s" | "a";
+// A record of Float64s (L285): its case and fields. Its slopes are its
+// fields', each a Float64's under a key of its own (fieldKey).
+interface Rec { variant: Id; fields: Id[] }
 type Comp = { k: "s"; parts: (() => Id)[] } | { k: "a"; cur: () => Id };
 class Res extends Map<Id, Comp> { base?: (key: Id) => Comp }
 // What going back starts from: the code of a Float64's slope; or, for an
@@ -118,6 +121,43 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
   const thunk = (body: Id) => add({ kind: "lambda", params: [], body });
   const nm = (id: Id) => names[id] ?? id;
   const cant = (why: string): never => { throw new NotDifferentiable(why); };
+
+  // ---- records ----
+  // A field read, `r.f`: the record read and where f is in its case.
+  let owners: Map<Id, Id> | undefined;
+  function recOf(field: Id): Rec | null {
+    if (nodes[field]?.kind !== "field") return null;
+    const def = (owners ??= ownerOfTypeParts(code)).get(field);
+    const td = def ? nodes[(nodes[def] as NodeOf<"def">).body ?? ""] : undefined;
+    if (td?.kind !== "typedef" || td.variants.length !== 1) return null;
+    const v = nodes[td.variants[0]] as NodeOf<"variant">;
+    return { variant: v.id, fields: v.fields };
+  }
+  function fieldRead(id: Id): { of: Id; rec: Rec; at: number } | null {
+    const n = nodes[id];
+    if (!isCall(n) || n.args.length !== 1 || nodes[n.fn]?.kind !== "ref") return null;
+    const f = (nodes[n.fn] as NodeOf<"ref">).target, rec = recOf(f);
+    return rec ? { of: n.args[0], rec, at: rec.fields.indexOf(f) } : null;
+  }
+  // The key a record binder's field's slopes go to.
+  const fieldKeys = new Map<string, Id>();
+  const fieldKey = (b: Id, at: number): Id => {
+    const key = `${b}.${at}`;
+    let k = fieldKeys.get(key);
+    if (!k) fieldKeys.set(key, (k = binder()));
+    return k;
+  };
+  // A record's slopes as a record: each field's, 0 where none was found.
+  const recordOf = (r: Res, b: Id, rec: Rec): Id => call(rec.variant, ...rec.fields.map((_, i) => { const c = r.get(fieldKey(b, i)); return c?.k === "s" ? total(c.parts) : num(0); }));
+  // Its slopes `whole` (a record) added to binder b's fields'.
+  const addRecord = (acc: Res, b: Id, rec: Rec, whole: () => Id): Res => {
+    let out = acc;
+    rec.fields.forEach((f, i) => {
+      const key = fieldKey(b, i), was = out.get(key);
+      out = put(out, key, { k: "s", parts: [...(was?.k === "s" ? was.parts : []), () => call(f, whole())] });
+    });
+    return out;
+  };
 
   // ---- the code read, copied with its binders renamed ----
   function copy(id: Id, ctx: Ctx): Id {
@@ -340,6 +380,8 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
         if (target === S.float32) return back(n.args[0], seed, ctx, acc, k);
         if (target === ARRAY_AT) return readBack(n.args[0], n.args[1], seed, ctx, acc, k, true);
         if (target === S.first) return firstBack(n, seed, ctx, acc, k);
+        const read = fieldRead(id);
+        if (read) return readFieldBack(read, seed, ctx, acc, k);
         if (is(target, "sum")) return sumBack(n.args[0], seed, ctx, acc, k);
         if (target === ARRAY_OF) return arrayBack(n.args[0], seed, ctx, acc, k);
         const t = nodes[target];
@@ -355,6 +397,19 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
       case "match": return matchBack(n, seed, ctx, acc, k, want);
       default: return cant(`can't go back through a ${n.kind}`);
     }
+  }
+
+  // r.f: the slope goes to f's own key of the record binder r is; of a
+  // record written there, to what f is given.
+  function readFieldBack(read: { of: Id; rec: Rec; at: number }, seed: Seed, ctx: Ctx, acc: Res, k: (r: Res) => Id): Id {
+    if (seed.k !== "s") return cant("a field read as an array");
+    const r = nodes[read.of];
+    if (r.kind === "ref" && ctx.moving.has(r.target) && ctx.bind.has(r.target)) {
+      const key = fieldKey(ctx.bind.get(r.target)!, read.at), was = acc.get(key);
+      return k(put(acc, key, { k: "s", parts: [...(was?.k === "s" ? was.parts : []), seed.at] }));
+    }
+    if (isCall(r) && nodes[r.fn]?.kind === "ref" && (nodes[r.fn] as NodeOf<"ref">).target === read.rec.variant) return back(r.args[read.at], seed, ctx, acc, k);
+    return cant("a field of a record worked out there");
   }
 
   // Whether a definition reaches itself through the definitions it calls.
@@ -429,22 +484,48 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     arrayKept.set(p, r);
     return r;
   }
+  // An input read as a record of Float64s in the definition's body: its
+  // field read, or given where a definition it calls reads one.
+  const recordKept = new Map<Id, Rec | null>();
+  function readAsRecord(p: Id, body: Id): Rec | null {
+    if (recordKept.has(p)) return recordKept.get(p)!;
+    recordKept.set(p, null);
+    const isP = (a: Id | undefined) => !!a && nodes[a]?.kind === "ref" && (nodes[a] as NodeOf<"ref">).target === p;
+    const walk = (id: Id): Rec | null => {
+      const x = nodes[id];
+      if (!x) return null;
+      const read = fieldRead(id);
+      if (read && isP(read.of)) return read.rec;
+      if (isCall(x)) {
+        const head = nodes[x.fn];
+        const t = head?.kind === "ref" ? nodes[(head as NodeOf<"ref">).target] : undefined;
+        const lam = head?.kind === "lambda" ? head : t?.kind === "def" && t.body && nodes[t.body]?.kind === "lambda" ? nodes[t.body] as NodeOf<"lambda"> : null;
+        if (lam) for (let i = 0; i < x.args.length; i++) { if (isP(x.args[i]) && lam.params[i]) { const r = readAsRecord(lam.params[i], lam.body); if (r) return r; } }
+      }
+      for (const c of children(x)) { const r = walk(c); if (r) return r; }
+      return null;
+    };
+    const r = walk(body);
+    recordKept.set(p, r);
+    return r;
+  }
   // The pullback of a definition that calls itself, for the inputs that
   // move (by place) and the kind of its result's slope: a definition of
   // the inputs, the slope and an array input's slopes so far, giving the
   // moving inputs' slopes packed (an array's, its slopes so far with the
   // definition's added).
-  const pullbacks = new Map<string, { def: Id; kinds: Kind[] }>();
-  function pullbackDef(target: Id, going: number[], fns: Map<number, Id>): { def: Id; kinds: Kind[] } {
+  const pullbacks = new Map<string, { def: Id; kinds: Kind[]; recs: (Rec | null)[] }>();
+  function pullbackDef(target: Id, going: number[], fns: Map<number, Id>): { def: Id; kinds: Kind[]; recs: (Rec | null)[] } {
     const key = `${target}:${going.join(",")}:${[...fns].map(([i, l]) => `${i}=${l}`).join(",")}`;
     const was = pullbacks.get(key);
     if (was) return was;
     const lam = nodes[(nodes[target] as NodeOf<"def">).body!] as NodeOf<"lambda">;
     const kinds = going.map((i): Kind => (readAsArray(lam.params[i], lam.body) ? "a" : "s"));
+    const recs = going.map((i, j) => (kinds[j] === "s" ? readAsRecord(lam.params[i], lam.body) : null));
     const def = add({ kind: "def", body: null });
     defs.push(def);
     if (names[target]) names[def] = `${names[target]} back`;
-    const out = { def, kinds };
+    const out = { def, kinds, recs };
     pullbacks.set(key, out);
     const ctx = scope({ bind: new Map(), moving: new Set(), lams: new Map(), inlining: new Set() }, lam.params);
     for (const i of going) ctx.moving.add(lam.params[i]);
@@ -456,6 +537,7 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     const start = new Res(), sofarBs: Id[] = [];
     keys.forEach((key, j) => { if (kinds[j] !== "a") return; const b = binder(); sofarBs.push(b); start.set(key, { k: "a", cur: () => ref(b) }); });
     const body = back(lam.body, { k: "s", at: () => ref(seedB) }, ctx, start, (r) => tupled(keys.map((key, j) => () => {
+      if (recs[j]) return recordOf(r, key, recs[j]!);
       const c = r.get(key);
       if (c && c.k !== kinds[j]) cant(`${nm(target)}'s input read both as a number and as an array`);
       return c?.k === "s" ? total(c.parts) : c?.k === "a" ? c.cur() : num(0);
@@ -475,7 +557,7 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     });
     const going = args.map((_, i) => i).filter((i) => !fns.has(i) && moves(args[i], ctx));
     if (!going.length) return k(acc);
-    const { def, kinds } = pullbackDef(target, going, fns);
+    const { def, kinds, recs } = pullbackDef(target, going, fns);
     // An array input given as a binder's value: that binder's slopes so
     // far go in, and come out with the definition's added. Any other
     // array: from zeros, and gone back through with what came out.
@@ -494,6 +576,13 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     const parts = unpack(() => ref(t), going.length);
     const step = (j: number, acc2: Res): Id => {
       if (j === going.length) return k(acc2);
+      const rec = recs[j];
+      if (rec) {
+        // A record's slopes, added to its binder's fields'.
+        const a = nodes[args[going[j]]];
+        if (a.kind !== "ref" || !ctx.bind.has(a.target)) return cant(`${nm(target)} calls itself with a record worked out there`);
+        return bound(parts[j], (whole) => step(j + 1, addRecord(acc2, ctx.bind.get(a.target)!, rec, whole)));
+      }
       if (kinds[j] === "s") return back(args[going[j]], { k: "s", at: parts[j] }, ctx, acc2, (r) => step(j + 1, r));
       const b = binder();
       const rest = (r: Res) => step(j + 1, r);
@@ -533,6 +622,22 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
         if (j === going.length) return k(acc2);
         const key = ctx.bind.get(going[j].p)!;
         const c = acc2.get(key);
+        // A record bound: its fields' slopes, each to what its case was
+        // given for that field.
+        const rec = !c ? readAsRecord(going[j].p, lam.body) : null;
+        if (rec && rec.fields.some((_, i) => acc2.has(fieldKey(key, i)))) {
+          const v = nodes[going[j].a];
+          if (!isCall(v) || nodes[v.fn]?.kind !== "ref" || (nodes[v.fn] as NodeOf<"ref">).target !== rec.variant) return cant("a record worked out there, other than by its case");
+          let rest = acc2;
+          const fieldParts = rec.fields.map((_, i) => { const f = rest.get(fieldKey(key, i)); rest = put(rest, fieldKey(key, i)); return f?.k === "s" ? f.parts : null; });
+          const field = (i: number, r2: Res): Id => {
+            if (i === rec.fields.length) return step(j + 1, r2);
+            const ps = fieldParts[i];
+            if (!ps) return field(i + 1, r2);
+            return bound(() => total(ps), (at) => back(v.args[i], { k: "s", at }, outer, r2, (r3) => field(i + 1, r3)));
+          };
+          return field(0, rest);
+        }
         if (!c) return step(j + 1, acc2);
         const rest = put(acc2, key);
         const then = (r2: Res) => step(j + 1, r2);
@@ -691,7 +796,14 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     const p = lam.params[0], np = ctx.bind.get(p)!;
     ctx.moving.add(p);
     const one = binder();
+    const rec = readAsRecord(p, lam.body);
     const body = letIn([one], [num(1)], back(lam.body, { k: "s", at: () => ref(one) }, ctx, new Res(), (r) => {
+      if (rec) {
+        const slopes = recordOf(r, np, rec);
+        if (!value) return slopes;
+        const v = r.get(VAL);
+        return v?.k === "s" ? call(tupleVariant(2), total(v.parts), slopes) : cant("the value not found on the way back");
+      }
       const c = r.get(np);
       if (c && c.k !== "a") cant("the input read as a number");
       const slots = c?.k === "a" ? c.cur() : zerosLike(np);
@@ -732,12 +844,17 @@ export function arrayGradientLambda(code: Code, lambda: Id, origin?: (id: Id) =>
 export function expandArrayGradients(code: Code, names: Names, info: Info, only?: (call: Id) => boolean): { code: Code; names: Names; expanded: Id[] } {
   const over = (call: Id) => gradientOver(code, info, call);
   const overArray = (call: Id) => over(call)?.of === ARRAY;
+  // Over a record of Float64s too (L285): one pass back for all its
+  // fields, where forward mode makes one pass for each; where the pass
+  // back can't be made, forward mode's.
+  const overRecord = (call: Id) => { const o = over(call); return !!o && o.of !== ARRAY && o.of !== NUMBER && recordType(code, o.of); };
+  const overMany = (call: Id) => overArray(call) || overRecord(call);
   const asked = (n: Node | undefined) => isCall(n) && n.args.length === 1 && code.nodes[n.fn]?.kind === "ref" ? (code.nodes[n.fn] as NodeOf<"ref">).target : null;
   const calls = nodeIds(code.nodes).filter((id) => {
     const n = code.nodes[id], t = asked(n);
     if ((t !== S.gradient && t !== S.valueAndGradient) || (only && !only(id))) return false;
     const f = (n as Call).args[0];
-    return t === S.valueAndGradient ? !!lambdaOf(code, f) || code.nodes[f]?.kind === "ref" : !!lambdaOf(code, f) && overArray(id);
+    return t === S.valueAndGradient ? !!lambdaOf(code, f) || code.nodes[f]?.kind === "ref" : !!lambdaOf(code, f) && overMany(id);
   });
   if (!calls.length) return { code, names, expanded: [] };
   const out: Code = { nodes: copyNodes(code.nodes), defs: [...code.defs] };
@@ -747,8 +864,12 @@ export function expandArrayGradients(code: Code, names: Names, info: Info, only?
     const item = over(id)?.item, generic = !!item && item !== NUMBER;
     const pb = pullbacker(out, outNames, undefined, generic, generic ? stillBesides(info, item) : undefined);
     const n = out.nodes[id] as Call, f = n.args[0], value = asked(n) === S.valueAndGradient;
-    let lam: Id;
-    if (value && !(lambdaOf(out, f) && overArray(id))) {
+    let lam: Id | null = null;
+    // Over a record, one pass back where it can be made.
+    if (lambdaOf(out, f) && overRecord(id)) {
+      try { lam = pb.gradient(lambdaOf(out, f)!, value); } catch (e) { if (!(e instanceof NotDifferentiable)) throw e; if (!value) continue; }
+    }
+    if (lam) { /* made */ } else if (value && !(lambdaOf(out, f) && overArray(id))) {
       // f(q) and gradient(f)(q), f written twice (a definition's name, or
       // the function written there copied).
       const add = (d: NodeData): Id => { const x = freshId(); out.nodes[x] = { id: x, ...d } as never; return x; };
@@ -773,6 +894,14 @@ export function expandArrayGradients(code: Code, names: Names, info: Info, only?
 function stillBesides(info: Info, item: Id): (id: Id) => boolean {
   const without = (t: Type): boolean => t.t === "con" ? t.id !== item && t.args.every(without) : t.t === "fn" ? t.params.every(without) && without(t.ret) : false;
   return (id) => { const t = info.typeOf.get(id); return !!t && without(info.subst.zonk(t)); };
+}
+
+// A type of one case whose fields are all Float64s.
+function recordType(code: Code, type: Id): boolean {
+  const td = code.nodes[(code.nodes[type] as NodeOf<"def"> | undefined)?.body ?? ""];
+  if (td?.kind !== "typedef" || td.variants.length !== 1 || td.params.length) return false;
+  const v = code.nodes[td.variants[0]] as NodeOf<"variant">;
+  return v.fields.length > 0 && v.fields.every((f) => { const t = code.nodes[(code.nodes[f] as NodeOf<"field">).type]; return t?.kind === "tref" && t.target === NUMBER && !t.args.length; });
 }
 
 // gradient's function, written right there or a definition's.
