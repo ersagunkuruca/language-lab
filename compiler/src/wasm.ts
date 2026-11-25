@@ -36,6 +36,7 @@
 import { bordered } from "../../ters/src/lang/border.ts";
 import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
+import { arrayCall, viewsByValue, type ViewFunc } from "./wasm-views.ts";
 import { assemble, byteSlots, inlined, POW5, runtime, textBytes, WASI_IMPORTS, wasiStop, type RtFn, type VT } from "./wasm-rt.ts";
 
 // Where the math functions' page starts in WASI's memory: after its fixed
@@ -114,6 +115,8 @@ const INT32_RT: Op[] = ["iadd", "isub", "imul", "ineg", "iabs", "iquot", "irem",
 const STACK = /^(hpush|hpop|handler|hhas|htake|hgive|hdepth|hcut|hoff|hon):([^:]+)(?::(\d+))?$/;
 // A fold's stack's own functions (C327d), by the data type's place.
 const FSTACK = /^fstack\.(push|top|pop)\.(\d+)$/;
+// A view held by value's (C327c2, wasm-views.ts).
+const VIEW_FN = /^view\.(\w+)(?:\.a(\d+))?(?:\.i64)?$/;
 const FRAME = 17, FRAMES = 4096;
 // A frame whose case runs while it may perform its own operation (pig's
 // `recorded into`, C325) is busy: its effect's number + BUSY, so `hhas`
@@ -465,7 +468,37 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       "local.get $a", "local.get $n", "local.get $x", "array.set $SI",
       "local.get $f", "local.get $n", "i32.const 1", "i32.add", "struct.set $SF 2", "local.get $f"]) };
   };
-  const rt = (name: string): RtFn => {
+  // A view held by value (C327c2, wasm-views.ts): its buffer, start and
+  // length taken out, a rest's start and length, a view made of the three,
+  // and the reads written again on the three, from the array's own.
+  const viewRt = (name: string): RtFn => {
+    const [, op, k] = VIEW_FN.exec(name)!, array = Number(k);
+    const three: [string, VT][] = [["vb", "buf"], ["vs", "i32"], ["vn", "i32"]];
+    if (op === "restLength") return { name, params: [["vn", "i32"]], result: "i32", locals: [], uses: [], native: true, body: "i32.const 0\nlocal.get $vn\ni32.const 1\ni32.sub\nlocal.get $vn\ni32.eqz\nselect" };
+    // Another view on the buffer: a replace in place no longer may.
+    if (op === "restStart") return { name, array, params: three, result: "i32", locals: [], uses: [], native: true, body: ["local.get $vn", "i32.eqz", "if i32", "local.get $vs", "else", "local.get $vb", "i32.const 1", "struct.set $buf 3", "local.get $vs", "i32.const 1", "i32.add", "end"].join("\n") };
+    if (op === "make") return { name, array, params: three, result: "array", locals: [], uses: [], native: true, body: "local.get $vb\nlocal.get $vs\nlocal.get $vn\nstruct.new $arr" };
+    // After a push: one longer, and starting where its buffer's first item
+    // is (a push in front), or where it did unless the buffer is a copy.
+    if (op === "grown") return { name, params: [["vn", "i32"]], result: "i32", locals: [], uses: [], native: true, body: "local.get $vn\ni32.const 1\ni32.add" };
+    if (op === "pushFrontStart") return { name, array, params: [["t", "buf"], ["vb", "buf"], ["vs", "i32"]], result: "i32", locals: [], uses: [], native: true, body: "local.get $t\nstruct.get $buf 1" };
+    if (op === "pushStart") return { name, array, params: [["t", "buf"], ["vb", "buf"], ["vs", "i32"]], result: "i32", locals: [], uses: [], native: true, body: "local.get $vs\nlocal.get $t\nstruct.get $buf 1\nlocal.get $t\nlocal.get $vb\nref.eq\nselect" };
+    const part = ["buf", "start", "count"].indexOf(op);
+    if (part >= 0) return { name, array, params: [["a", "array"]], result: part ? "i32" : "buf", locals: [], uses: [], native: true, body: `local.get $a\nstruct.get $arr ${part}` };
+    const g = rt0(name.replace(/^view\./, "array."));
+    const body = g.body.replace(/local\.get \$a\s+struct\.get \$arr ([012])/g, (_, i) => `local.get $${three[Number(i)][0]}`)
+      .replace(/local\.get \$a\b/g, "local.get $vb\nlocal.get $vs\nlocal.get $vn").replace(/call \$array\.(\w+)\.a(\d+)/g, "call $view.$1.a$2");
+    if (g.params[0]?.[0] !== "a" || /\$v[bsn]\b/.test(g.body) || /\$a\b/.test(body)) throw new Error(`${name}: not a read of the view alone`);
+    // A push gives its buffer alone (wasm-views.ts works out the rest).
+    if (op === "push" || op === "pushFront") return { ...g, name, params: [...three, ...g.params.slice(1)], result: "buf", body: body.replace(/struct\.new \$arr\b/g, "drop\ndrop"), uses: g.uses.map((x) => x.replace(/^array\.(\w+)\.a(\d+)/, "view.$1.a$2")) };
+    return { ...g, name, params: [...three, ...g.params.slice(1)], body, uses: g.uses.map((x) => x.replace(/^array\.(\w+)\.a(\d+)/, "view.$1.a$2")) };
+  };
+  // With TERS_COUNT_VIEWS (wasi), each view made is counted in memory at
+  // 120, an i64 a runner reads after (C327c2: structs made, not time).
+  // (Its value a pattern: only the runtime functions it matches; 1 all.)
+  const countViews = wasi && typeof process !== "undefined" && process.env.TERS_COUNT_VIEWS ? new RegExp(process.env.TERS_COUNT_VIEWS === "1" ? "" : process.env.TERS_COUNT_VIEWS) : null;
+  const rt = (name: string): RtFn => { const g = rt1(name); return countViews?.test(name) ? { ...g, body: g.body.replace(/struct\.new \$arr\b/g, "struct.new $arr\ni32.const 120\ni32.const 120\ni64.load\ni64.const 1\ni64.add\ni64.store") } : g; };
+  const rt1 = (name: string): RtFn => {
     const vm = VERSION_FN.exec(name);
     if (vm) { const v = versionRt(name, vm); return byteArray(lowered.arrays[v.array!]) ? byteSlots(v) : v; }
     const cm = COL_FN.exec(name);
@@ -479,6 +512,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const rt0 = (name: string): RtFn => {
     if (STACK.test(name)) return stackRt(name);
     if (FSTACK.test(name)) return fstackRt(name);
+    if (VIEW_FN.test(name)) return viewRt(name);
     if (TABLE_RT.test(name)) { const f = tableRt(name, lowered.tables); return f.array !== undefined && byteArray(lowered.arrays[f.array]) ? byteSlots(f) : f; }
     if (name === "wasi.stop") return { ...wasiStop(lowered.stops ?? []), name };
     // Bytes, the module's own record (C291).
@@ -526,7 +560,12 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (e.k === "op" && INT32_RT.includes(e.op)) need(`int32.${e.op}`);
     kids(e).forEach(rtCalls);
   };
-  funcs.forEach((f) => rtCalls(f.body));
+  // An array's views held by value in a loop (C327c2, wasm-views.ts):
+  // not where the view is the version (C285) or the buffer is columns.
+  const bufTypes = new Map<number, AType>();
+  const bufOf = (a: AType) => { if (!bufTypes.has(a.index)) bufTypes.set(a.index, { ...a, key: `buf:${a.key}` }); return bufTypes.get(a.index)!; };
+  if (!shader && !int32 && !(typeof process !== "undefined" && process.env.NO_WASM_VIEWS)) funcs.forEach((f, i) => { const g = viewsByValue(f, i, (a) => !versioned.has(a.index) && !colArrays.has(a.index), bufOf, (j) => (funcs[j].partial ? null : arrayCall(funcs[j]))); if (g) funcs[i] = g; });
+  funcs.forEach((f) => { rtCalls(f.body); (f as ViewFunc).viewEntry?.forEach(([, x]) => rtCalls(x)); });
   if (math) maths.forEach((op) => op !== "stop" && need(`math.${op}`));
   if (wasi && maths.includes("stop")) need("wasi.stop");
   // The world's operations used, imported from "world" in the order first
@@ -689,6 +728,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     // Its note (C285): the newer array, the slot and what was there.
     if (noted) structs.push({ name: `note${a.index}`, fields: [{ name: "next", t: "i32", ref: k + 2 }, { name: "slot", t: "i32" }, { name: "old", t: a.item }], final: true, mutable: true });
     arrIndex.set(a.key, k + 2);
+    // Its buffer, where a loop holds a view by value (C327c2).
+    arrIndex.set(`buf:${a.key}`, k + 1);
   }
   // A table (C63j, wasm-table.ts): each slot's state, its keys and its
   // values, the store holding them, a version (the newest holds the store,
@@ -896,7 +937,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       ].join("\n"),
     });
   }
-  const rtType = (f: RtFn, t: VT): MType | null => (f.types?.[t] ? f.types[t] as MType : t === "table" ? lowered.tables[f.table!] : t === "key" ? lowered.tables[f.table!].keyT : t === "value" ? lowered.tables[f.table!].value : t === "list" ? listOf(f) : t === "option" ? optionOf() : t === "void" ? null : t === "array" ? arrayOf(f) : t === "item" ? arrayOf(f).item : t === "buf" || t === "items" ? null : t === "tstore" || t === "tkeys" || t === "tvals" || t === "tst" || t === "tpath" ? { key: `table.${f.table}.${t}`, name: t, fields: [] } as unknown as RType : t as MType);
+  const rtType = (f: RtFn, t: VT): MType | null => (f.types?.[t] ? f.types[t] as MType : t === "table" ? lowered.tables[f.table!] : t === "key" ? lowered.tables[f.table!].keyT : t === "value" ? lowered.tables[f.table!].value : t === "list" ? listOf(f) : t === "option" ? optionOf() : t === "void" ? null : t === "array" ? arrayOf(f) : t === "item" ? arrayOf(f).item : t === "buf" ? bufOf(arrayOf(f)) : t === "items" ? null : t === "tstore" || t === "tkeys" || t === "tvals" || t === "tst" || t === "tpath" ? { key: `table.${f.table}.${t}`, name: t, fields: [] } as unknown as RType : t as MType);
   const rtSig = rts.map((f) => sig(f.params.map(([, t]) => rtType(f, t)!), rtType(f, f.result), f.partial));
   const rtCode = rts.map((f) => assemble(f, resolver(f)));
   const struct = (x: (typeof structs)[number]) => {
@@ -956,10 +997,12 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // Remembered per node: a body's nodes can be shared (a value used in two
   // places is one node), so walking it as a tree went over the ray
   // marcher's motor exponentially often, minutes in the editor.
+  // (A view held by value's read is the array's, written again here, C327c2.)
+  const rtPartial = (n: string) => !!(VIEW_FN.test(n) ? rt(n) : runtime(n)).partial;
   const fails = new WeakMap<SExpr, boolean>();
   const failing = (e: SExpr): boolean => {
     let r = fails.get(e);
-    if (r === undefined) fails.set(e, r = e.k === "fail" || (e.k === "world" && e.aborts) || e.k === "attempt" || e.k === "abort" || e.k === "handle" || (e.k === "call" && !!funcs[e.fn].partial) || (e.k === "apply" && !!e.t.partial) || (e.k === "rt" && e.fn !== "derived" && !!runtime(e.fn).partial) || kids(e).some(failing));
+    if (r === undefined) fails.set(e, r = e.k === "fail" || (e.k === "world" && e.aborts) || e.k === "attempt" || e.k === "abort" || e.k === "handle" || (e.k === "call" && !!funcs[e.fn].partial) || (e.k === "apply" && !!e.t.partial) || (e.k === "rt" && e.fn !== "derived" && rtPartial(e.fn)) || kids(e).some(failing));
     return r;
   };
   const statusOf = (f: SFunc) => (f.partial || failing(f.body) ? f.locals.length : -1);
@@ -1050,7 +1093,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         const put = inPlace(e, String);
         if (put) return put.code;
       }
-      return [...e.args.flatMap(code1), 0x10, ...u(resolve.func(e.fn)), ...(/^(handler|htake):/.test(e.fn) ? [0xfb, 0x16, ...s(cloIndex.get((e.host!.t as FType).key)!)] : []), ...(runtime(e.fn).partial ? check(d, fl) : [])];
+      return [...e.args.flatMap(code1), 0x10, ...u(resolve.func(e.fn)), ...(/^(handler|htake):/.test(e.fn) ? [0xfb, 0x16, ...s(cloIndex.get((e.host!.t as FType).key)!)] : []), ...(rtPartial(e.fn) ? check(d, fl) : [])];
       case "bool": return [0x41, ...s(e.v ? 1 : 0)];
       case "local": return [0x20, ...u(e.i)];
       case "let":
@@ -1074,7 +1117,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         const g = funcs[e.fn], tail = e.tail && !!g.partial === !!f.partial;
         const k = kept.get(e.fn);
         if (k !== undefined) return [0x23, ...u(k), 0xd1, 0x04, 0x40, 0x10, ...u(fnIndex(e.fn)), 0x24, ...u(k), 0x0b, 0x23, ...u(k)];
-        if (looped && e.tail && e.fn === self) return [...e.args.flatMap(code1), ...e.args.flatMap((_, j) => [0x21, ...u(e.args.length - 1 - j)]), 0x0c, ...u(d - 1)];
+        if (looped && e.tail && e.fn === self) { const to = (f as ViewFunc).viewSlots ?? e.args.map((_, j) => j); return [...e.args.flatMap(code1), ...e.args.flatMap((_, j) => [0x21, ...u(to[e.args.length - 1 - j])]), 0x0c, ...u(d - 1)]; }
         return [...e.args.flatMap(code1), tail ? 0x12 : 0x10, ...u(fnIndex(e.fn)), ...(g.partial && !tail ? check(d, fl) : [])];
       }
       case "make": return [...e.args.flatMap(code1), ...(isFloat32(e.t) ? [0xb6] : []), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!)];
@@ -1206,7 +1249,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     // A partial function's body is in a block a status goes to:
     // block $none (result i32) body; 0; return end; status = it; zero; status
     const st = statusOf(f), code = coder(f);
-    const main = f.partial ? [0x02, 0x7f, ...code(f.body, 1, 0), 0x41, 0x00, 0x0f, 0x0b, 0x21, ...u(st), ...zero(f.result), 0x20, ...u(st)] : selfTail(f, funcs.indexOf(f)) ? [0x03, ...typeOf(f.result as MType), ...code(f.body, 1, -1), 0x0b] : code(f.body, 0, -1);
+    const main = f.partial ? [0x02, 0x7f, ...code(f.body, 1, 0), 0x41, 0x00, 0x0f, 0x0b, 0x21, ...u(st), ...zero(f.result), 0x20, ...u(st)] : selfTail(f, funcs.indexOf(f)) ? [...((f as ViewFunc).viewEntry ?? []).flatMap(([i, x]) => [...code(x, 0, -1), 0x21, ...u(i)]), 0x03, ...typeOf(f.result as MType), ...code(f.body, 1, -1), 0x0b] : code(f.body, 0, -1);
     const body = [...vec(groups), ...spend(f), ...main, 0x0b];
     return [...u(body.length), ...body];
   }), ...helperCode, ...rtCode.map((c) => [...u(c.code.length), ...c.code])]);
@@ -1257,7 +1300,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         const put = inPlace(e, (i) => local(f, i));
         if (put) return put.wat.map((x) => `${d}${x}`).join("\n");
       }
-      return [...e.args.map(w), `${d}call $${e.fn}`, ...(/^(handler|htake):/.test(e.fn) ? [`${d}ref.cast (ref ${sname(cloIndex.get((e.host!.t as FType).key)!)})`] : []), ...(runtime(e.fn).partial ? check(ld) : [])].join("\n");
+      return [...e.args.map(w), `${d}call $${e.fn}`, ...(/^(handler|htake):/.test(e.fn) ? [`${d}ref.cast (ref ${sname(cloIndex.get((e.host!.t as FType).key)!)})`] : []), ...(rtPartial(e.fn) ? check(ld) : [])].join("\n");
       case "bool": return `${d}i32.const ${e.v ? 1 : 0}`;
       case "local": return `${d}local.get ${local(f, e.i)}`;
       case "let":
@@ -1266,6 +1309,9 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "if": return `${w(e.cond)}\n${d}(if (result ${ty(e.t)})\n${d}  (then\n${wat(e.then, f, d + "    ", ld + 1, fl)})\n${d}  (else\n${wat(e.else, f, d + "    ", ld + 1, fl)}))`;
       case "call": {
         const g = funcs[e.fn], tail = e.tail && !!g.partial === !!f.partial;
+        // A loop's next round (C327c2): its inputs and its views' locals set.
+        const to = (f as ViewFunc).viewSlots;
+        if (to && e.tail && g === f) return [...e.args.map(w), ...e.args.map((_, j) => `${d}local.set ${local(f, to[e.args.length - 1 - j])}`), `${d}br $self`].join("\n");
         if (kept.has(e.fn)) return [`${d}global.get $kept${e.fn}`, `${d}ref.is_null`, `${d}(if (then call ${id(g)} global.set $kept${e.fn}))`, `${d}global.get $kept${e.fn}`].join("\n");
         return [...e.args.map(w), `${d}${tail ? "return_call" : "call"} ${id(g)}`, ...(g.partial && !tail ? check(ld) : [])].join("\n");
       }
@@ -1399,6 +1445,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       const spends = f.spends ? `    global.get $fuel\n    f64.const 1\n    f64.sub\n    global.set $fuel\n    global.get $fuel\n    f64.const 0\n    f64.lt\n    (if (then ${none} return))\n` : "";
       const body = f.partial
         ? `    (block (result i32) ;; no answer\n${wat(f.body, f, "      ", 1, 0)}\n      i32.const 0\n      return)\n    local.set ${local(f, st)}\n    ${zeroText(f.result)}\n    local.get ${local(f, st)}`
+        : (f as ViewFunc).viewSlots ? [...(f as ViewFunc).viewEntry!.map(([i, x]) => `${wat(x, f, "    ", 0, -1)}\n    local.set ${local(f, i)}`), `    (loop $self (result ${ty(f.result)})`, `${wat(f.body, f, "      ", 1, -1)})`].join("\n")
         : wat(f.body, f, "    ", 0, -1);
       return `  ;; ${f.name}\n  (func ${id(f)}${f.budgeted || f.inner ? "" : ` (export "${exportName(f)}")`}${codeOf.has(i) ? ` (type ${sname(cloIndex.get(codeOf.get(i)!.key)! + 1)})` : makerOf.has(i) ? ` (type ${sname(cloIndex.get(makerOf.get(i)!.key)! + 2)})` : ""}${ps} (result ${ty(f.result)}${f.partial ? " i32" : ""})${ls}\n${spends}${body})`;
     }),
