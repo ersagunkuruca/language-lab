@@ -16,6 +16,7 @@ which also has how they compound per benchmark.
 
 | item | program, target | kind | gain measured | where |
 |---|---|---|---|---|
+| C331 | eight gaps programs, wasi | checks | tagged Int `+ - <` without the big and overflow tests: about 0% (mini 6%, typeset and bazaar -4%; V8 noise ±8%) | [CHECKS-2026-11-25](CHECKS-2026-11-25.md) |
 | C331 | eight gaps programs, native | checks | every Float64 guard dropped (zero before a division, x <= 0 before a root): 0.0% of instructions, geometric mean | [CHECKS-2026-11-25](CHECKS-2026-11-25.md) |
 | C331 | eight gaps programs, native | checks | Int quotient and remainder without the zero test: 0.3% (pack 1.1%) | [CHECKS-2026-11-25](CHECKS-2026-11-25.md) |
 | C331 | eight gaps programs, native | checks | failure reads after calls dropped: five of nine runs need them; elsewhere flock 4%, pack 1.5%, mnist -5% | [CHECKS-2026-11-25](CHECKS-2026-11-25.md) |
