@@ -183,6 +183,11 @@ of text; they were these cells logging every finished row).
     made of (a representation, a kind of check, the collector on lists
     made between steps), never "no row". If such a row already exists,
     the stop adds its program to that row's examples.
+  - **Every idea closed under the bar goes in the cut log**
+    ([CUTS.md](../reports/CUTS.md), Ersagun 2026-11-25): one line in the
+    PR that closes it, with program, target, kind and what was measured.
+    The weekly review sums it by kind and target and asks whether a kind
+    now clears the bar as a whole.
 - The PR body says which item: `Backlog: E3`. The same PR moves the row to
   the table of the lane that did it in [DONE.md](DONE.md) (its own table,
   at the top, whatever the row's letter, so two lanes never edit the same
