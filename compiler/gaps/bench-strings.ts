@@ -11,6 +11,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { folder, ways } from "./strings.ts";
+import { wasiImportsSource } from "../src/wasi-imports.ts";
 const w = await ways();
 const sizes = (process.argv.slice(2).length ? process.argv.slice(2) : ["2", "8", "32"]).map(Number);
 const runs = Number(process.env.RUNS ?? 3);
@@ -26,9 +27,9 @@ if (built) {
   spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "strings")]);
   spawnSync(process.execPath, [lab, "wasi", folder, "-o", join(dir, "strings.wasm")]);
   spawnSync("cc", ["-O2", join(import.meta.dirname, "strings.ideal.c"), "-lm", "-o", join(dir, "ideal-c")]);
-  writeFileSync(join(dir, "run-wasi.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi";
+  writeFileSync(join(dir, "run-wasi.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi"; ${wasiImportsSource}
 const w = new WASI({ version: "preview1", args: ["strings", ...process.argv.slice(2)], returnOnExit: true });
-w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync("strings.wasm")), w.getImportObject()));`);
+w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync("strings.wasm")), wasiImports(w)));`);
 }
 for (const n of sizes) {
   const args = [String(n)];

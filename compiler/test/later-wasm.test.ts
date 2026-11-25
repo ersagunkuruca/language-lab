@@ -18,6 +18,7 @@ import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { CONS, NIL, S, SHOW_ANY, UNIT, UNIT_V } from "../../ters/src/lang/std.ts";
 import { CONSOLE, DIVERGE, NUMBER, STRING } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 const lib = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
@@ -35,7 +36,7 @@ async function onWasm(build: (k: Lang) => void): Promise<{ want: [string, string
   assert.equal(made.status, 0, made.stderr);
   const o = join(dir, "out.txt"), e = join(dir, "err.txt"), fo = openSync(o, "w"), fe = openSync(e, "w");
   const w = new WASI({ version: "preview1", args: ["p"], preopens: { ".": dir }, stdout: fo, stderr: fe, returnOnExit: true });
-  const code = w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), w.getImportObject() as WebAssembly.Imports));
+  const code = w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasiImports(w)));
   closeSync(fo); closeSync(fe);
   return { want: [r.stdout, r.stderr, r.status ?? 1], got: [readFileSync(o, "utf8"), readFileSync(e, "utf8"), code] };
 }

@@ -26,6 +26,7 @@ import { emitWasm, fromText, instantiate } from "../src/wasm.ts";
 import { build, skip as noC } from "./c-harness.ts";
 import { compiledDefs, FAIL, loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { Stopped } from "../src/core-rt.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 // Each definition takes two Float64s and shows its answer.
 const CASES: [string, (k: Lang, a: Id, b: Id) => Id][] = [
@@ -136,7 +137,7 @@ test("a WASI program stops with the evaluator's reason and exit code", async () 
   const io = mkdtempSync(join(tmpdir(), "finite-wasi-"));
   const [stdout, stderr] = [openSync(join(io, "out"), "w"), openSync(join(io, "err"), "w")];
   const wasi = new WASI({ version: "preview1", args: ["main"], stdout, stderr, returnOnExit: true });
-  const got = wasi.start(await WebAssembly.instantiate(await WebAssembly.compile(m.bytes), wasi.getImportObject() as WebAssembly.Imports));
+  const got = wasi.start(await WebAssembly.instantiate(await WebAssembly.compile(m.bytes), wasiImports(wasi)));
   [stdout, stderr].forEach((fd) => closeSync(fd));
   assert.deepEqual([got, readFileSync(join(io, "out"), "utf8"), readFileSync(join(io, "err"), "utf8")], [1, "0.25\n", "the answer is too big for a Float64 (overflow) (in main)\n"]);
 });

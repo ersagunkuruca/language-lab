@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { WASI } from "node:wasi";
 import { folder, ways } from "../gaps/scan.ts";
 import { skip } from "./c-harness.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const w = await ways();
 const all = (args: string[]) => {
@@ -51,7 +52,7 @@ test("scan through ters wasi and ters native prints what ters run prints", async
   assert.equal(made.status, 0, made.stderr);
   const of = join(dir, "out.txt"), fd = openSync(of, "w");
   const wasi = new WASI({ version: "preview1", args: ["s", "200"], stdout: fd, stderr: fd, returnOnExit: true });
-  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "s.wasm"))), wasi.getImportObject() as WebAssembly.Imports));
+  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "s.wasm"))), wasiImports(wasi)));
   closeSync(fd);
   assert.equal(readFileSync(of, "utf8"), want.stdout, "ters wasi");
   if (skip) return;

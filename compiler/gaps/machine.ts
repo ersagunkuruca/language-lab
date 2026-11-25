@@ -21,6 +21,7 @@ import { ownedArrays } from "../src/owned-arrays.ts";
 import { intoAsSets, ownedRecords } from "../src/owned-records.ts";
 import { coreMain, lowerCore } from "../src/core-js.ts";
 import { machine as ideal } from "./machine.ideal.js";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 export interface Run { out: string[]; err: string[]; code: number }
 export type Way = (args: string[], files: Record<string, string>) => Run;
@@ -111,7 +112,7 @@ export async function ways(): Promise<Record<Name, Way> & { chosen: string[]; wa
       for (const [name, text] of Object.entries(files)) writeFileSync(join(run, name), text);
       const out = openSync(join(run, ".out"), "w"), errOut = openSync(join(run, ".err"), "w");
       const wasi = new WASI({ version: "preview1", args: ["machine", ...args], preopens: { ".": run }, stdout: out, stderr: errOut, returnOnExit: true });
-      const code = wasi.start(new WebAssembly.Instance(wasm.module, wasi.getImportObject() as WebAssembly.Imports));
+      const code = wasi.start(new WebAssembly.Instance(wasm.module, wasiImports(wasi)));
       closeSync(out); closeSync(errOut);
       const text = (f: string) => readFileSync(join(run, f), "utf8").split("\n").filter((l, i, all) => l !== "" || i < all.length - 1);
       return { out: text(".out"), err: text(".err"), code };

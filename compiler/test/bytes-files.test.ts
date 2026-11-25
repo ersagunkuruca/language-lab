@@ -22,6 +22,7 @@ import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
 import { emitWasm, runMain as runWasm } from "../src/wasm.ts";
 import { compile, skip } from "./c-harness.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 // The program, and what the evaluator prints and the reason it stops.
 function program() {
@@ -66,7 +67,7 @@ test("read bytes and write bytes in a WASI command give back the bytes written, 
   const m = emitWasm(l, { wasi: true, main });
   const dir = mkdtempSync(join(tmpdir(), "bytes-files-wasi-")), out = join(dir, "out.txt"), fd = openSync(out, "w");
   const w = new WASI({ version: "preview1", args: ["p"], preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
-  const status = w.start(new WebAssembly.Instance(new WebAssembly.Module(m.bytes), w.getImportObject() as WebAssembly.Imports));
+  const status = w.start(new WebAssembly.Instance(new WebAssembly.Module(m.bytes), wasiImports(w)));
   closeSync(fd);
   assert.notEqual(status, 0);
   const lines = readFileSync(out, "utf8").split("\n").filter((x) => x);

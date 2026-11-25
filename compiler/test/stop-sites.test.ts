@@ -22,6 +22,7 @@ import { WASI } from "node:wasi";
 import { emitC } from "../src/c.ts";
 import { runCoreFn } from "../src/core-rt.ts";
 import { build, compile, skip } from "./c-harness.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 function program() {
   const k = new Lang();
@@ -68,7 +69,7 @@ test("WASI's main says the reason and the definition (C143b)", async () => {
   const io = mkdtempSync(join(tmpdir(), "stop-sites-"));
   const [stdout, stderr] = [openSync(join(io, "out"), "w"), openSync(join(io, "err"), "w")];
   const wasi = new WASI({ version: "preview1", args: ["main"], stdout, stderr, returnOnExit: true });
-  const got = wasi.start(await WebAssembly.instantiate(await WebAssembly.compile(m.bytes), wasi.getImportObject() as WebAssembly.Imports));
+  const got = wasi.start(await WebAssembly.instantiate(await WebAssembly.compile(m.bytes), wasiImports(wasi)));
   [stdout, stderr].forEach((fd) => closeSync(fd));
   assert.deepEqual([got, readFileSync(join(io, "err"), "utf8")], [1, "the answer is too big for a Float64 (overflow) (in grow)\n"]);
 });

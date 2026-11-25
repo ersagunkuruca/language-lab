@@ -20,6 +20,7 @@ import { B } from "../../ters/src/prelude.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { build, skip } from "./c-harness.ts";
 import { parseSaved } from "../../ters/src/saved.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 
@@ -85,7 +86,7 @@ async function throughDir(program: string, dir = mkdtempSync(join(tmpdir(), "sol
   assert.equal(made.status, 0, made.stderr);
   const of = join(dir, "out.txt"), fd = openSync(of, "w");
   const w = new WASI({ version: "preview1", args: ["p"], preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
-  w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), w.getImportObject() as WebAssembly.Imports));
+  w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasiImports(w)));
   closeSync(fd);
   assert.equal(readFileSync(of, "utf8"), want.stdout, "ters wasi");
   if (!skip) {
@@ -297,7 +298,7 @@ test("a hundred thousand numbers read back on WebAssembly and C", async () => {
   assert.equal(made.status, 0, made.stderr);
   const of = join(dir, "out.txt"), fd = openSync(of, "w");
   const w = new WASI({ version: "preview1", args: ["p"], preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
-  w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), w.getImportObject() as WebAssembly.Imports));
+  w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasiImports(w)));
   closeSync(fd);
   const out = readFileSync(of, "utf8");
   assert.ok(out.includes(`= [${numbers.join(" ")}]`), out.slice(0, 300));

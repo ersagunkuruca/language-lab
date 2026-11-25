@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { WASI } from "node:wasi";
 import { Session } from "../../ters/mcp/session.ts";
 import { skip } from "./c-harness.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 test("and, or: the second side only when the first doesn't decide, on every engine (L259)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "short-circuit-")), folder = join(dir, "p");
@@ -36,7 +37,7 @@ test("and, or: the second side only when the first doesn't decide, on every engi
   assert.equal(made.status, 0, made.stderr);
   const of = join(dir, "out.txt"), fd = openSync(of, "w");
   const wasi = new WASI({ version: "preview1", args: ["p"], stdout: fd, stderr: fd, returnOnExit: true });
-  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasi.getImportObject() as WebAssembly.Imports));
+  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasiImports(wasi)));
   closeSync(fd);
   assert.equal(readFileSync(of, "utf8"), want, "ters wasi");
   if (skip) return;

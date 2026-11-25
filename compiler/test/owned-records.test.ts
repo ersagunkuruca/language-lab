@@ -26,6 +26,7 @@ import { intoAsSets, ownedRecords } from "../src/owned-records.ts";
 import { kids, lowerScalar } from "../src/scalar.ts";
 import { load } from "../src/program.ts";
 import { emitWasm } from "../src/wasm.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 // A record P(x, y) of Ints; `moved(p)` is P(p.x + 1, p.y) and `x of(p)`
 // reads p.x in a function of its own. main prints what `body` makes of
@@ -53,7 +54,7 @@ function both(body: (q: P, p: Id) => Id): { evaluator: string[]; compiled: strin
   const sets = intoAsSets(lowered);
   const io = mkdtempSync(join(tmpdir(), "owned-")), out = openSync(join(io, "out"), "w");
   const wasi = new WASI({ version: "preview1", args: ["main"], stdout: out, returnOnExit: true });
-  wasi.start(new WebAssembly.Instance(new WebAssembly.Module(emitWasm(lowered, { wasi: true, main }).bytes), wasi.getImportObject() as WebAssembly.Imports));
+  wasi.start(new WebAssembly.Instance(new WebAssembly.Module(emitWasm(lowered, { wasi: true, main }).bytes), wasiImports(wasi)));
   closeSync(out);
   const owned = printed(ir).js.includes("instanceof");
   assert.equal(sets > 0, owned);

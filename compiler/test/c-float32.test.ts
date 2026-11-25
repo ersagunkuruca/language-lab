@@ -26,6 +26,7 @@ import { lowerCore, printed, runCoreMain } from "../src/core-js.ts";
 import { load } from "../src/program.ts";
 import { represented } from "../../ters/cli/represented.ts";
 import { representationsIn } from "../../ters/src/lang/represent.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name && (LIBRARY.code.nodes[d] as { body?: Id }).body !== undefined)!;
 
@@ -94,7 +95,7 @@ test("WebAssembly holds a Float32 as an f32, as the evaluator computes (C309)", 
   assert.match(m.wat, /\(type \$Float32\d+ \(struct \(field \$value f32\)\)\)/);
   const out = join(mkdtempSync(join(tmpdir(), "float32-wasi-")), "out.txt"), fd = openSync(out, "w");
   const w = new WASI({ version: "preview1", args: ["p"], stdout: fd, stderr: fd, returnOnExit: true });
-  w.start(new WebAssembly.Instance(new WebAssembly.Module(m.bytes), w.getImportObject() as WebAssembly.Imports));
+  w.start(new WebAssembly.Instance(new WebAssembly.Module(m.bytes), wasiImports(w)));
   closeSync(fd);
   assert.deepEqual(readFileSync(out, "utf8").split("\n").filter((x) => x), want);
 });

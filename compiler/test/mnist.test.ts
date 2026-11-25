@@ -17,6 +17,7 @@ import { dirname, join } from "node:path";
 import { WASI } from "node:wasi";
 import { folder, madeUp, ways } from "../gaps/mnist.ts";
 import { skip } from "./c-harness.ts";
+import { wasiImports, wasiImportsSource } from "../src/wasi-imports.ts";
 
 const w = await ways();
 const same = (args: string[], files: Record<string, Uint8Array>) => {
@@ -63,9 +64,22 @@ test("mnist through ters wasi and ters native prints what the ideal prints", asy
   assert.equal(made.status, 0, made.stderr);
   const of = join(dir, "out.txt"), fd = openSync(of, "w");
   const wasi = new WASI({ version: "preview1", args: ["p", "d", "adam", "200", "1"], preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
-  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasi.getImportObject() as WebAssembly.Imports));
+  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasiImports(wasi)));
   closeSync(fd);
   assert.equal(readFileSync(of, "utf8"), want, "ters wasi");
+  // C344: a training file of MNIST's size read under Node's WASI with the
+  // collector on one thread crashed V8 every run (a collection inside
+  // fd_read's fast call); through wasiImports it doesn't.
+  const big = join(dir, "big");
+  for (const [f, bytes] of Object.entries(madeUp(60000, 100))) { mkdirSync(join(big, dirname(f)), { recursive: true }); writeFileSync(join(big, f), bytes); }
+  // (Run from a CommonJS file: from a module, or from -e, it didn't crash here.)
+  writeFileSync(join(dir, "run.cjs"), `const { readFileSync } = require("node:fs"), { WASI } = require("node:wasi"); ${wasiImportsSource}
+const w = new WASI({ version: "preview1", args: ["p", "d", "adam", "100", "1"], preopens: { ".": ${JSON.stringify(big)} }, returnOnExit: true });
+process.exitCode = w.start(new WebAssembly.Instance(new WebAssembly.Module(readFileSync(${JSON.stringify(join(dir, "p.wasm"))})), wasiImports(w)));
+`);
+  const child = spawnSync(process.execPath, ["--no-warnings", "--single-threaded-gc", join(dir, "run.cjs")], { encoding: "utf8" });
+  assert.equal(child.status, 0, child.stderr);
+  assert.match(child.stdout, /^mnist: 100 training digits, 100 test digits/);
   if (skip) return;
   const built = spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "p")], { encoding: "utf8" });
   assert.equal(built.status, 0, built.stderr);

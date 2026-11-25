@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WASI } from "node:wasi";
 import { nodeIds } from "../../ters/src/model.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 test("derivative and gradient of a function value, and a second derivative, as the evaluator gives them", () => {
   const k = new Lang();
@@ -175,7 +176,7 @@ test("calculus through ters wasi and ters native prints what ters run prints (I2
   assert.equal(made.status, 0, made.stderr);
   const of = join(dir, "out.txt"), fd = openSync(of, "w");
   const w = new WASI({ version: "preview1", args: ["p"], preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
-  w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), w.getImportObject() as WebAssembly.Imports));
+  w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasiImports(w)));
   closeSync(fd);
   assert.equal(readFileSync(of, "utf8"), want.stdout, "ters wasi");
   if (skip) return;

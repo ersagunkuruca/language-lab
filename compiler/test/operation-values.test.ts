@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { WASI } from "node:wasi";
 import { call } from "../../ters/mcp/server.ts";
 import { skip } from "./c-harness.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 
@@ -39,7 +40,7 @@ test("print given to for each, through ters run, compile, wasi and native", asyn
   assert.equal(made.status, 0, made.stderr);
   const of = join(out, "out.txt"), fd = openSync(of, "w");
   const wasi = new WASI({ version: "preview1", args: ["p", "three"], stdout: fd, stderr: fd, returnOnExit: true });
-  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(out, "p.wasm"))), wasi.getImportObject() as WebAssembly.Imports));
+  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(out, "p.wasm"))), wasiImports(wasi)));
   closeSync(fd);
   assert.equal(readFileSync(of, "utf8"), want.stdout, "ters wasi");
   if (skip) return;

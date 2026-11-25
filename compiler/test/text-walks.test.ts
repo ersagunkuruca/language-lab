@@ -16,6 +16,7 @@ import { loadProgram } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { lowerCore } from "../src/core-js.ts";
 import { kids, type SExpr } from "../src/scalar.ts";
+import { wasiImportsSource } from "../src/wasi-imports.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 const found = (e: SExpr, p: (e: SExpr) => boolean): boolean => p(e) || kids(e).some((k) => found(k, p));
@@ -56,9 +57,9 @@ test("a walk down a text's characters reads the text in place, every way", () =>
   assert.equal(spawnSync(process.execPath, [join(out, "p.js"), "z"], { encoding: "utf8" }).stdout, want.stdout, "ters compile");
   const wasi = spawnSync(process.execPath, [lab, "wasi", dir, "-o", join(out, "p.wasm")], { encoding: "utf8" });
   assert.equal(wasi.status, 0, wasi.stderr);
-  writeFileSync(join(out, "run.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi";
+  writeFileSync(join(out, "run.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi"; ${wasiImportsSource}
 const w = new WASI({ version: "preview1", args: ["p", ...process.argv.slice(2)], returnOnExit: true });
-w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync("p.wasm")), w.getImportObject()));`);
+w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync("p.wasm")), wasiImports(w)));`);
   assert.equal(spawnSync(process.execPath, ["--no-warnings", "run.mjs", "z"], { cwd: out, encoding: "utf8" }).stdout, want.stdout, "ters wasi");
   const native = spawnSync(process.execPath, [lab, "native", dir, "-o", join(out, "p")], { encoding: "utf8" });
   if (native.status === 0) assert.equal(spawnSync(join(out, "p"), ["z"], { encoding: "utf8" }).stdout, want.stdout, "ters native");

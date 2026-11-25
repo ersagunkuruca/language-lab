@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { WASI } from "node:wasi";
 import { Session } from "../../ters/mcp/session.ts";
 import { skip } from "./c-harness.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 test("gradient of a function of an array: one pass back, in the evaluator and compiled (L285)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "reverse-gradient-")), folder = join(dir, "p");
@@ -69,7 +70,7 @@ test("gradient of a function of an array: one pass back, in the evaluator and co
   assert.equal(made.status, 0, made.stderr);
   const of = join(dir, "out.txt"), fd = openSync(of, "w");
   const wasi = new WASI({ version: "preview1", args: ["p"], stdout: fd, stderr: fd, returnOnExit: true });
-  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasi.getImportObject() as WebAssembly.Imports));
+  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasiImports(wasi)));
   closeSync(fd);
   check("ters wasi", readFileSync(of, "utf8"));
   if (skip) return;

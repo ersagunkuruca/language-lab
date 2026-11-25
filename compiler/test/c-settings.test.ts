@@ -20,6 +20,7 @@ import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
 import { emitWasm } from "../src/wasm.ts";
 import { compile, skip } from "./c-harness.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 function program(settings = true) {
   const k = new Lang();
@@ -86,7 +87,7 @@ test("open outside in a WASI command fails with the reason, a missing file's as 
   writeFileSync(join(dir, "a.txt"), "hello");
   const fd = openSync(out, "w");
   const w = new WASI({ version: "preview1", args: ["p"], preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
-  w.start(new WebAssembly.Instance(new WebAssembly.Module(m.bytes), w.getImportObject() as WebAssembly.Imports));
+  w.start(new WebAssembly.Instance(new WebAssembly.Module(m.bytes), wasiImports(w)));
   closeSync(fd);
   assert.deepEqual(readFileSync(out, "utf8").split("\n").slice(0, 2), ["a WASI command can't open a.txt in another app: it has no way out to one", "no such file or folder: nope"]);
 });

@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { boxedCompares } from "../src/wasm.ts";
 import type { SExpr } from "../src/scalar.ts";
+import { wasiImportsSource } from "../src/wasi-imports.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 const folder = join(import.meta.dirname, "../gaps/greenhouse");
@@ -42,9 +43,9 @@ test("the greenhouse on WebAssembly with its walks' compares as i64s prints as c
   assert.equal(want.status, 0, want.stderr);
   const b = spawnSync(process.execPath, [lab, "wasi", folder, "-o", join(dir, "g.wasm")], { encoding: "utf8" });
   assert.equal(b.status, 0, b.stderr);
-  writeFileSync(join(dir, "w.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi";
+  writeFileSync(join(dir, "w.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi"; ${wasiImportsSource}
 const w = new WASI({ version: "preview1", args: ["g", ...process.argv.slice(3)], returnOnExit: true });
-w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(process.argv[2])), w.getImportObject()));`);
+w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(process.argv[2])), wasiImports(w)));`);
   const r = spawnSync(process.execPath, ["--no-warnings", join(dir, "w.mjs"), join(dir, "g.wasm"), ...args], { encoding: "utf8" });
   assert.equal(r.stdout, want.stdout);
 });

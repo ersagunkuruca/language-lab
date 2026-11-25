@@ -10,6 +10,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { folder } from "./moths.ts";
+import { wasiImportsSource } from "../src/wasi-imports.ts";
 
 const [ticks = "100", ...given] = process.argv.slice(2);
 const sizes = given.length ? given : ["3000", "10000"];
@@ -22,9 +23,9 @@ ok(spawnSync("cc", ["-O2", "-ffp-contract=off", "-fopenmp", c, "-o", join(dir, "
 ok(spawnSync(process.execPath, [lab, "compile", folder, "-o", join(dir, "moths.mjs")]));
 ok(spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "moths")]));
 ok(spawnSync(process.execPath, [lab, "wasi", folder, "-o", join(dir, "moths.wasm")]));
-writeFileSync(join(dir, "wasi.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi";
+writeFileSync(join(dir, "wasi.mjs"), `import { readFileSync } from "node:fs"; import { WASI } from "node:wasi"; ${wasiImportsSource}
 const w = new WASI({ version: "preview1", args: ["moths", ...process.argv.slice(2)], returnOnExit: true });
-w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(${JSON.stringify(join(dir, "moths.wasm"))})), w.getImportObject()));`);
+w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(${JSON.stringify(join(dir, "moths.wasm"))})), wasiImports(w)));`);
 const node = process.execPath;
 const ways: [string, string, string[], Record<string, string>][] = [
   ["C, one thread", join(dir, "c"), [], {}],

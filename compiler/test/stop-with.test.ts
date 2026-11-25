@@ -22,6 +22,7 @@ import { emitWasm, instantiate } from "../src/wasm.ts";
 import { emitC } from "../src/c.ts";
 import { loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { build, compile, skip } from "./c-harness.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 // double: twice x, or a stop for a negative. tail: a list's rest, or a
 // stop for the empty list. main prints, then stops.
@@ -71,7 +72,7 @@ test("stop with under WASI: what main printed, the words to standard error, exit
   const io = mkdtempSync(join(tmpdir(), "stop-with-"));
   const [stdout, stderr] = [openSync(join(io, "out"), "w"), openSync(join(io, "err"), "w")];
   const wasi = new WASI({ version: "preview1", args: ["main"], stdout, stderr, returnOnExit: true });
-  const got = wasi.start(await WebAssembly.instantiate(await WebAssembly.compile(m.bytes), wasi.getImportObject() as WebAssembly.Imports));
+  const got = wasi.start(await WebAssembly.instantiate(await WebAssembly.compile(m.bytes), wasiImports(wasi)));
   [stdout, stderr].forEach((fd) => closeSync(fd));
   assert.deepEqual([got, readFileSync(join(io, "out"), "utf8"), readFileSync(join(io, "err"), "utf8")], [1, "6\n", "negative: -2\n"]);
 });

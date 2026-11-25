@@ -21,6 +21,7 @@ import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
 import { emitWasm } from "../src/wasm.ts";
 import { compile, skip } from "./c-harness.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 function program() {
   const k = new Lang(LIBRARY.code);
@@ -58,7 +59,7 @@ test("unit parts in a WASI command, likewise", () => {
   assert.deepEqual([...l.refused.values()], []);
   const dir = mkdtempSync(join(tmpdir(), "unit-parts-")), out = join(dir, "out.txt"), fd = openSync(out, "w");
   const w = new WASI({ version: "preview1", args: ["p"], stdout: fd, stderr: fd, returnOnExit: true });
-  const status = w.start(new WebAssembly.Instance(new WebAssembly.Module(emitWasm(l, { wasi: true, main }).bytes), w.getImportObject() as WebAssembly.Imports));
+  const status = w.start(new WebAssembly.Instance(new WebAssembly.Module(emitWasm(l, { wasi: true, main }).bytes), wasiImports(w)));
   closeSync(fd);
   assert.equal(status, 0);
   assert.deepEqual(readFileSync(out, "utf8").split("\n").filter((x) => x), want);

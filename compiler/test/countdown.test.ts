@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { load } from "../src/program.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm } from "../src/wasm.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const w = await ways();
 
@@ -43,7 +44,7 @@ test("countdown: its main as a WASI command, with no JavaScript host, prints Hut
   const dir = mkdtempSync(join(tmpdir(), "countdown-")), out = join(dir, "out");
   const stdout = openSync(out, "w");
   const wasi = new WASI({ version: "preview1", args: ["countdown"], stdout, returnOnExit: true });
-  assert.equal(wasi.start(await WebAssembly.instantiate(m.bytes, wasi.getImportObject() as WebAssembly.Imports).then((r) => r.instance)), 0);
+  assert.equal(wasi.start(await WebAssembly.instantiate(m.bytes, wasiImports(wasi)).then((r) => r.instance)), 0);
   closeSync(stdout);
   assert.deepEqual(readFileSync(out, "utf8").trimEnd().split("\n"), w.ideal([1, 3, 7, 10, 25, 50], 765));
   rmSync(dir, { recursive: true });

@@ -18,6 +18,7 @@ import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
 import { emitWasm } from "../src/wasm.ts";
 import { compile, skip } from "./c-harness.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 // main's printed lines from the evaluator, C and WebAssembly.
 function run(body: (k: Lang, show: (x: Id) => Id) => Id) {
@@ -34,7 +35,7 @@ function run(body: (k: Lang, show: (x: Id) => Id) => Id) {
   assert.equal(r.status, 0, r.stderr.toString());
   const io = mkdtempSync(join(tmpdir(), "cells-")), out = openSync(join(io, "out"), "w");
   const wasi = new WASI({ version: "preview1", args: ["main"], stdout: out, returnOnExit: true });
-  wasi.start(new WebAssembly.Instance(new WebAssembly.Module(emitWasm(lowerScalar(code, info, names, [main], opts), { wasi: true, main }).bytes), wasi.getImportObject() as WebAssembly.Imports));
+  wasi.start(new WebAssembly.Instance(new WebAssembly.Module(emitWasm(lowerScalar(code, info, names, [main], opts), { wasi: true, main }).bytes), wasiImports(wasi)));
   closeSync(out);
   return { evaluator, c: r.stdout.toString(), wasm: readFileSync(join(io, "out"), "utf8") };
 }
