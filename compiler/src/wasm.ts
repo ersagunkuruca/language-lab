@@ -43,6 +43,7 @@ import { assemble, byteSlots, inlined, POW5, runtime, textBytes, WASI_IMPORTS, w
 // area (iovecs, sizes), before its buffer.
 const MATH_AT = 128;
 import { keysArrays, TABLE_RT, tableRt } from "./wasm-table.ts";
+import { FRAME_FN, frameSpares } from "./frame-spares.ts";
 import { reasonOf, siteOf } from "./stops.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { answerByShapes, type Shape } from "../../ters/src/lang/hosts.ts";
@@ -486,6 +487,23 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       "local.get $a", "local.get $n", "local.get $x", "array.set $SI",
       "local.get $f", "local.get $n", "i32.const 1", "i32.add", "struct.set $SF 2", "local.get $f"]) };
   };
+  // A deep loop's frame made (a spare one written again, else a new one)
+  // and taken (its next given, it spare), C327g part 2b.
+  const frameRt = (name: string): RtFn => {
+    const [, op, k, cs] = FRAME_FN.exec(name)!;
+    const d = lowered.data[Number(k)], c = Number(cs), fs = d.cases[c].fields, n = fs.length, j = spareAt(d, c);
+    const types: Record<string, unknown> = { S: d, get SF() { return caseIndex(d, c); }, get "global spare"() { return stackGlobals + 2 * stacks.length + nils.length + j; }, get "global made"() { return stackGlobals + 2 * stacks.length + nils.length + spares.length + madeAt.get(`new ${d.name ?? d.key}.${c} (fresh frame)`)!; } };
+    fs.forEach((x, i) => { types[`X${i}`] = x.t; });
+    if (op === "take") return { name, params: [["s", "S" as VT]], result: "S" as VT, locals: [], uses: [], types: types as RtFn["types"], body: [
+      "local.get $s", "ref.cast $SF", `struct.get $SF ${n}`, "local.get $s", "ref.cast $SF", "global.get $spare", `struct.set $SF ${n}`, "local.get $s", "global.set $spare"].join("\n") };
+    return { name, params: fs.map((x, i): [string, VT] => [`x${i}`, (typeof x.t === "string" ? x.t : `X${i}`) as VT]), result: "S" as VT, locals: [["f", "SF" as VT]], uses: [], types: types as RtFn["types"], body: [
+      "global.get $spare", "ref.test $SF", "if void",
+      "global.get $spare", "ref.cast $SF", "local.tee $f", `struct.get $SF ${n}`, "global.set $spare",
+      ...fs.flatMap((_, i) => ["local.get $f", `local.get $x${i}`, `struct.set $SF ${i + 1}`]),
+      "else", `i32.const ${c}`, ...fs.map((_, i) => `local.get $x${i}`), "struct.new $SF", "local.set $f",
+      ...(counting ? ["global.get $made", "i64.const 1", "i64.add", "global.set $made"] : []),
+      "end", "local.get $f"].join("\n") };
+  };
   // A view held by value (C327c2, wasm-views.ts): its buffer, start and
   // length taken out, a rest's start and length, a view made of the three,
   // and the reads written again on the three, from the array's own.
@@ -549,6 +567,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const rt0 = (name: string): RtFn => {
     if (STACK.test(name)) return stackRt(name);
     if (FSTACK.test(name)) return fstackRt(name);
+    if (FRAME_FN.test(name)) return frameRt(name);
     if (VIEW_FN.test(name)) return viewRt(name);
     if (TABLE_RT.test(name)) { const f = tableRt(name, lowered.tables); return f.array !== undefined && byteArray(lowered.arrays[f.array]) ? byteSlots(f) : f; }
     if (name === "wasi.stop") return { ...wasiStop(lowered.stops ?? []), name };
@@ -588,6 +607,11 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const noStacks = typeof process !== "undefined" && !!process.env.NO_FOLD_STACKS;
   const stackOf = (t: LType): boolean => isData(t) && !!t.inner && t.key.endsWith(".frames") && t.cases.length === 2 && !t.cases[0].fields.length && t.cases[1].fields.length === 2 && t.cases[1].fields[1].t === t && isData(t.cases[1].fields[0].t) && !several.has(t.key) && !noStacks;
   const stacks = lowered.data.filter(stackOf);
+  // A deep loop's frames, a spare list a case (C327g part 2b, frame-spares.ts).
+  const noSpares = shader || (typeof process !== "undefined" && !!process.env.NO_FRAME_SPARES);
+  const spared = noSpares ? [] : frameSpares(funcs, lowered.data, (d) => several.has(d.key));
+  const spares = spared.flatMap((d) => d.cases.slice(1).map((_, c) => ({ d, c: c + 1 })));
+  const spareAt = (d: DType, c: number) => spares.findIndex((x) => x.d === d && x.c === c);
   // With TERS_COUNT_MAKES, each place that makes a struct (a record, a
   // case, a closure) counts what it makes in an exported i64 global,
   // `made.<k>`, the module's `made` naming each (C327g: structs made, not
@@ -602,6 +626,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const counting = typeof process !== "undefined" && !!process.env.TERS_COUNT_MAKES;
   const made: string[] = [], madeAt = new Map<string, number>();
   const site = (e: SExpr, f: SFunc): string | null => e.k === "make" ? `make ${e.t.name ?? e.t.key} in ${f.name}` : e.k === "new" && !stackOf(e.t) && nilKey(e) === null ? `new ${e.t.name ?? e.t.key}.${e.c} in ${f.name}` : e.k === "closure" ? `closure ${funcs[e.fn].name} in ${f.name}` : null;
+  if (counting) for (const { d, c } of spares) { const k = `new ${d.name ?? d.key}.${c} (fresh frame)`; madeAt.set(k, made.length); made.push(k); }
   if (counting) for (const f of funcs) (function walk(e: SExpr) { const k = site(e, f); if (k !== null && !madeAt.has(k)) { madeAt.set(k, made.length); made.push(k); } kids(e).forEach(walk); })(f.body);
   const fstack = (op: "push" | "top" | "pop", t: DType) => `fstack.${op}.${lowered.data.findIndex((x) => x.key === t.key)}`;
   const rtCalls = (e: SExpr): void => {
@@ -743,7 +768,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       structs.push({ name: `${name}.items`, fields: [], final: true, items: d.cases[1].fields[0].t });
       continue;
     }
-    for (const c of d.cases) structs.push({ name: `${name}.${ident(c.name)}`, fields: [CASE, ...c.fields], sup: b, final: true });
+    const spare = spared.includes(d);
+    for (const c of d.cases) structs.push({ name: `${name}.${ident(c.name)}`, fields: [CASE, ...(spare ? c.fields.map((x) => ({ ...x, mut: true as const })) : c.fields)], sup: b, final: true });
   }
   // A function type: its closure's struct, holding the code, then the
   // code's type, taking the closure and the inputs; each closure's own
@@ -1044,8 +1070,10 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...(stack ? [[0x64, ...s(hstackIndex), 0x00, 0x41, ...s(SLOTS), 0xfb, 0x07, ...u(hstackIndex), 0x0b], [0x7f, 0x01, 0x41, 0x00, 0x0b]] : []),
     ...stacks.flatMap((d) => { const k = caseIndex(d, 1), z = caseIndex(d, 0); return [[0x63, ...s(k), 0x01, 0xd0, ...s(k), 0x0b], [0x64, ...s(z), 0x00, 0x41, 0x00, 0xfb, 0x00, ...u(z), 0x0b]]; }),
     ...nils.map(({ t, c }) => { const k = caseIndex(t, c); return [0x64, ...s(k), 0x00, 0x41, ...s(c), 0xfb, 0x00, ...u(k), 0x0b]; }),
+    ...spares.map(({ d }) => [0x63, ...s(baseIndex.get(d.key)!), 0x01, 0x41, 0x00, 0xfb, 0x00, ...u(caseIndex(d, 0)), 0x0b]),
   ];
-  const madeBase = globalsBefore.length, nilBase = madeBase - nils.length;
+  const madeBase = globalsBefore.length, spareBase = madeBase - spares.length, nilBase = spareBase - nils.length;
+  if (spareBase !== stackGlobals + 2 * stacks.length + nils.length) throw new Error("the frames' spare globals aren't where their functions read them");
   const globalSec = vec([...globalsBefore, ...made.map(() => [0x7e, 0x01, 0x42, 0x00, 0x0b])]);
   // A made struct counted: made.<k> += 1, the struct left on the stack.
   const count = (e: SExpr, f: SFunc): number[] => { const k = counting ? madeAt.get(site(e, f) ?? "") : undefined; if (k === undefined) return []; const g = u(madeBase + k); return [0x23, ...g, 0x42, 0x01, 0x7c, 0x24, ...g]; };
@@ -1059,7 +1087,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // places is one node), so walking it as a tree went over the ray
   // marcher's motor exponentially often, minutes in the editor.
   // (A view held by value's read is the array's, written again here, C327c2.)
-  const rtPartial = (n: string) => !!(VIEW_FN.test(n) ? rt(n) : runtime(n)).partial;
+  const rtPartial = (n: string) => !!(VIEW_FN.test(n) || FRAME_FN.test(n) ? rt(n) : runtime(n)).partial;
   const fails = new WeakMap<SExpr, boolean>();
   const failing = (e: SExpr): boolean => {
     let r = fails.get(e);
@@ -1321,7 +1349,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
     // WASI's memory, with the math functions' page when they're used.
     ...(wasi ? section(5, vec([[0x00, math ? 0x02 : 0x01]])) : []),
-    ...(fuel || aborts || ryu || math || escapes || flags || rand || kept.size || stack || stacks.length || nils.length || made.length ? section(6, globalSec) : []), ...section(7, exportSecOf()),
+    ...(fuel || aborts || ryu || math || escapes || flags || rand || kept.size || stack || stacks.length || nils.length || spares.length || made.length ? section(6, globalSec) : []), ...section(7, exportSecOf()),
     // ref.func needs the functions declared: one declarative segment.
     ...(declared.length ? section(9, vec([[0x03, 0x00, ...vec(declared.map((i) => u(fnIndex(i))))]])) : []),
     ...section(10, codeSec),
@@ -1500,6 +1528,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...(stack ? [`  (global $hs (ref $hstack) (array.new_default $hstack (i32.const ${SLOTS})))`, "  (global $hn (mut i32) (i32.const 0))"] : []),
     ...stacks.flatMap((d, j) => { const k = sname(caseIndex(d, 1)), z = sname(caseIndex(d, 0)); return [`  (global $spare${j} (mut (ref null ${k})) (ref.null ${k}))`, `  (global $done${j} (ref ${z}) (struct.new ${z} (i32.const 0)))`]; }),
     ...nils.map(({ t, c }, j) => { const k = sname(caseIndex(t, c)); return `  (global $nil${j} (ref ${k}) (struct.new ${k} (i32.const ${c})))`; }),
+    ...spares.map(({ d }, j) => `  (global $fspare${j} (mut (ref null ${sname(baseIndex.get(d.key)!)})) (struct.new ${sname(caseIndex(d, 0))} (i32.const 0)))`),
     ...(declared.length ? [`  (elem declare func${declared.map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");

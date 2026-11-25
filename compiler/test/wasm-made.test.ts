@@ -33,6 +33,26 @@ test("strings on WebAssembly makes no pair for a zipped fold's step, and prints 
   assert.ok(on.total < off.total * 0.8, `${on.total} structs, ${off.total} before`);
 });
 
+// A deep loop's frames (deep-loops.ts) taken by `$up` wait on a spare
+// list for `$down`'s next call (frame-spares.ts): pack's tree update at
+// makes a frame a level only as deep as the deepest walk, not each walk.
+test("pack on WebAssembly makes a deep loop's frames only as deep as it goes", () => {
+  const dir = mkdtempSync(join(tmpdir(), "wasm-spares-"));
+  const build = (out: string, env: Record<string, string>) => {
+    const r = spawnSync(process.execPath, [lab, "wasi", join(gaps, "pack"), "-o", join(dir, out)], { encoding: "utf8", env: { ...process.env, TERS_COUNT_MAKES: "1", ...env } });
+    assert.equal(r.status, 0, r.stderr);
+    return join(dir, out);
+  };
+  const run = (wasm: string, out: string) => { const fd = openSync(join(dir, out), "w"); try { return made(wasm, ["400"], dir, fd); } finally { closeSync(fd); } };
+  const off = run(build("off.wasm", { NO_FRAME_SPARES: "1" }), "off.txt"), on = run(build("on.wasm", {}), "on.txt");
+  assert.equal(readFileSync(join(dir, "on.txt"), "utf8"), readFileSync(join(dir, "off.txt"), "utf8"));
+  assert.equal(on.code, 0);
+  const frames = (r: typeof on) => r.places.filter(([n]) => /^new tree update at.*frames\.\d+/.test(n)).reduce((n, [, c]) => n + c, 0);
+  assert.ok(frames(off) > 1000, `${frames(off)} frames made without the spare lists`);
+  assert.ok(frames(on) < 100, `${frames(on)} frames made`);
+  assert.ok(on.places.some(([n]) => /\(fresh frame\)$/.test(n)), "the fresh frames are counted");
+});
+
 // A case with no fields (pack's Order.0 and Order.2, an empty list) is one
 // struct in a global: the run makes none of them, and prints the same.
 test("pack on WebAssembly makes a field-less case once, not per use", () => {
