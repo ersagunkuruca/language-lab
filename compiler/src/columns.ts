@@ -37,7 +37,7 @@ const isRecord = (t: LType | undefined): t is RType => typeof t === "object" && 
 const isArray = (t: LType | undefined, a: AType) => typeof t === "object" && t !== null && (t as { key?: string }).key === a.key;
 
 // The ops on an array type that columns keep, by name.
-const KEPT = /^array\.(get|at|length|empty|replaceOwned|pushFrontOwned|replaceAt|pushFront|push)\.a(\d+)$/;
+const KEPT = /^array\.(get|at|length|empty|slice|of|replaceOwned|pushFrontOwned|replaceAt|pushFront|push)\.a(\d+)$/;
 const PUSH = /^array\.pushFront(Owned)?\.a\d+$/, REPLACE = /^array\.replace(Owned|At)\.a\d+$/;
 
 // A map's fold as lowered (owned-arrays.ts): f(a, i, made, by) is `if i = 0
@@ -106,6 +106,9 @@ function renamed(e: SExpr, m: (i: number) => number): SExpr {
 const PLAIN = new Set(["num", "int", "text", "bool", "local", "op", "let", "make", "get", "call"]);
 const plain = (e: SExpr): boolean => PLAIN.has(e.k) && kids(e).every(plain);
 const size = (e: SExpr): number => 1 + kids(e).reduce((n, k) => n + size(k), 0);
+// One read of an array's item, after lets of locals (the prelude's `item
+// read`).
+const oneRead = (e: SExpr): boolean => (e.k === "let" && e.value.k === "local" ? oneRead(e.body) : e.k === "rt" && /^array\.(at|get)\.a\d+$/.test(e.fn) && e.args.every((x) => x.k === "local"));
 
 // Calls of small plain functions put in place in f, where they take an
 // item or make one that goes into an array: what columns need to see.
@@ -116,7 +119,7 @@ function inlined(ir: CoreIR, f: SFunc, self: number, wanted: (e: Extract<SExpr, 
       const r = mapKids(e, put);
       if (r.k !== "call" || r.cps || r.fn === self || !wanted(r)) return r;
       const g = ir.funcs[r.fn];
-      if (g.multi || !plain(g.body) || size(g.body) > 200 || found(g.body, (x) => x.k === "call" && x.fn === r.fn)) return r;
+      if (g.multi || !(plain(g.body) || oneRead(g.body)) || size(g.body) > 200 || found(g.body, (x) => x.k === "call" && x.fn === r.fn)) return r;
       const at = g.locals.map((t) => f.locals.push(t) - 1);
       changed = true;
       return r.args.reduceRight<SExpr>((body, value, j) => ({ k: "let", i: at[j], value, body }), renamed(g.body, (i) => at[i]));
@@ -209,7 +212,9 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
   const leafAt = (path: number[]) => leaves.findIndex((l) => l.path.length === path.length && l.path.every((x, k) => x === path[k]));
   const suffix = `.a${a.index}`;
   const ofA = (fn: string) => fn.endsWith(suffix) && /^array\./.test(fn);
-  if (!rts.get(`array.get${suffix}`)?.size) return false;
+  // Read by position (`get`), or whole by `item at` (C342: the prelude's
+  // strided contraction sum reads its items so).
+  if (!rts.get(`array.get${suffix}`)?.size && !(whole && rts.get(`array.at${suffix}`)?.size)) return false;
   // A copy to work on: nothing changes unless every use is one columns keep.
   const funcs = ir.funcs.map((f) => ({ ...f, locals: [...f.locals], ...(f.binders ? { binders: [...f.binders] } : {}) }));
   const work: CoreIR = { ...ir, funcs };
@@ -237,7 +242,10 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
     w(f.body);
     const puts = found(f.body, (e) => e.k === "rt" && ofA(e.fn) && (PUSH.test(e.fn) || REPLACE.test(e.fn)));
     const makes = (c: Extract<SExpr, { k: "call" }>) => { const t = funcs[c.fn].result; return isRecord(t) && isRecord(r) && t.key === r.key; };
-    if (items.size || puts) inlined(work, f, i, (c) => (puts && makes(c)) || c.args.some((x) => isLocal(x) && items.has(x.i)));
+    // And a function that is one read of an item (the prelude's `item
+    // read`, C342), so the loop calling it reads the columns itself.
+    const reads = (c: Extract<SExpr, { k: "call" }>) => { let b = funcs[c.fn].body; while (b.k === "let") b = b.body; return whole && oneRead(funcs[c.fn].body) && b.k === "rt" && ofA(b.fn); };
+    if (items.size || puts || whole) inlined(work, f, i, (c) => (puts && makes(c)) || c.args.some((x) => isLocal(x) && items.has(x.i)) || reads(c));
   }
 
   // The folds of maps putting into an array of a, and their entries.
@@ -304,6 +312,12 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
             if (!m) return bad();
             if (m[1] === "get" && under?.k !== "let") return bad();
             if (m[1] === "at" && (!whole || !isLocal(e.args[0]))) return bad();
+            // A slice (JavaScript, whole): its columns copied (C342: mnist's
+            // weights as a Tensor, a slice of its parameters).
+            if (m[1] === "slice" && !whole) return bad();
+            // And made of a list's items, each a record of plain fields
+            // (C342: a tensor transposed, `array of(map(indices, …))`).
+            if (m[1] === "of" && (!whole || !isRecord(r) || leaves.some((l) => l.path.length !== 1 || l.opt))) return bad();
             // Growing, a replace or a put in front of an array held
             // elsewhere too: on a copy of its columns (G1b4: a pool's slot
             // given an item, at a lamp hung or taken).
@@ -400,6 +414,8 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
         }
       }
       if (e.k === "rt" && e.fn === `array.length${suffix}`) return rt(`array.clength${suffix}`, ...e.args.map(go));
+      if (e.k === "rt" && e.fn === `array.slice${suffix}`) return rt(`array.cslice${suffix}`, ...e.args.map(go));
+      if (e.k === "rt" && e.fn === `array.of${suffix}`) return rt(`array.cof${suffix}`, ...e.args.map(go));
       // Pushed onto where a loop builds it; empty, with room to grow.
       if (e.k === "rt" && pushes.has(e)) return written(e.args[0], null, e.args[1], false);
       // A call of `array nil` too: a function of no inputs is worked out

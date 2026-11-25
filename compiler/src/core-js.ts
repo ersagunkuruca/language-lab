@@ -576,8 +576,24 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
           // Float32's (C309: already a binary32, so stored exactly).
           {
             const kind = (a: string, x: LType, i: number) => (ir.arrays[Number(a)].narrow?.[i] ? "Float32Array" : x === "f64" ? "Float64Array" : "Array");
-            const m = /^array\.c(new|build|push|copy|front|length|in|get(\d+)|set([\d_]+))\.a(\d+)$/.exec(e.fn);
+            const m = /^array\.c(new|build|push|copy|front|slice|of|length|in|get(\d+)|set([\d_]+))\.a(\d+)$/.exec(e.fn);
             if (m) {
+              // A slice, its columns copied: from, count, each clamped to the
+              // array (array-view.ts sliceOf) (C342).
+              // Made of a list's items, records of plain fields (C342).
+              if (m[1] === "of") {
+                const ts = ir.arrays[Number(m[4])].leaves ?? (ir.arrays[Number(m[4])].item as RType).fields.map((x) => x.t);
+                const c = temp(), w = temp();
+                pre.push(`${d}const ${c} = R.itemsOf(${xs[0]}).items(), ${w} = { n: ${c}.length };`);
+                ts.forEach((x, i) => pre.push(`${d}{ const g = new ${kind(m[4], x, i)}(${c}.length); for (let k = 0; k < ${c}.length; k++) { const r = ${c}[k]; g[k] = r.f${i} ?? r.fields[${i}]; } ${w}.c${i} = g; }`));
+                return w;
+              }
+              if (m[1] === "slice") {
+                const ts = ir.arrays[Number(m[4])].leaves ?? (ir.arrays[Number(m[4])].item as RType).fields.map((x) => x.t);
+                const c = temp(), f = temp(), k = temp();
+                pre.push(`${d}const ${c} = ${xs[0]}, ${f} = Math.max(0, Math.min(${c}.n, Number(${xs[1]}))), ${k} = Math.max(0, Math.min(${c}.n - ${f}, Number(${xs[2]})));`);
+                return `{ n: ${k}, ${ts.map((_, i) => `c${i}: ${c}.c${i}.slice(${f}, ${f} + ${k})`).join(", ")} }`;
+              }
               // A copy of an array's columns, to write an item into; or with
               // one more item in front, at 0 (G1b4).
               if (m[1] === "copy" || m[1] === "front") {
