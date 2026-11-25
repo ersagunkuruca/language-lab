@@ -16,6 +16,9 @@ which also has how they compound per benchmark.
 
 | item | program, target | kind | gain measured | where |
 |---|---|---|---|---|
+| C331 | eight gaps programs, native | checks | every Float64 guard dropped (zero before a division, x <= 0 before a root): 0.0% of instructions, geometric mean | [CHECKS-2026-11-25](CHECKS-2026-11-25.md) |
+| C331 | eight gaps programs, native | checks | Int quotient and remainder without the zero test: 0.3% (pack 1.1%) | [CHECKS-2026-11-25](CHECKS-2026-11-25.md) |
+| C331 | eight gaps programs, native | checks | failure reads after calls dropped: five of nine runs need them; elsewhere flock 4%, pack 1.5%, mnist -5% | [CHECKS-2026-11-25](CHECKS-2026-11-25.md) |
 | C283 | greenhouse, JS | checks | column guards, finite check, view checks dropped: 6% | DONE |
 | C283 | greenhouse, JS | allocation | the walk's Flock as seven numbers: 8% | DONE |
 | C283 | greenhouse, JS | loop shape | three walks as one loop of numbers: 11% (over the bar; no general pass named, not built) | DONE |
