@@ -3042,6 +3042,15 @@ const PIECE = 40;
 function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Filling[]> {
   const h = info.holes.get(hole);
   if (!h) return [];
+  // The candidates' types are made (their schemes instantiated, their
+  // rows widened) in a trial of the check's substitution, never in it: a
+  // check made over this one (an edit's, inferEdited) took its variables
+  // on from that substitution's count, and variables made in it after
+  // that were numbered like that check's own, so one marked plain there
+  // made a fresh one plain here (I362: Change the function on + refused,
+  // its hole's function "not plain data", when the palette's search had
+  // run on after the fill's check).
+  const subst = info.subst.trial();
   const out: Filling[] = [];
   // Variables of the enclosing definitions' types. A filling that pins one
   // of them down changes what callers see, which may break a caller far
@@ -3051,8 +3060,8 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   // callers through it.
   for (let more = true; more; ) {
     more = false;
-    for (const c of info.subst.subs) {
-      const f = info.subst.resolveRow(c.from).tail, t = info.subst.resolveRow(c.to).tail;
+    for (const c of subst.subs) {
+      const f = subst.resolveRow(c.from).tail, t = subst.resolveRow(c.to).tail;
       if (f !== null && t !== null && pinned.includes(`r${t}`) && !pinned.includes(`r${f}`)) { pinned.push(`r${f}`); more = true; }
     }
   }
@@ -3064,7 +3073,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
     return t.t !== "con" || !!implementationOf(info, w.iface, t);
   });
   const fits = (t: Type, asCall: boolean): Subst | null => {
-    const s = info.subst.trial();
+    const s = subst.trial();
     const from = s.wanted.length;
     try {
       if (!asCall) { s.unify(h.expected, t); return implemented(s, from) ? s : null; }
@@ -3208,7 +3217,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   // for each type it was pinned to, nearly all refused at main).
   const uses = callers ? [...affected].filter((d) => !h.group.includes(d)).flatMap((d) => subtree(code, d)).flatMap((id) => {
     const n = code.nodes[id], t = info.typeOf.get(id);
-    return n?.kind === "ref" && h.group.includes(n.target) && t ? [{ def: n.target, t: info.subst.zonk(t) }] : [];
+    return n?.kind === "ref" && h.group.includes(n.target) && t ? [{ def: n.target, t: subst.zonk(t) }] : [];
   }) : [];
   const meetsUses = (s: Subst): boolean => {
     if (!uses.length) return true;
@@ -3272,15 +3281,15 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   // pin's open row carries (signatures.ts rigid).
   const pinRows = h.group.filter((d) => info.options?.pins?.[d]).flatMap((d) => {
     const body = (code.nodes[d] as NodeOf<"def"> | undefined)?.body;
-    const t = body ? info.typeOf.get(body) : undefined, r = t && info.subst.resolve(t);
+    const t = body ? info.typeOf.get(body) : undefined, r = t && subst.resolve(t);
     if (r?.t !== "fn") return [];
-    const own = info.subst.resolveRow(r.eff);
+    const own = subst.resolveRow(r.eff);
     if (own.tail === null) return [];
     const tails = new Set([own.tail]);
     for (let more = true; more; ) {
       more = false;
-      for (const c of info.subst.subs) {
-        const from = info.subst.resolveRow(c.from).tail, to = info.subst.resolveRow(c.to).tail;
+      for (const c of subst.subs) {
+        const from = subst.resolveRow(c.from).tail, to = subst.resolveRow(c.to).tail;
         if (from !== null && to !== null && tails.has(to) && !tails.has(from)) { tails.add(from); more = true; }
       }
     }
@@ -3294,7 +3303,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   // lift it (liftPinned).
   const pinInputs = h.group.flatMap((d) => {
     const pin = info.options?.pins?.[d], body = (code.nodes[d] as NodeOf<"def"> | undefined)?.body;
-    const t = pin && body ? info.typeOf.get(body) : undefined, r = t && info.subst.resolve(t);
+    const t = pin && body ? info.typeOf.get(body) : undefined, r = t && subst.resolve(t);
     return pin && r?.t === "fn" ? [{ pin, params: r.params }] : [];
   });
   const keepsPinInputs = (s: Subst) => pinInputs.every(({ pin, params }) => {
@@ -3318,7 +3327,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   };
   const read = solves.length ? new Set([...affected].flatMap((d) => subtree(code, d))) : new Set<Id>();
   const solvedAt = new Set(solves.filter((n) => read.has(n.id)).map((n) => useTarget(code.nodes, n)));
-  const solvedPure = [...solvedAt].filter((d) => info.schemes.has(d) && !acting(info.subst, d));
+  const solvedPure = [...solvedAt].filter((d) => info.schemes.has(d) && !acting(subst, d));
   const safe = (s: Subst, f: Filling, risky: boolean | "field", mix?: string, brings = "") => {
     if (pinRows.length && !keepsPin(s)) return false;
     if (solvedPure.some((d) => acting(s, d))) return false;
@@ -3355,7 +3364,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
     // the hole is seen in the hole: the type it expects, the effects
     // around it, the inputs in scope. Fillings that change none of those
     // keep the pin; the others are checked against it.
-    const held = pinnedGroup && groupKey(s, around) !== (aroundBefore ??= groupKey(info.subst, around));
+    const held = pinnedGroup && groupKey(s, around) !== (aroundBefore ??= groupKey(subst, around));
     if (!touches && !held) return true;
     // What a filling pins of the group's own types is seen only by its
     // callers: with none (a new definition, main), there is no one it can
@@ -3371,15 +3380,15 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   // A hole whose row is still open (an `else` given to first, which runs
   // outside first's handler) may join the definition's own row, so what
   // the definition does counts as near too.
-  const hereRow = info.subst.resolveRow(h.row);
-  const groupEffs = hereRow.tail === null ? [] : groupTypes.flatMap((t) => { const r = info.subst.resolve(t); return r.t === "fn" ? info.subst.resolveRow(r.eff).effs : []; });
+  const hereRow = subst.resolveRow(h.row);
+  const groupEffs = hereRow.tail === null ? [] : groupTypes.flatMap((t) => { const r = subst.resolve(t); return r.t === "fn" ? subst.resolveRow(r.eff).effs : []; });
   const near = new Set([...hereRow.effs, ...groupEffs]);
-  const expected = info.subst.resolve(h.expected);
-  const underChoice = near.has(CHOICE) || (expected.t === "fn" && info.subst.resolveRow(expected.eff).effs.includes(CHOICE));
+  const expected = subst.resolve(h.expected);
+  const underChoice = near.has(CHOICE) || (expected.t === "fn" && subst.resolveRow(expected.eff).effs.includes(CHOICE));
   const mixes = (effs: Id[]) => effs.some((e) => (e === CHOICE ? [...near].some((x) => WORLD.includes(x)) : WORLD.includes(e) && underChoice));
   const consider = (target: Id, t: Type, risky: boolean | "field" = false) => {
-    const ft = info.subst.resolve(t);
-    const effs = ft.t === "fn" ? info.subst.resolveRow(ft.eff).effs : [];
+    const ft = subst.resolve(t);
+    const effs = ft.t === "fn" ? subst.resolveRow(ft.eff).effs : [];
     const mix = mixes(effs) ? [...effs].sort().join(",") : undefined;
     // A caller sees the group's Choice dropped where the inputs answer
     // each builtin that brings it (L125b, signs.ts totalCall), which
@@ -3391,7 +3400,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
     const asRef = fits(t, false);
     const ref: Filling = { kind: "ref", target, type: t };
     if (asRef && safe(asRef, ref, risky, mix, brings)) out.push(ref);
-    const r = info.subst.resolve(t);
+    const r = subst.resolve(t);
     const asCall = r.t === "fn" ? fits(t, true) : null;
     const call: Filling = { kind: "call", target, arity: r.t === "fn" ? r.params.length : 0, type: t };
     if (asCall && safe(asCall, call, risky, mix, brings)) out.push(call);
@@ -3400,9 +3409,9 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   // An input nothing has given a type yet can still be called: calling it
   // with n inputs is what says it's a function of n (before(□, □)).
   for (const b of h.scope) {
-    if (info.subst.resolve(b.type).t !== "var") continue;
+    if (subst.resolve(b.type).t !== "var") continue;
     for (const arity of [1, 2, 3]) {
-      const s = info.subst.trial();
+      const s = subst.trial();
       const t: Type = { t: "fn", params: Array.from({ length: arity }, () => s.fresh()), ret: s.fresh(), eff: s.freshRow() };
       try { s.unify(b.type, t); s.unify(h.expected, t.ret); s.unifyRow(t.eff, h.row); } catch (e) { if (e instanceof TypeError) continue; throw e; }
       const call: Filling = { kind: "call", target: b.id, arity, type: s.zonk(t) };
@@ -3415,7 +3424,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   for (const [d, sc] of info.schemes) {
     if (info.hidden.has(d)) continue;
     if (h.group.includes(d)) consider(d, sc.type, true);
-    else consider(d, mayDoNow(code, sc, info.subst), affected.has(d));
+    else consider(d, mayDoNow(code, sc, subst), affected.has(d));
     if (++tried % PIECE === 0) yield;
   }
   // One + for every number type (NUMBERS.md, "One `+`"): the palette
@@ -3427,7 +3436,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
     const v = call && code.nodes[call.fn]?.kind === "ref" ? code.nodes[(code.nodes[call.fn] as NodeOf<"ref">).target] : null;
     return v?.kind === "variant" && waysIn(code).has(v.fields[call!.args.indexOf(hole)]);
   };
-  for (const [id, sig] of Object.entries(SIGS)) if (!PER_TYPE.has(id) && (id !== S.byItsWays || wayField())) { consider(id, sig(info.subst)); if (++tried % PIECE === 0) yield; }
+  for (const [id, sig] of Object.entries(SIGS)) if (!PER_TYPE.has(id) && (id !== S.byItsWays || wayField())) { consider(id, sig(subst)); if (++tried % PIECE === 0) yield; }
   // A private constructor only where the checker would take it.
   const insiders = info.options?.insiders ? new Set(info.options.insiders) : null;
   const outside = !!insiders && !h.group.every((d) => insiders.has(d));
@@ -3438,25 +3447,25 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
     // An interface's constructor makes an implementation, so it's offered
     // only as a definition's whole body: elsewhere an operation of the same
     // name (Twice's twice) is what's meant (BACKLOG E141).
-    if (n.kind === "variant") { if (!(n.private && outside && (!library || library.has(def))) && (atTop || !isInterface(code, def))) consider(part, constructorType(code, info.subst, def, part)); }
+    if (n.kind === "variant") { if (!(n.private && outside && (!library || library.has(def))) && (atTop || !isInterface(code, def))) consider(part, constructorType(code, subst, def, part)); }
     // A field of a one-case type reads it from a value: fst(p), pages(c).
     // An interface's operation is checked whole: what its type ends up
     // as decides whether there is an implementation.
     // Arithmetic's and Ordered's operations are offered as the one + − · <.
     else if (code.nodes[part].kind === "field" && (def === "std.arithmetic" || def === "std.ordered")) continue;
-    else if (code.nodes[part].kind === "field") { const t = fieldType(code, info.subst, def, part); if (t) consider(part, t, isInterface(code, def) && "field"); }
+    else if (code.nodes[part].kind === "field") { const t = fieldType(code, subst, def, part); if (t) consider(part, t, isInterface(code, def) && "field"); }
     if (++tried % PIECE === 0) yield;
   }
   const lit = (of: "number" | "text" | "int", t: Type) => { const f: Filling = { kind: "lit", of }; const s = fits(t, false); if (s && safe(s, f, false)) out.push(f); };
   lit("number", num);
   lit("text", str);
   lit("int", { t: "con", id: INT, args: [] });
-  const ex = info.subst.resolve(h.expected);
-  if (ex.t === "fn") out.push({ kind: "lambda", arity: ex.params.length, params: ex.params.map((t) => info.subst.zonk(t)) });
+  const ex = subst.resolve(h.expected);
+  if (ex.t === "fn") out.push({ kind: "lambda", arity: ex.params.length, params: ex.params.map((t) => subst.zonk(t)) });
   // Where any type goes (a new value, say), a function is one too: of one
   // input or two, so a local helper can be started there (BACKLOG E128).
   else if (ex.t === "var") for (const arity of [1, 2]) {
-    const s = info.subst.trial();
+    const s = subst.trial();
     const t: Type = { t: "fn", params: Array.from({ length: arity }, () => s.fresh()), ret: s.fresh(), eff: s.freshRow() };
     try { s.unify(h.expected, t); } catch (e) { if (e instanceof TypeError) continue; throw e; }
     const f: Filling = { kind: "lambda", arity };
@@ -3477,7 +3486,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   const STD_SPLIT = ["std.bool", "std.list", "std.tuple2", "std.optional"];
   const splittable = dataTypes.filter((t) => !t.startsWith("std.") || STD_SPLIT.includes(t));
   for (const b of h.scope) {
-    const bt = info.subst.resolve(b.type);
+    const bt = subst.resolve(b.type);
     if (bt.t === "con" && dataTypes.includes(bt.id)) {
       // Splitting an input of a definition with results can end its
       // computed-forward direction, so there it is checked as well.
@@ -3493,7 +3502,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
       // the definition's own input (a step from one state to the next):
       // not every field of every record in scope wherever anything goes.
       const input = h.group.some((d) => { const l = code.nodes[(code.nodes[d] as NodeOf<"def"> | undefined)?.body ?? ""]; return l?.kind === "lambda" && l.params.includes(b.id); });
-      const asIs = only && only.fields.length > 1 && (input || info.subst.resolve(h.expected).t === "con") ? fits(b.type, false) : null;
+      const asIs = only && only.fields.length > 1 && (input || subst.resolve(h.expected).t === "con") ? fits(b.type, false) : null;
       if (asIs) for (const field of only!.fields) {
         const f: Filling = { kind: "set", on: b.id, field, type: bt.id };
         if (safe(asIs, f, false)) out.push(f);
@@ -3507,7 +3516,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
       // a variable down.
       for (const type of splittable) {
         const td = code.nodes[(code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">;
-        const s = info.subst.trial();
+        const s = subst.trial();
         try { s.unify(bt, { t: "con", id: type, args: td.params.map(() => s.fresh()) }); } catch (e) { if (e instanceof TypeError) continue; throw e; }
         for (const kind of recursiveType(code, type) ? ["match", "fold"] as const : ["match"] as const) {
           const f: Filling = { kind, on: b.id, type };
@@ -3516,7 +3525,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
       }
       // Or by its values, as a Text or an Int (E225).
       for (const type of [STRING, INT]) {
-        const s = info.subst.trial();
+        const s = subst.trial();
         try { s.unify(bt, { t: "con", id: type, args: [] }); } catch (e) { if (e instanceof TypeError) continue; throw e; }
         const f: Filling = { kind: "values", on: b.id, type };
         if (safe(s, f, false)) out.push(f);
@@ -3529,7 +3538,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   for (const type of splittable) {
     for (const kind of recursiveType(code, type) ? ["match", "fold"] as const : ["match"] as const) {
       const f: Filling = { kind, on: null, type };
-      if (safe(info.subst, f, false)) out.push(f);
+      if (safe(subst, f, false)) out.push(f);
     }
   }
   // A handler: a match on a computation still to be given, one case per
@@ -3537,10 +3546,15 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   for (const type of new Set(info.owner.values())) {
     if (!(code.nodes[(code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">).effect || info.hidden.has(type)) continue;
     const f: Filling = { kind: "match", on: null, type };
-    if (safe(info.subst, f, false)) out.push(f);
+    if (safe(subst, f, false)) out.push(f);
   }
+  for (const f of out) madeIn.set(f, subst);
   return out;
 }
+// The substitution a filling's type was made in (fillingSteps' trial of
+// the check's): what its variables stand for, a number type for add's a.
+const madeIn = new WeakMap<Filling, Subst>();
+export const fillingSubst = (info: Info, f: Filling): Subst => madeIn.get(f) ?? info.subst;
 
 // A type with a case that holds the type itself: a fold has something to fold.
 function recursiveType(code: Code, type: Id): boolean {

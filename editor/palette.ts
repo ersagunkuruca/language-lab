@@ -58,15 +58,16 @@ export function palette(host: PaletteHost) {
   function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, string] {
     const nm = (id: Id) => names[id] ?? id;
     switch (f.kind) {
-      case "ref": return lazily(nm(f.target), () => typeName(info, f.type, names), node(f.target)?.kind === "binder" ? "in scope" : node(f.target)?.kind === "variant" ? "constructors" : info.subst.resolve(f.type).t === "fn" ? "functions, not called" : "definitions");
+      // Its type's variables are the palette's search's (T.fillingSubst).
+      case "ref": return lazily(nm(f.target), () => showIn(f.type, names, T.fillingSubst(info, f)), node(f.target)?.kind === "binder" ? "in scope" : node(f.target)?.kind === "variant" ? "constructors" : T.fillingSubst(info, f).resolve(f.type).t === "fn" ? "functions, not called" : "definitions");
       case "call": {
         // An input nothing has typed yet, offered called with 1, 2 or 3
         // inputs: say so, or the rows read as three library functions
         // (I235: celsius(□), celsius(□, □), celsius(□, □, □)).
-        const open = node(f.target)?.kind === "binder" && info.subst.resolve(info.typeOf.get(f.target) ?? f.type).t === "var";
+        const open = node(f.target)?.kind === "binder" && T.fillingSubst(info, f).resolve(info.typeOf.get(f.target) ?? f.type).t === "var";
         const label = `${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`;
         if (open) return [label, `${nm(f.target)} called with ${f.arity === 1 ? "one input" : `${f.arity} inputs`}: nothing says yet what ${nm(f.target)} is, and this makes it a function`, "calls"];
-        return lazily(label, () => typeName(info, f.type, names), "calls");
+        return lazily(label, () => showIn(f.type, names, T.fillingSubst(info, f)), "calls");
       }
       case "lit": return [f.of === "number" ? "a number" : f.of === "int" ? "an integer" : "a text", f.of === "number" ? "Float64" : f.of === "int" ? "Int" : "Text", "literals"];
       case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function you write here", "new function"];
@@ -225,10 +226,10 @@ export function palette(host: PaletteHost) {
     const seen = new Map<string, number>();
     for (const { l } of all) seen.set(l[0], (seen.get(l[0]) ?? 0) + 1);
     for (const x of all) {
-      const t = x.f.kind === "call" ? info.subst.resolve(x.f.type) : null;
+      const t = x.f.kind === "call" ? T.fillingSubst(info, x.f).resolve(x.f.type) : null;
       if (seen.get(x.l[0])! > 1 && x.f.kind === "call" && t?.t === "fn" && t.params.length) {
-        const target = x.f.target;
-        x.l = renamed(x.l, () => `${names[target] ?? target}(${t.params.map((p) => `□: ${typeName(info, p, names)}`).join(", ")})`);
+        const target = x.f.target, sub = T.fillingSubst(info, x.f);
+        x.l = renamed(x.l, () => `${names[target] ?? target}(${t.params.map((p) => `□: ${showIn(p, names, sub)}`).join(", ")})`);
       }
     }
     // A definition of the program's own named like the library's (values
