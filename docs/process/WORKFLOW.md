@@ -170,6 +170,13 @@ of text; they were these cells logging every finished row).
     per item) over every benchmark and target it touches, not at one site
     of one benchmark. It passes at 10% on one benchmark, or at about 3%
     geometric mean over the benchmarks it touches.
+  - **Where the work has a goal, judge a batch against the goal** (Ersagun
+    2026-11-25). For a goal written down (0.5 s a compile, a key in 16 ms,
+    a ratio to the ideal), a lane may take steps under 10% while each
+    batch of three PRs buys 10% together and the goal is still in reach;
+    it stops when a batch doesn't. A flat profile, many parts each under
+    10%, is not a stop by itself (stage 4: machine's recompile 820 to 450
+    ms in seven PRs, five of them under 10%).
 - The PR body says which item: `Backlog: E3`. The same PR moves the row to
   the table of the lane that did it in [DONE.md](DONE.md) (its own table,
   at the top, whatever the row's letter, so two lanes never edit the same
