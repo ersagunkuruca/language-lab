@@ -61,7 +61,7 @@ import { BASE, C_TAKEN, cName, POSIX, reservedNames, RT_C, runtimeC, WORLD_H, ty
 // The `lab_` names c.ts's own runtime text defines (the thread pool, the
 // shared counts, stops, fdlibm's maths), kept from a program's definitions
 // (I214). c-rt.ts's are found in its text (reservedNames).
-export const C_RUNTIME = ["_hd", "_hd_cap", "_hd_n", "_held", "_hold", "_holds", "_hs", "_hs_cap", "_hs_n", "_hseen", "_int_hold", "mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "dclosure", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_always", "par_items", "par_runs", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stack", "stack_below", "stack_copy", "stack_done", "stack_new", "stack_push", "stack_spare", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
+export const C_RUNTIME = ["_hd", "_hd_cap", "_hd_n", "_held", "_hold", "_holds", "_hs", "_hs_cap", "_hs_n", "_hseen", "_int_hold", "mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "dclosure", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "framed", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_always", "par_items", "par_runs", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stack", "stack_below", "stack_copy", "stack_done", "stack_new", "stack_push", "stack_spare", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
 // The prefixes this file puts a number after (lab_m3), or with true any
 // name (lab_print_ and a type's), which a program's own names must not
 // start with either (c-names.test.ts checks both lists against this file).
@@ -73,6 +73,7 @@ const UOPS: Partial<Record<Op, string>> = { uadd: "+", usub: "-", umul: "*", uan
 const U64OPS: Partial<Record<Op, string>> = { u64add: "+", u64sub: "-", u64mul: "*", u64and: "&", u64or: "|", u64xor: "^" };
 import { SITES, STOPS } from "./stops.ts";
 import { fails, isFloat32, keyList, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, poolHeld, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { frames } from "./frames.ts";
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
 // shifts signed ints past their top bit (pow's test for an odd exponent).
@@ -240,7 +241,16 @@ static void *lab_new(size_t size, uint16_t type, uint8_t tag) {
   lab_live++;
   return c;
 }
+// A cell in its maker's frame (C327e, frames.ts): counted as any other,
+// so its fields go at its last drop, but its memory is the frame's.
+#define LAB_FRAMED 255
+static inline lab_cell *lab_framed(void *m, uint16_t type) {
+  lab_cell *c = (lab_cell *)m;
+  c->rc = 1; c->type = type; c->tag = 0; c->size = LAB_FRAMED;
+  return c;
+}
 static inline void lab_free(lab_cell *c) {
+  if (c->size == LAB_FRAMED) return;
   lab_live--;
 #if LAB_SIZES
   uint8_t k = c->size;
@@ -1139,6 +1149,9 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // into a branch is then a round of a loop, and a call of something
   // with one answer or none passes its status on as it is.
   for (const i of kept) funcs[i].body = tailLets(funcs[i].body);
+  // Closures that never leave the function making them live in its frame
+  // (C327e, frames.ts), read once the bodies are as they'll be printed.
+  const inFrame = process.env.NO_FRAMES ? new Set<SExpr>() : frames(funcs).closures;
   // Inputs lent, not given (C94, Perceus's borrowed parameters): a record
   // or cell input the body only reads fields of, or lends on in turn, is
   // neither dup'd by the caller nor dropped by the callee. Such a function
@@ -3001,7 +3014,9 @@ int main(int argc, char **argv) {
           const s = shapes[e.shape], n = shapeName.get(e.shape)!;
           const xs = args(e.caps, pre, d, after);
           const v = temp(s.t);
-          pre.push(`${d}${v} = lab_new(sizeof(${n}), ${tnum.get(`shape ${e.shape}`)}, 0);`, `${d}((${n} *)${v})->code = (void (*)(void))${names.get(e.fn)};`, ...(derived.has(s.t.key) ? [`${d}((${n} *)${v})->d = ${e.d !== undefined ? `(void (*)(void))${names.get(e.d)}` : "0"};`] : []), ...xs.map((x, k) => `${d}((${n} *)${v})->c${k} = ${x};`));
+          const room = inFrame.has(e) ? `fr${temps++}` : null;
+          if (room) decls.push(`  ${n} ${room};`);
+          pre.push(room ? `${d}${v} = lab_framed(&${room}, ${tnum.get(`shape ${e.shape}`)});` : `${d}${v} = lab_new(sizeof(${n}), ${tnum.get(`shape ${e.shape}`)}, 0);`, `${d}((${n} *)${v})->code = (void (*)(void))${names.get(e.fn)};`, ...(derived.has(s.t.key) ? [`${d}((${n} *)${v})->d = ${e.d !== undefined ? `(void (*)(void))${names.get(e.d)}` : "0"};`] : []), ...xs.map((x, k) => `${d}((${n} *)${v})->c${k} = ${x};`));
           return v;
         }
         case "cap": return borrow({ k: "local", i: 0 }, shapes[e.shape].caps[e.i], (r) => `((${shapeName.get(e.shape)} *)${r})->c${e.i}`, pre, d, after);

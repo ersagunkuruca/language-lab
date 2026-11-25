@@ -570,3 +570,42 @@ al., "Continuing WebAssembly with effect handlers" (OOPSLA 2023);
 Friedman and Wise on TRMC (1975); Go's slices; Swift's non-escaping
 closures; Boost.Context's stack switch. All listed in
 docs/language/CREDITS.md.
+
+## C327b and C327e, closures in their frame on C (2026-11-25)
+
+`compiler/src/frames.ts` is the first part of the analysis (C327b). It
+reads each value's lifetime on the lowered IR. A value leaves its frame
+when it is the answer, goes into a record, case, list, closure or box,
+goes to the runtime, the world or an abort, or goes to a function or
+closure code whose parameter in that place leaves. Each parameter is
+summed up once, to a fixpoint over the calls. Two more cases count as
+leaving: a value handed to the next turn of its maker's loop (its calls
+of itself made last), and anything the analysis doesn't read (handlers,
+searches, budgets). Maps on the threads (parC) are read as staying,
+since they apply their function only while they run and wait for their
+threads.
+
+Its first reader (C327e) is C. A closure that never leaves has its cell
+in its maker's frame (`lab_framed`, size class 255), and it is counted
+like any other. Its captures go at its last drop, and `lab_free` leaves
+its memory alone. Cells made, one thread, outputs the same, times the
+best of five:
+
+| program | closures made before | in the frame now | cells made | time |
+|---|---|---|---|---|
+| bazaar 10,000 | 45 k | all | 808 k → 763 k (−6%) | 21 → 20 ms |
+| mini 2,000 | 908 k | all | 4.98 M → 4.07 M (−18%) | 80 → 79 ms |
+| pack 3,200 | 23 k | all | 327 k → 304 k (−7%) | 12 → 12 ms |
+| scan 800 | 3.02 M | all | 13.0 M → 10.0 M (−23%) | 430 → 412 ms |
+| strings 8 | 1.48 M | all | 33.0 M → 31.5 M (−4%) | 595 → 570 ms |
+| typeset 200 at 300 | 679 k | all but 14 k (`hyphen points`) | 5.40 M → 4.73 M (−12%) | 124 → 123 ms |
+| flock 5,000 × 30 | 425 k | all | 3.22 M → 2.79 M (−13%) | 307 → 303 ms |
+
+As C327a found for fold frames, the time hardly moves: the free lists
+hand back warm cells. On the pool, flock prints the same. Under
+AddressSanitizer, flock, scan and mini show no errors, and their leaks
+are what they were before (the runtime's own buffers). `NO_FRAMES=1`
+turns it off.
+
+Next are C327f (one holder decided per value, which C334 waits on) and
+C327g (WebAssembly's frame-local records as locals).
