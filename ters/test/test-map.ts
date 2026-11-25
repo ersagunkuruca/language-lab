@@ -34,6 +34,10 @@ export interface Entry {
   streak?: number;
   // Wall seconds, run alone.
   seconds: number;
+  // Its wall seconds the last time it passed with every sweep in full
+  // (SWEEP=all, the nightly's): a run after a merge checks a slice, so its
+  // seconds say nothing of how long the whole sweep takes.
+  full?: number;
   // Source file -> the lines it ran, as "a-b,c,d-e" (1-based).
   code: Record<string, string>;
   // Data files read, folders listed, and files or folders copied whole
@@ -126,6 +130,12 @@ export const LIMIT_SECONDS = 480;
 // sound ones (c-threads, 293 s the run before; core-js) pass 480 s on 11-23.
 export const LONGEST_SECONDS = 720;
 export const limitFor = (lastSeconds?: number): number => Math.min(LONGEST_SECONDS, Math.max(LIMIT_SECONDS, Math.ceil(2 * (lastSeconds ?? 0))));
+// With every sweep in full, twice the file's last full run, with no cap of
+// 12 minutes: core-js.test sweeps every example, 24 minutes on a runner
+// (nightly-times.json), and is stopped only when it takes twice that. A
+// share's job has 45 minutes (nightly.yml).
+export const LONGEST_FULL_SECONDS = 40 * 60;
+export const fullLimitFor = (lastFull?: number): number => Math.min(LONGEST_FULL_SECONDS, Math.max(LIMIT_SECONDS, Math.ceil(2 * (lastFull ?? 0))));
 
 // Runs one test file (a path from the top) in its package with coverage and
 // the reads recorder on, and gives its entry, with what the run printed
@@ -161,7 +171,8 @@ export function recordOne(top: string, test: string, at: string, env: NodeJS.Pro
       clearTimeout(limit);
       if (late) output += `\nstopped: still running after ${limitSeconds} s\n`;
       const seconds = Math.round((Date.now() - start) / 100) / 10;
-      const entry: Entry = { at, ran: new Date(start).toISOString(), passed: status === 0 && !late, seconds, ...readRecording(top, covDir, reads) };
+      const passed = status === 0 && !late;
+      const entry: Entry = { at, ran: new Date(start).toISOString(), passed, seconds, ...(passed && env.SWEEP === "all" ? { full: seconds } : {}), ...readRecording(top, covDir, reads) };
       rmSync(scratch, { recursive: true, force: true });
       done({ entry, output });
     });

@@ -388,7 +388,10 @@ export function resolvedFor(code: Code, info: Info, names: Names | undefined): {
     // (one pass back for all its fields, as compiled: pullback.ts).
     const overOther = (call: Id) => { const o = gradientOver(code, info, call); return !!o && (o.of === ARRAY || o.of === TENSOR ? !!o.item && o.item !== NUMBER : o.of !== NUMBER); };
     const grads = asksGradient(code) ? expandArrayGradients(code, names ?? {}, info, overOther) : { code, names: names ?? {}, expanded: [] };
-    const [from, check] = grads.expanded.length ? [grads.code, infer(grads.code, grads.names, undefined, info.options)] : [code, info];
+    // The check again holds no pins: the code here may be resolved already
+    // (lowered, its generic < written at Float64 as its one use needs),
+    // which the library's pins, of the definitions as written, refuse.
+    const [from, check] = grads.expanded.length ? [grads.code, infer(grads.code, grads.names, undefined, { ...info.options, pins: undefined })] : [code, info];
     const { code: c, info: i } = resolveArithmetic(from, check, grads.names);
     byInfo.set(info, (r = { code: c, info: i }));
     resolvedAlready(c, i);
