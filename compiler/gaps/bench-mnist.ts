@@ -1,7 +1,10 @@
 // The tables in GAPS.md round 22: `node compiler/gaps/bench-mnist.ts
 // [adam:1000:1 newton:1000:3 …]`, each run a mode, how many training
 // digits and how many passes (default: Adam over 1000, 10000 and 60000
-// digits once, Newton over 1000 digits three times and 10000 once).
+// digits once, Adam with the gradient from `gradient` (reverse, L285 R4)
+// over 1000 and 10000, Newton over 1000 digits three times and 10000
+// once). For reverse the ideal is the hand-written pass, and NumPy and
+// PyTorch aren't run.
 // The core IR's module and the hand-written ideal run in this process,
 // timed once after the files are read; `ters native`, `ters wasi`, NumPy
 // and PyTorch (Float64 and Float32, on the CPU) run as processes, with
@@ -14,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cut, folder, ways } from "./mnist.ts";
 
-const runs = (process.argv.slice(2).length ? process.argv.slice(2) : ["adam:1000:1", "adam:10000:1", "adam:60000:1", "newton:1000:3", "newton:10000:1"]).map((s) => s.split(":"));
+const runs = (process.argv.slice(2).length ? process.argv.slice(2) : ["adam:1000:1", "adam:10000:1", "adam:60000:1", "reverse:1000:1", "reverse:10000:1", "newton:1000:3", "newton:10000:1"]).map((s) => s.split(":"));
 const skip = new Set((process.env.SKIP ?? "").split(",").filter(Boolean));
 const w = await ways();
 const dir = mkdtempSync(join(tmpdir(), "bench-mnist-")), lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), py = join(import.meta.dirname, "mnist-python");
@@ -39,7 +42,7 @@ for (const [mode, n, of] of runs) {
     line(what, "core IR", performance.now() - t, idealMs, JSON.stringify(r) === JSON.stringify(want));
   }
   const proc = (way: string, cmd: string, as: string[], cwd = data.dir) => {
-    if (skip.has(way.split(" ")[0])) return;
+    if (skip.has(way.split(" ")[0]) || (mode === "reverse" && cmd === "python3")) return;
     const t = performance.now(), r = spawnSync(cmd, as, { cwd, encoding: "utf8", maxBuffer: 1 << 24 });
     const ms = performance.now() - t, own = /(\d+) ms\s*$/.exec(r.stderr ?? "");
     line(what, way, ms, idealMs, r.stdout === wantText, own ? `  (${own[1]} ms after imports)` : r.status ? `  (exit ${r.status}: ${(r.stderr ?? "").trim().split("\n")[0].slice(0, 80)})` : "");

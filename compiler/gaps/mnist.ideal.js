@@ -207,8 +207,8 @@ const fixed = (x, places) => {
 
 export function mnist(args, io) {
   const mode = args[1] ?? "adam", n0 = Number(args[2] ?? "1000"), of = Number(args[3] ?? "1");
-  if (!args.length || (mode !== "adam" && mode !== "newton") || !(n0 >= 100) || !(of >= 1)) {
-    io.printError("usage: mnist <folder> [adam|newton] [training digits, at least 100] [passes]");
+  if (!args.length || (mode !== "adam" && mode !== "reverse" && mode !== "newton") || !(n0 >= 100) || !(of >= 1)) {
+    io.printError("usage: mnist <folder> [adam|reverse|newton] [training digits, at least 100] [passes]");
     return 2;
   }
   try {
@@ -225,6 +225,8 @@ export function mnist(args, io) {
       }
       p = s.p;
     } else {
+      // reverse: Adam with its gradient from `gradient`, in the program;
+      // here the hand-written pass is the ideal of both.
       const s = { p: startingWeights(20261123), m: new Float64Array(P), v: new Float64Array(P), b1t: 1, b2t: 1 };
       for (let k = 1; k <= of; k++) io.print(`epoch ${k}: loss ${fixed(adamEpoch(s, train, n) / Math.floor(n / 100), 4)}`);
       p = s.p;

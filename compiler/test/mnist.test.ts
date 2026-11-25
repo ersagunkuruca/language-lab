@@ -1,7 +1,8 @@
 // mnist (compiler/gaps/mnist), GAPS.md round 22's program: a 784-32-10
 // network learning digits by Adam, or by damped Newton steps whose
 // Hessian-vector products come from running the backward pass on dual
-// numbers. The core IR's module and the hand-written ideal (whose
+// numbers, or by Adam with its gradient from `gradient` (reverse, L285
+// R4) where the ideal's is hand-written. The core IR's module and the hand-written ideal (whose
 // Hessian times a vector is the R-operator written out) must print the
 // same and exit the same way, and so must `ters native` and `ters wasi`.
 // Made-up digits (mnist.ts `madeUp`), so the test needs no download.
@@ -30,13 +31,18 @@ test("mnist: Adam over made-up digits, from the core IR and the ideal", () => {
   assert.match(r.out[3], /^test: \d+ of 100 right/);
 });
 
+test("mnist: Adam with gradient's gradient prints what the hand-written one does (L285 R4)", () => {
+  const files = madeUp(200, 100), r = same(["d", "reverse", "200", "2"], files);
+  assert.deepEqual(r.out.slice(1), w.ideal(["d", "adam", "200", "2"], files).out.slice(1));
+});
+
 test("mnist: a Newton step from dual numbers gives the R-operator's step", () => {
   const r = same(["d", "newton", "100", "1"], madeUp(100, 100));
   assert.equal(r.out[1], "epoch 1: loss 2.2962, damping 0.6667");
 });
 
 test("mnist: usage and files that aren't MNIST's", () => {
-  const usage = ["usage: mnist <folder> [adam|newton] [training digits, at least 100] [passes]"];
+  const usage = ["usage: mnist <folder> [adam|reverse|newton] [training digits, at least 100] [passes]"];
   for (const args of [[], ["d", "sgd"], ["d", "adam", "50"], ["d", "adam", "100", "0"]]) assert.deepEqual(same(args, {}), { out: [], err: usage, code: 2 });
   assert.deepEqual(same(["nope"], {}).err, ["mnist: no such file or folder: nope/train-images-idx3-ubyte"]);
   const files = madeUp(100, 100);
@@ -63,4 +69,5 @@ test("mnist through ters wasi and ters native prints what the ideal prints", asy
   const built = spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "p")], { encoding: "utf8" });
   assert.equal(built.status, 0, built.stderr);
   assert.equal(spawnSync(join(dir, "p"), ["d", "adam", "200", "1"], { cwd: dir, encoding: "utf8" }).stdout, want, "ters native");
+  assert.equal(spawnSync(join(dir, "p"), ["d", "reverse", "200", "1"], { cwd: dir, encoding: "utf8" }).stdout, want.replace("tanh, adam", "tanh, reverse"), "ters native, reverse");
 });
