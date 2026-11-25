@@ -51,6 +51,7 @@ import { norm } from "../../ters/src/lang/int.ts";
 import { FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import { hostLocale, hostZone, zoneOffset } from "../../ters/src/lang/text.ts";
 import type { HostOps } from "./core-rt.ts";
+import { leavesOf } from "./columns.ts";
 import { emptyArray, fails, isFloat32, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, mapLocals, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
@@ -339,14 +340,18 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // Arrays of records kept as columns (C60 w2, columns.ts): the buffer
   // holds, past its own fields, one array per field of the item (its
   // items left null), and an item is only read and written field by
-  // field. Fields of a plain type only: Float64, Int, Text, Bool.
-  const colArrays = new Map<number, MType[]>();
+  // field. Fields of a plain type only: Float64, Int, Text, Bool; a
+  // Float32's value an `(array (mut f32))` (colNarrow, C309), rounded as
+  // it is written and widened as it is read.
+  const colArrays = new Map<number, MType[]>(), colNarrow = new Map<number, boolean[]>();
   const colScan = (e: SExpr): void => {
     const m = e.k === "rt" ? COL_FN.exec(e.fn) : null;
     if (m && !colArrays.has(Number(m[4]))) {
       const a = lowered.arrays[Number(m[4])], r = a?.item;
-      if (!r || !isRecord(r) || r.fields.some((x) => !["f64", "int", "text", "i32"].includes(x.t as string))) throw new Error(`array ${m[4]} can't be kept as columns in WebAssembly`);
-      colArrays.set(a.index, (r as RType).fields.map((x) => x.t));
+      const leaves = r && isRecord(r) ? leavesOf(r, true) : [];
+      if (!leaves.length || leaves.some((l) => l.opt || !["f64", "int", "text", "i32"].includes(l.t as string))) throw new Error(`array ${m[4]} can't be kept as columns in WebAssembly`);
+      colArrays.set(a.index, leaves.map((l) => l.t));
+      colNarrow.set(a.index, leaves.map((l) => !!l.narrow));
     }
     if (e.k !== "rt" || !m) kids(e).forEach(colScan); else e.args.forEach(colScan);
   };
@@ -360,10 +365,11 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       "local.get $n", "call $int.clamped", "local.tee $m", "i64.const 0", "local.get $m", "i64.const 0", "i64.gt_s", "select", "i32.wrap_i64", "local.set $c",
       "ref.null $items", "i32.const 0", "local.get $c", "i32.const 0", ...ts.map((_, f) => `local.get $c\narray.new_default $col${f}`), "struct.new $buf", "i32.const 0", "local.get $c", "struct.new $arr"].join("\n") };
     if (m[1] === "length") return { ...base, params: [["a", "array"]], result: "int", locals: [], uses: ["int.of"], body: "local.get $a\nstruct.get $arr 2\ni64.extend_i32_s\ncall $int.of" };
-    if (m[2] !== undefined) { const f = Number(m[2]); return { ...base, params: [["a", "array"], ["k", "int"]], result: ts[f] as VT, locals: [["j", "i32"]], uses: ["int.clamped"], body: `${index}\n${at(f)}\narray.get $col${f}` }; }
+    const narrow = colNarrow.get(i)!;
+    if (m[2] !== undefined) { const f = Number(m[2]); return { ...base, params: [["a", "array"], ["k", "int"]], result: ts[f] as VT, locals: [["j", "i32"]], uses: ["int.clamped"], body: `${index}\n${at(f)}\narray.get $col${f}${narrow[f] ? "\nf64.promote_f32" : ""}` }; }
     const ks = m[3]!.split("_").map(Number);
     return { ...base, params: [["a", "array"], ["k", "int"], ...ks.map((f, x) => [`x${x}`, ts[f] as VT] as [string, VT])], result: "array", locals: [["j", "i32"]], uses: ["int.clamped"],
-      body: [index, ...ks.map((f, x) => `${at(f)}\nlocal.get $x${x}\narray.set $col${f}`), "local.get $a"].join("\n") };
+      body: [index, ...ks.map((f, x) => `${at(f)}\nlocal.get $x${x}${narrow[f] ? "\nf32.demote_f64" : ""}\narray.set $col${f}`), "local.get $a"].join("\n") };
   };
   // Arrays as versions (C285), as compiled JS keeps them (array-view.ts,
   // Baker's trick): a replace in an array whose buffer no other view
@@ -730,7 +736,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // `bytes`: Text's array.
   // `items`: an Array's items (C66), a mutable array of the item type;
   // a field with `ref` holds a (nullable) reference to that type.
-  const structs: { name: string; fields: { name: string; t: MType; code?: number; ref?: number; narrow?: true; mut?: true }[]; sup?: number; final: boolean; func?: FType; maker?: { self: FType; result: FType }; bytes?: true; i64s?: true; u32s?: true; refs?: true; mutable?: true; items?: MType }[] = [];
+  const structs: { name: string; fields: { name: string; t: MType; code?: number; ref?: number; narrow?: true; mut?: true }[]; sup?: number; final: boolean; func?: FType; maker?: { self: FType; result: FType }; bytes?: true; i64s?: true; u32s?: true; refs?: true; mutable?: true; items?: MType; narrowItems?: true }[] = [];
   if (texty) structs.push({ name: "bytes", fields: [], final: true, bytes: true });
   // A Text (I222): its bytes' array, where in it the text starts, its
   // size, its characters (-1 till counted), and the array's fill when it
@@ -799,7 +805,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const arrIndex = new Map<string, number>();
   for (const a of lowered.arrays) {
     // Its columns first, when it's kept so (colArrays): the buffer's fields past its own.
-    const cols = (colArrays.get(a.index) ?? []).map((t, f) => { recIndex.set(`col.${a.index}.${f}`, structs.length); structs.push({ name: `col${a.index}.${f}`, fields: [], final: true, items: t }); return { name: `c${f}`, t: "i32" as const, ref: structs.length - 1 }; });
+    const cols = (colArrays.get(a.index) ?? []).map((t, f) => { recIndex.set(`col.${a.index}.${f}`, structs.length); structs.push({ name: `col${a.index}.${f}`, fields: [], final: true, items: t, ...(colNarrow.get(a.index)![f] ? { narrowItems: true as const } : {}) }); return { name: `c${f}`, t: "i32" as const, ref: structs.length - 1 }; });
     const k = structs.length;
     structs.push({ name: `items${a.index}`, fields: [], final: true, items: a.item });
     // An Int array's buffer has its bytes too (L189f2b, wasm-rt.ts byteSlots).
@@ -1026,7 +1032,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (x.i64s) return [0x5e, 0x7e, 0x00];
     if (x.u32s) return [0x5e, 0x7f, 0x01];
     if (x.refs) return [0x5e, 0x6d, 0x01];
-    if (x.items) return [0x5e, ...typeOf(x.items), 0x01];
+    if (x.items) return [0x5e, ...(x.narrowItems ? [0x7d] : typeOf(x.items)), 0x01];
     if (x.func) return [0x60, ...vec([x.func, ...x.func.params].map(typeOf)), ...vec([typeOf(x.func.result), ...(x.func.partial ? [[0x7f]] : [])])];
     if (x.maker) return [0x60, ...vec([typeOf(x.maker.self)]), ...vec([typeOf(x.maker.result)])];
     const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : y.ref !== undefined ? [0x63, ...s(y.ref)] : y.narrow ? [0x7d] : typeOf(y.t)), x.mutable || y.mut ? 0x01 : 0x00]))];
@@ -1504,7 +1510,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       if (x.i64s) return "    (type $i64s (array i64))";
       if (x.u32s) return "    (type $u32s (array (mut i32)))";
       if (x.refs) return "    (type $hstack (array (mut eqref)))";
-      if (x.items) return `    (type $${x.name} (array (mut ${ty(x.items)})))`;
+      if (x.items) return `    (type $${x.name} (array (mut ${x.narrowItems ? "f32" : ty(x.items)})))`;
       if (x.func) return `    (type $${x.name} (func (param ${[x.func, ...x.func.params].map(ty).join(" ")}) (result ${ty(x.func.result)}${x.func.partial ? " i32" : ""})))`;
       if (x.maker) return `    (type $${x.name} (func (param ${ty(x.maker.self)}) (result ${ty(x.maker.result)})))`;
       const fty = (y: (typeof x.fields)[number]) => (y.ref !== undefined ? `(ref null ${sname(y.ref)})` : y.narrow ? "f32" : ty(y.t));

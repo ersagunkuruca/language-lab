@@ -177,7 +177,8 @@ const zeroOf = (t: LType): SExpr => (t === "f64" ? { k: "num", v: 0 } : t === "i
 
 // `plain`: only records of plain fields (Float64, Int, Text, Bool), the
 // columns WebAssembly keeps (wasm.ts colScan): there a record holding an
-// array or a record stays a row (pack's, read by position since G3a).
+// array or a record stays a row (pack's, read by position since G3a), but
+// a Float32 field is a column of binary32s (C309).
 // `grow` (JavaScript, G1b2): an array built by pushes in a loop from an
 // empty one (`keep`'s, kept-items.ts) is columns too, growing as it is
 // pushed onto; any empty array is columns with room to grow.
@@ -201,14 +202,17 @@ export function columns(ir: CoreIR, roots: number[], opts: { plain?: boolean; wh
     // record's leaves.
     const slots = opts.whole && opts.grow ? slotOf(r) : null;
     if (!slots && (!isRecord(r) || !r.fields.length)) continue;
-    if (opts.plain && isRecord(r) && r.fields.some((x) => !["f64", "int", "text", "i32"].includes(x.t as string))) continue;
-    if (stored(ir, a, r as RType | DType, roots, !!opts.whole, !!opts.grow, rtsOf(), live!)) { n++; rts = null; }
+    // A Float32 field too (C309): its value a column of binary32s.
+    if (opts.plain && isRecord(r) && r.fields.some((x) => !["f64", "int", "text", "i32"].includes(x.t as string) && !(isRecord(x.t) && isFloat32(x.t)))) continue;
+    if (stored(ir, a, r as RType | DType, roots, !!opts.whole, !!opts.grow, rtsOf(), live!, !!opts.whole || !!opts.plain)) { n++; rts = null; }
   }
   return n;
 }
 
-function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: boolean, grow: boolean, rts: Map<string, Set<number>>, live: Set<number>): boolean {
-  const leaves = isRecord(r) ? leavesOf(r, whole) : slotLeaves(r);
+// `deep`: a record in a field a column per leaf (whole, or plain, where
+// the only such field is a Float32's).
+function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: boolean, grow: boolean, rts: Map<string, Set<number>>, live: Set<number>, deep: boolean): boolean {
+  const leaves = isRecord(r) ? leavesOf(r, deep) : slotLeaves(r);
   const leafAt = (path: number[]) => leaves.findIndex((l) => l.path.length === path.length && l.path.every((x, k) => x === path[k]));
   const suffix = `.a${a.index}`;
   const ofA = (fn: string) => fn.endsWith(suffix) && /^array\./.test(fn);
@@ -388,7 +392,7 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
     // A get of a get … of an item: its path, or null.
     const pathOf = (e: SExpr): { p: { x: Local; j: Local }; path: number[] } | null => {
       if (e.k === "local" && at.has(e.i)) return { p: at.get(e.i)!, path: [] };
-      if (e.k === "get") { const q = pathOf(e.rec); return q && (whole || !q.path.length) ? { p: q.p, path: [...q.path, e.i] } : null; }
+      if (e.k === "get") { const q = pathOf(e.rec); return q && (deep || !q.path.length) ? { p: q.p, path: [...q.path, e.i] } : null; }
       return null;
     };
     const go = (e: SExpr): SExpr => {
