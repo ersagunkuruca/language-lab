@@ -120,10 +120,15 @@ export function inlineCalls(ir: CoreIR, divergent: (i: number) => boolean): numb
   let changed = 0;
   for (let round = 0; round < 8; round++) {
     const sites = new Map<number, number>();
-    const count = (e: SExpr) => { if (e.k === "call") sites.set(e.fn, (sites.get(e.fn) ?? 0) + 1); if (e.k === "closure") sites.set(e.fn, Infinity); kids(e).forEach(count); };
-    ir.funcs.forEach((f) => count(f.body));
+    // (And what each function calls: one calling nothing that can be put
+    // in place isn't walked again.)
+    const callees = ir.funcs.map(() => new Set<number>());
+    let at = 0;
+    const count = (e: SExpr) => { if (e.k === "call") { sites.set(e.fn, (sites.get(e.fn) ?? 0) + 1); callees[at].add(e.fn); } if (e.k === "closure") sites.set(e.fn, Infinity); kids(e).forEach(count); };
+    ir.funcs.forEach((f, i) => { at = i; count(f.body); });
     const before = changed;
     ir.funcs.forEach((f, fi) => {
+      if (![...callees[fi]].some((j) => j !== fi && can[j] && sites.get(j) === 1)) return;
       if (stops(f.body)) return;
       const put = (e: SExpr): SExpr => {
         const r = mapKids(e, put);
