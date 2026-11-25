@@ -89,6 +89,7 @@ which also has how they compound per benchmark.
 | L266 | machine | spread | 4.1 s over about twenty passes, none over 10% | BACKLOG |
 | stage 4 | machine recompile | spread | "lowering 650 ms flat, none 10%", stopped 11-24 | memory |
 | L266af | machine recompile | spread | after #3301 the steady 0.33 s over the IR passes, none 10%; their literal reads (Int ranges, kept arrays, keys) not replayable, so not built 11-25 | BACKLOG |
+| L266af | machine, greenhouse-page, sheet, mandelbrot-page recompile | caching | the bake's reads told by the evaluator (the literals it compiled or read, a derivative's code falling back to all), not every literal its candidates reach: 0% on all four (machine's 344 reads were the same either way; the edits the bench makes are ones the bake's runs read), not built 11-25 | BACKLOG |
 | L266u | machine | checks | the List choice's check carried, not made again: 0.13-0.16 s of a 4.1 s compile (3.5%), not built 11-25 | BACKLOG |
 
 ### Editor and tooling
