@@ -1,4 +1,5 @@
-// A loop's Ints kept untagged (BACKLOG C207e, on C). A function that calls
+// A loop's Ints kept untagged (BACKLOG C207e, on C), and a recursion's
+// (C333). A function that calls
 // itself last is a loop in C (`for (;;)`), and an Int it counts with is a
 // tagged lab_int: each step tests the tag, untags, checks the range and
 // tags again, and counts and drops what it keeps. Here such a function gets
@@ -33,14 +34,17 @@ export function untaggedLoops(ir: CoreIR, wasm = false): number {
   let made = 0;
   for (let i = 0; i < n0; i++) {
     const f = ir.funcs[i];
+    // Its calls of itself: last (a loop), or not (a recursion, C333:
+    // mnist's `dot back`, down a row and back up it, its indices counted
+    // the same way).
     const calls: (SExpr & { k: "call" })[] = [];
-    let other = false;
+    let other = false, cps = false;
     (function walk(e: SExpr) {
-      if (e.k === "call" && e.fn === i) { if (e.tail) calls.push(e); else other = true; }
+      if (e.k === "call" && e.fn === i) { calls.push(e); if (!e.tail) other = true; if (e.cps) cps = true; }
       kids(e).forEach(walk);
     })(f.body);
-    if (!calls.length || other) continue;
-    if (valueLoop(ir, i, wasm)) { made++; continue; }
+    if (!calls.length || cps || (other && envSet("NO_UNTAGGED_RECURSION"))) continue;
+    if (!other && valueLoop(ir, i, wasm)) { made++; continue; }
     // The counts: parameters, then the lets stepping one of them.
     let params = new Set(f.params.flatMap((t, j) => (t === "int" ? [j] : [])));
     let counts = new Set<number>();
@@ -72,7 +76,7 @@ export function untaggedLoops(ir: CoreIR, wasm = false): number {
       if (e.k === "rt" && COMPARE[e.fn] && e.args.length === 2 && e.args.some(isCount) && e.args.every((a) => isCount(a) || small(a))) return { k: "rt", fn: COMPARE[e.fn], args: e.args.map((a) => (isCount(a) ? a : { k: "rt", fn: "i64.lit", args: [a] })) };
       if (e.k === "rt" && e.fn === "int.toNumber" && isCount(e.args[0])) return { k: "rt", fn: "i64.toNumber", args: [e.args[0]] };
       if (e.k === "let" && counts.has(e.i) && e.value.k === "rt") return { ...e, value: { k: "rt", fn: e.value.fn === "int.add" ? "i64.add" : "i64.sub", args: e.value.args.map(raw) }, body: rw(e.body) };
-      if (e.k === "call" && e.fn === i && e.tail) return { ...e, fn: g, args: e.args.map((a, j) => (params.has(j) ? raw(a) : rw(a))) };
+      if (e.k === "call" && e.fn === i) return { ...e, fn: g, args: e.args.map((a, j) => (params.has(j) ? raw(a) : rw(a))) };
       return mapKids(e, rw);
     };
     const copy: SFunc = { ...f, name: `${f.name} counted`, inner: true, params: f.params.map((t, j) => (params.has(j) ? "i64" : t)), locals: f.locals.map((t, j) => (w.has(j) ? "i64" : t)), body: rw(f.body) };
