@@ -1516,25 +1516,48 @@ export function buildPrelude(): Module {
     { variant: CONS, names: ["first", "rest"], body: ([y, rest]) => k.call(S.and, k.call(S.not, k.call(contains, rest, y)), k.call(axesOnce, rest)) },
   ])));
   const once = (axes: Id) => k.call(axesOnce, axes);
-  // An index of `rank` axes: an axis paired at place q reads the summed
-  // index's q, the others the result index's, in order from `start`.
-  const indexFor = (r: Id, paired: Id, free: Id, start: Id, summed: Id, result: Id) => k.call(map, k.call(INT_OPS.range, r), k.fn(["axis"], (p) =>
-    k.let("place", k.call(placeOf, paired, p, k.int(0)), (q) => k.if(iLess(q, k.int(0)),
-      k.call(itemAt, result, iAdd(start, k.call(placeOf, free, p, k.int(0))), k.int(0)),
-      k.call(itemAt, summed, q, k.int(0))))));
   const firsts = (ps: Id) => k.call(map, ps, k.fn(["pair"], (pr) => entry(pr, (x) => x, ["a axis", "b axis"])));
   const seconds = (ps: Id) => k.call(map, ps, k.fn(["pair"], (pr) => entry(pr, (_x, y) => y, ["a axis", "b axis"])));
+  // Each axis's stride among the items, row-major: the lengths after it
+  // multiplied.
+  const stridesOf = k.def("strides of");
+  k.define(stridesOf, k.fn(["shape"], (sh) => k.match(sh, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["length", "rest"], body: ([, rest]) => k.call(CONS, k.call(shapeSize, rest), k.call(stridesOf, rest)) },
+  ])));
+  // An index's offset by the strides of its axes.
+  const strided = k.def("strided offset");
+  k.define(strided, k.fn(["index", "strides", "so far"], (ix, st, acc) => k.match(ix, [
+    { variant: CONS, names: ["position", "later"], body: ([i, later]) => k.match(st, [
+      { variant: CONS, names: ["stride", "rest"], body: ([sd, rest]) => k.call(strided, later, rest, iAdd(acc, iMul(i, sd))) },
+    ], acc) },
+  ], acc)));
+  // The sum over the summed indices from the last down (as tensor items
+  // added sums them, the first item outermost): item `a base` + its
+  // offset of the first's items times the second's, each read in an array
+  // (C302: an index list a product and `item at` on the items list a read
+  // took 10 s for a 10 × 784 by 784 × 32 contraction).
+  const contractionSum = k.def("contraction sum");
+  k.define(contractionSum, k.fn(["a items", "b items", "a offsets", "b offsets", "a base", "b base", "at", "so far"], (xa, xb, ka, kb, ba, bb, j, acc) =>
+    k.if(iLess(j, k.int(0)), acc,
+      k.call(contractionSum, xa, xb, ka, kb, ba, bb, k.call(INT_OPS.sub, j, k.int(1)), k.call(ARITH.add, k.call(ARITH.mul,
+        first(k.call(ARRAY_OPS.at, xa, iAdd(ba, first(k.call(ARRAY_OPS.at, ka, j), k.int(0)))), k.lit(0)),
+        first(k.call(ARRAY_OPS.at, xb, iAdd(bb, first(k.call(ARRAY_OPS.at, kb, j), k.int(0)))), k.lit(0))), acc)))));
   const contracted = def("contracted", ["first", "second", "pairs"], (a, b, ps) => tenOf(a, (sa, xs) => tenOf(b, (sb, ys) =>
     k.let("a axes", firsts(ps), (as) => k.let("b axes", seconds(ps), (bs) =>
       k.let("a rank", k.call(length, sa), (ra) => k.let("b rank", k.call(length, sb), (rb) =>
         k.if(k.call(S.and, k.call(S.and, axesInRange(as, ra), axesInRange(bs, rb)), k.call(S.and, k.call(S.and, once(as), once(bs)), k.equal(lengthsAt(sa, as), lengthsAt(sb, bs)))),
           k.let("a free", k.call(axesBut, k.call(INT_OPS.range, ra), as), (fa) => k.let("b free", k.call(axesBut, k.call(INT_OPS.range, rb), bs), (fb) =>
             k.let("shape", k.call(append, lengthsAt(sa, fa), lengthsAt(sb, fb)), (shape) => k.let("summed indices", k.call(indicesOf, lengthsAt(sa, as)), (sums) =>
-              k.let("b starts", k.call(length, fa), (bStart) => T(shape,
-              k.call(map, k.call(indicesOf, shape), k.fn(["at"], (rix) => k.call(tsum, k.call(map, sums, k.fn(["summed"], (kix) =>
-                k.call(ARITH.mul,
-                  itemFitting(sa, xs, indexFor(ra, as, fa, k.int(0), kix, rix)),
-                  itemFitting(sb, ys, indexFor(rb, bs, fb, bStart, kix, rix)))))))))))))),
+              k.let("b starts", k.call(length, fa), (bStart) => k.let("a strides", k.call(stridesOf, sa), (sta) => k.let("b strides", k.call(stridesOf, sb), (stb) =>
+              k.let("a offsets", k.call(ARRAY_OPS.of, k.call(map, sums, k.fn(["summed"], (kix) => k.call(strided, kix, lengthsAt(sta, as), k.int(0))))), (ka) =>
+              k.let("b offsets", k.call(ARRAY_OPS.of, k.call(map, sums, k.fn(["summed"], (kix) => k.call(strided, kix, lengthsAt(stb, bs), k.int(0))))), (kb) =>
+              k.let("a array", k.call(ARRAY_OPS.of, xs), (xa) => k.let("b array", k.call(ARRAY_OPS.of, ys), (xb) =>
+              k.let("last summed", k.call(INT_OPS.sub, k.call(length, sums), k.int(1)), (last) => T(shape,
+              k.call(map, k.call(indicesOf, shape), k.fn(["at"], (rix) => k.call(contractionSum, xa, xb, ka, kb,
+                k.call(strided, k.call(take, rix, bStart), lengthsAt(sta, fa), k.int(0)),
+                k.call(strided, k.call(drop, rix, bStart), lengthsAt(stb, fb), k.int(0)),
+                last, k.lit(0))))))))))))))))),
           k.call(ABORT_OP, texts(k.lit("contracted: the pairs don't fit a "), k.call(shapeText, sa), k.lit(" tensor and a "), k.call(shapeText, sb), k.lit(" one: each pair needs an axis of each, of the same length, each axis in one pair at most")))))))))));
   // Axis order[k] of the tensor becomes axis k.
   const transposedBy = def("transposed by", ["tensor", "order"], (t, order) => tenOf(t, (sa, xs) => k.let("rank", k.call(length, sa), (r) =>
