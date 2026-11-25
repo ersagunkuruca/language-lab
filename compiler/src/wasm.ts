@@ -482,7 +482,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     // is (a push in front), or where it did unless the buffer is a copy.
     if (op === "grown") return { name, params: [["vn", "i32"]], result: "i32", locals: [], uses: [], native: true, body: "local.get $vn\ni32.const 1\ni32.add" };
     if (op === "pushFrontStart") return { name, array, params: [["t", "buf"], ["vb", "buf"], ["vs", "i32"]], result: "i32", locals: [], uses: [], native: true, body: "local.get $t\nstruct.get $buf 1" };
-    if (op === "pushStart") return { name, array, params: [["t", "buf"], ["vb", "buf"], ["vs", "i32"]], result: "i32", locals: [], uses: [], native: true, body: "local.get $vs\nlocal.get $t\nstruct.get $buf 1\nlocal.get $t\nlocal.get $vb\nref.eq\nselect" };
+    if (op === "pushStart" || op === "pushOwnedStart") return { name, array, params: [["t", "buf"], ["vb", "buf"], ["vs", "i32"]], result: "i32", locals: [], uses: [], native: true, body: "local.get $vs\nlocal.get $t\nstruct.get $buf 1\nlocal.get $t\nlocal.get $vb\nref.eq\nselect" };
     const part = ["buf", "start", "count"].indexOf(op);
     if (part >= 0) return { name, array, params: [["a", "array"]], result: part ? "i32" : "buf", locals: [], uses: [], native: true, body: `local.get $a\nstruct.get $arr ${part}` };
     const g = rt0(name.replace(/^view\./, "array."));
@@ -490,7 +490,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       .replace(/local\.get \$a\b/g, "local.get $vb\nlocal.get $vs\nlocal.get $vn").replace(/call \$array\.(\w+)\.a(\d+)/g, "call $view.$1.a$2");
     if (g.params[0]?.[0] !== "a" || /\$v[bsn]\b/.test(g.body) || /\$a\b/.test(body)) throw new Error(`${name}: not a read of the view alone`);
     // A push gives its buffer alone (wasm-views.ts works out the rest).
-    if (op === "push" || op === "pushFront") return { ...g, name, params: [...three, ...g.params.slice(1)], result: "buf", body: body.replace(/struct\.new \$arr\b/g, "drop\ndrop"), uses: g.uses.map((x) => x.replace(/^array\.(\w+)\.a(\d+)/, "view.$1.a$2")) };
+    if (op === "push" || op === "pushOwned" || op === "pushFront") return { ...g, name, params: [...three, ...g.params.slice(1)], result: "buf", body: body.replace(/struct\.new \$arr\b/g, "drop\ndrop"), uses: g.uses.map((x) => x.replace(/^array\.(\w+)\.a(\d+)/, "view.$1.a$2")) };
     return { ...g, name, params: [...three, ...g.params.slice(1)], body, uses: g.uses.map((x) => x.replace(/^array\.(\w+)\.a(\d+)/, "view.$1.a$2")) };
   };
   // With TERS_COUNT_VIEWS (wasi), each view made is counted in memory at

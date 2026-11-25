@@ -26,7 +26,7 @@ export type ViewFunc = SFunc & { viewSlots?: number[]; viewEntry?: [number, SExp
 const READ = /^array\.(length|first|at|get)\.a(\d+)(\.i64)?$/;
 const REST = /^array\.rest\.a(\d+)$/;
 // A next round's view one item longer (a map's, built from the end).
-const FEED = /^array\.(pushFront|push)\.a(\d+)$/;
+const FEED = /^array\.(pushFront|push|pushOwned)\.a(\d+)$/;
 const simple = (e: SExpr) => ["local", "num", "int", "bool", "text"].includes(e.k);
 
 // A function that is one array function on its inputs (`array cons` is

@@ -67,6 +67,7 @@ const { deepLoops } = compiles ? await import("../../compiler/src/deep-loops.ts"
 const { ownedTables } = compiles ? await import("../../compiler/src/owned-tables.ts") : ({} as typeof import("../../compiler/src/owned-tables.ts"));
 const { itemReads } = compiles ? await import("../../compiler/src/item-reads.ts") : ({} as typeof import("../../compiler/src/item-reads.ts"));
 const { columns } = compiles ? await import("../../compiler/src/columns.ts") : ({} as typeof import("../../compiler/src/columns.ts"));
+const { ownPushes, ownedPerValue } = compiles ? await import("../../compiler/src/holders.ts") : ({} as typeof import("../../compiler/src/holders.ts"));
 const { checkedOnce } = compiles ? await import("../../compiler/src/checked-once.ts") : ({} as typeof import("../../compiler/src/checked-once.ts"));
 const { untaggedLoops, untaggedFunctions } = compiles ? await import("../../compiler/src/untagged-ints.ts") : ({} as typeof import("../../compiler/src/untagged-ints.ts"));
 const { earlyAnd } = compiles ? await import("../../compiler/src/early-and.ts") : ({} as typeof import("../../compiler/src/early-and.ts"));
@@ -376,8 +377,13 @@ function nativeLoweredNow(main: Id, wasm: boolean, page: boolean, from: Program)
     if (!process.env.NO_CONS_LOOPS) consLoops(lowered);
     if (!process.env.NO_DEEP_LOOPS) deepLoops(lowered);
     ownedArrays(lowered, q.code, q.info, q.names, root, true);
+    // And each other replace or push whose array has one holder, decided
+    // per value (holders.ts, C327f), as on JavaScript.
+    const roots = lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : []));
+    if (!process.env.NO_HOLDERS) ownedPerValue(lowered, roots);
     ownedRecords(lowered, q.code, q.info, q.names, root);
-    columns(lowered, lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : [])), { plain: true });
+    columns(lowered, roots, { plain: true });
+    ownPushes(lowered);
     intoAsSets(lowered);
     // A loop computing on Ints alone, with them as i64s (C207k).
     untaggedLoops(lowered, true);
