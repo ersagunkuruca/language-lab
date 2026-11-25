@@ -94,6 +94,10 @@ test("contracted over one pair is matrix product, the same as Matrix's; over non
   assert.equal(await both((k) => k.call(lib("tensor shape"), k.call(lib("contracted"), u(k), u(k), pairs(k)))), "[3, 3]");
   // The whole 2 × 3 tensor against itself on both axes: 1 + 4 + … + 36.
   assert.equal(await both((k, t) => items(k, k.call(lib("contracted"), t, t, pairs(k, [0, 0], [1, 1])))), "[91]");
+  // Axes paired across (C302, read by their strides): b's rows by t's
+  // columns, Σ b[k][i] t[j][k]; and t's columns against each other.
+  assert.equal(await both((k, t) => items(k, k.call(lib("contracted"), b(k), t, pairs(k, [0, 1])))), "[4, 10, 5, 11]");
+  assert.equal(await both((k, t) => items(k, k.call(lib("contracted"), t, t, pairs(k, [0, 0])))), "[17, 22, 27, 22, 29, 36, 27, 36, 45]");
 });
 
 test("transposed by reorders the axes; traced sums a diagonal; a pair or order that doesn't fit stops", async () => {
