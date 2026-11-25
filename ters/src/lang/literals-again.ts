@@ -105,7 +105,8 @@ function differing(a: Record<Id, Node>, b: Record<Id, Node>): Id[] {
 export function onlyLiteralValues(a: Code, b: Code): boolean {
   if (a === b) return true;
   if (a.defs.length !== b.defs.length || a.defs.some((d, i) => d !== b.defs[i])) return false;
-  return differing(a.nodes, b.nodes).every((id) => { const x = a.nodes[id], y = b.nodes[id]; return x?.kind === "lit" && y?.kind === "lit" && sameValue({ ...x, value: y.value }, y); });
+  // (A node made again as it was, other object or not, is the same.)
+  return differing(a.nodes, b.nodes).every((id) => { const x = a.nodes[id], y = b.nodes[id]; return x !== undefined && y !== undefined && (sameValue(x, y) || (x.kind === "lit" && y.kind === "lit" && sameValue({ ...x, value: y.value }, y))); });
 }
 
 // The literals the step made: copies of the program's (model.ts
