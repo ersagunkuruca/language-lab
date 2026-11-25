@@ -73,7 +73,7 @@ const OPS: Record<string, [number[], Imm[]]> = {
   "i64.reinterpret_f64": [[0xbd], []], "f64.reinterpret_i64": [[0xbf], []], "f64.convert_i64_u": [[0xba], []], "i32.shl": [[0x74], []], "i32.clz": [[0x67], []], "i32.shr_u": [[0x76], []], "i32.shr_s": [[0x75], []], "i32.div_s": [[0x6d], []], "i32.rem_s": [[0x6f], []],
   "f64.sqrt": [[0x9f], []], "f64.convert_i32_s": [[0xb7], []], "i32.trunc_f64_s": [[0xaa], []],
   "f64.abs": [[0x99], []], "f64.neg": [[0x9a], []], "f64.floor": [[0x9c], []], "f64.add": [[0xa0], []], "f64.sub": [[0xa1], []], "f64.mul": [[0xa2], []], "f64.div": [[0xa3], []],
-  "i32.wrap_i64": [[0xa7], []], "i64.extend_i32_s": [[0xac], []], "i64.extend_i32_u": [[0xad], []], "i64.trunc_f64_s": [[0xb0], []], "f64.convert_i64_s": [[0xb9], []],
+  "i32.wrap_i64": [[0xa7], []], "i64.extend_i32_s": [[0xac], []], "i64.extend_i32_u": [[0xad], []], "i64.trunc_f64_s": [[0xb0], []], "f64.convert_i64_s": [[0xb9], []], "f32.demote_f64": [[0xb6], []], "f64.promote_f32": [[0xbb], []],
   // Linear memory (WASI's buffers), aligned naturally, at offset 0.
   "i32.load": [[0x28, 0x02, 0x00], []], "i64.load": [[0x29, 0x03, 0x00], []], "i32.load8_u": [[0x2d, 0x00, 0x00], []],
   "i32.store": [[0x36, 0x02, 0x00], []], "i32.store8": [[0x3a, 0x00, 0x00], []], "memory.size": [[0x3f, 0x00], []], "memory.grow": [[0x40, 0x00], []],
