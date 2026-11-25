@@ -34,6 +34,11 @@ const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: p
 // One frame is 16 ms; a task the size of a few is a stutter, one of
 // LONG_MS a freeze.
 const LONG_MS = 200;
+// A page's view or handler in the preview runs on the editor's thread up
+// to its update limit (pagePanel.ts UPDATE_MS, 1 s since I363): a page
+// that runs away stops there, with room for the collection after (the
+// long list below: a 1,377 ms task, what it made collected).
+const PAGE_LONG_MS = 1500;
 // The places whose row moves or bounds them, not built yet.
 const KNOWN: Record<string, string> = {
   // Five tasks of 80 to 200 ms, one of them (its graph drawn, or the
@@ -43,7 +48,7 @@ const KNOWN: Record<string, string> = {
 
 // `then`: what the place shows once its work is done, off the thread or not.
 // `opening`: what's measured is the file's opening itself.
-type Place = { name: string; file: string; open: (p: Page) => Promise<void>; then?: (p: Page) => Promise<string | null>; opening?: true };
+type Place = { name: string; file: string; open: (p: Page) => Promise<void>; then?: (p: Page) => Promise<string | null>; opening?: true; longMs?: number };
 
 // A definition with no inputs that takes seconds: Show values ran it on
 // the editor's thread (main.ts boundedTrace, GIVEN_MS: a 3 s freeze); now
@@ -72,7 +77,7 @@ function slowTest(): Place {
 // compiled code that ends took no steps from the page's budget (at a million, 238 and
 // 720 ms tasks before E319d).
 function slowPage(): Place {
-  return { name: "a page's view", file: exampleFile("dice", "Slow page", (s) => s.replace("main", "read(said) ++ show(sum(range(3000000)))", "read(said)")), open: (q) => openDef(q, "main") };
+  return { name: "a page's view", file: exampleFile("dice", "Slow page", (s) => s.replace("main", "read(said) ++ show(sum(range(3000000)))", "read(said)")), open: (q) => openDef(q, "main"), longMs: PAGE_LONG_MS };
 }
 
 // The ray marcher, edited so it isn't the shipped one: the editor lowered
@@ -132,7 +137,7 @@ function longList(): Place {
   return { name: "a page's long list", file: exampleFile("dice", "Long list", (s) => s.replace("main", "read(said) ++ show(length(reverse(range(20000000))))", "read(said)")), open: async (q) => {
     await openDef(q, "main");
     await q.getByText("Compiling…").first().waitFor({ state: "hidden", timeout: 120000 });
-  } };
+  }, longMs: PAGE_LONG_MS };
 }
 
 // Spacetime's largest definition opened: its graph and blocks were drawn
@@ -194,7 +199,7 @@ for (const place of [wireValues(), slowTest(), slowPage(), picture(), slowPixels
   if (!place.opening) await longTasks(p);
   await place.open(p);
   await p.waitForTimeout(6000);
-  const long = (await longTasks(p)).filter((ms) => ms > LONG_MS);
+  const long = (await longTasks(p)).filter((ms) => ms > (place.longMs ?? LONG_MS));
   const row = KNOWN[place.name];
   const said = long.length ? `tasks of ${long.join(", ")} ms` : "no long task";
   if (row) console.log(`${long.length ? "known" : "FIXED"} ${place.name} (${row}): ${said}`);
