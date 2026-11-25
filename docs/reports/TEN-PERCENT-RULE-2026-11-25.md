@@ -257,3 +257,15 @@ against:
 
 Each of these changes WORKFLOW.md and would go in its own PR once Ersagun
 chooses.
+
+## Decided (Ersagun, 2026-11-25 09:22 UTC)
+
+"All four": recommendations 1 to 4 go into WORKFLOW.md, one PR each.
+Recommendation 5 is turned down: "V8 or whatever browser engine could
+alleviate the issues with allocations but I feel like we shouldn't rely on
+that. Because we can do more analysis and JIT compiler has very little
+time budget to do the same. It will hurt us eventually." An allocation
+idea that measures nothing on JavaScript or WebAssembly because the engine
+hides it is not closed for that. And: "let's abandon the notion that ters's
+first target is JS or the browser. Browser helps for showcasing demos
+easily, but it's not the first target."
