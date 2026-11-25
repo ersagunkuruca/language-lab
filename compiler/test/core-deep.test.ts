@@ -51,3 +51,31 @@ test("x + sum(rest) a hundred thousand deep on the core IR's JavaScript, as the 
   for (let i = 0; i < 3; i++) assert.equal(at(p.defs.guarded)(100_000), "bottom6");
   assert.equal(at(p.defs.down)(10), 55);
 });
+
+// A big frame (C339): wide(n, x) holds 120 locals and calls itself after
+// making them, 1100 deep. Under the thousand plain calls it ran out of
+// Node's stack (housefit's pass back, 88 locals); a big frame counts for
+// more toward the thousand.
+test("a recursion with a big frame goes to the heap before the stack runs out", () => {
+  const k = new Lang(LIBRARY.code);
+  const wide = k.def("wide"), K = 120;
+  k.define(wide, k.fn(["n", "x"], (n, x) => {
+    const vs: string[] = [];
+    const lets = (i: number): string => {
+      if (i === K) {
+        const sum = vs.map((v, j) => k.call(B.mul, v, vs[(j * 7) % K])).reduce((a, b) => k.call(B.add, a, b));
+        return k.if(k.call(S.less, n, k.lit(1)), x, k.call(B.add, k.call(wide, k.call(B.sub, n, k.lit(1)), k.call(B.add, x, k.lit(1))), sum));
+      }
+      return k.let(`v${i}`, k.call(B.add, k.call(B.mul, x, k.lit(i + 2)), n), (v) => (vs.push(v), lets(i + 1)));
+    };
+    return lets(0);
+  }));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const core = lowerCore(code, info, names, [wide]);
+  assert.deepEqual([...core.refused.entries()], []);
+  assert.match(emitCoreJs(core).js, /depth \+= \d+/);
+  const at = loadCoreJs(core)[core.funcs.findIndex((f) => f.def === wide && !f.inner)];
+  const expect = (n: number, x: number): number => { let r = x + n; for (let m = 1; m <= n; m++) { const xm = x + n - m, v = (i: number) => xm * (i + 2) + m; let s = 0; for (let j = 0; j < K; j++) s += v(j) * v((j * 7) % K); r += s; } return r; };
+  for (const n of [0, 3, 1100]) assert.equal(Number(at(n, 1)), expect(n, 1), `wide ${n}`);
+});
