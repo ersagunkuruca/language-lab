@@ -285,7 +285,7 @@ export const NOTES: Comments = {
 
   // --- calculus and records of Float64s
   "builtin.derivative": "The slope of a function of one Float64, as a function. Where a slope can't be read there's no answer (Choice).",
-  "builtin.gradient": "For a function of a record of Float64s (a point, a colour), the record of its slopes along each part. For a function of an Array Float64, the array of its slopes, in one pass back (reverse mode).",
+  "builtin.gradient": "For a function of a record of Float64s (a point, a colour), the record of its slopes along each part. For a function of an Array Float64, the array of its slopes, in one pass back (reverse mode); of a Tensor Float64, a tensor of its slopes, of its shape.",
   "builtin.valueAndGradient": "f(p) and gradient(f)(p) as a pair. Over an Array Float64 both come from one run forward, as training wants a loss with its slopes.",
   "builtin.mapParts": "A function applied to each part of a record of Float64s: map parts(f, vec(x, y)) is vec(f(x), f(y)).",
   "builtin.zipParts": "A function applied to each pair of parts of two records of the same type.",

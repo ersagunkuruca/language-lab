@@ -908,7 +908,7 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
     }), acc, k);
   }
 
-  // gradient(f) of f : (Array Float64) -> Float64, as a lambda: the
+  // gradient(f) of f : (Array Float64) -> Float64 (or of a Tensor), as a lambda: the
   // input's slopes, from n zeros, each added in where it is found. With
   // `value`, value and gradient's: f's value and the slopes, a pair.
   function gradient(lamId: Id, value = false): Id {
@@ -935,9 +935,11 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
         const b = binder(), j = binder();
         return letIn([b], [slots], call(ARRAY_OF, call(lib("map"), call("builtin.int.range", call(ARRAY_LENGTH, ref(b))), add({ kind: "lambda", params: [j], body: itemOr0(() => ref(b), () => ref(j)) }))));
       };
-      if (!value) return plain();
+      // Over a tensor, a tensor of its shape (L285).
+      const slopes = (): Id => (tensorKeys.has(np) ? call(lib("tensor of array"), call(lib("tensor shape"), ref(np)), plain()) : plain());
+      if (!value) return slopes();
       const v = r.get(VAL);
-      return v?.k === "s" ? call(tupleVariant(2), total(v.parts), plain()) : cant("the value not found on the way back");
+      return v?.k === "s" ? call(tupleVariant(2), total(v.parts), slopes()) : cant("the value not found on the way back");
     }, value));
     return add({ kind: "lambda", params: [np], body });
   }
@@ -965,11 +967,11 @@ export function arrayGradientLambda(code: Code, lambda: Id, origin?: (id: Id) =>
 // `only`: the calls to make (all of them when not given).
 export function expandArrayGradients(code: Code, names: Names, info: Info, only?: (call: Id) => boolean): { code: Code; names: Names; expanded: Id[] } {
   const over = (call: Id) => gradientOver(code, info, call);
-  const overArray = (call: Id) => over(call)?.of === ARRAY;
+  const overArray = (call: Id) => { const o = over(call)?.of; return o === ARRAY || o === TENSOR; };
   // Over a record of Float64s too (L285): one pass back for all its
   // fields, where forward mode makes one pass for each; where the pass
   // back can't be made, forward mode's.
-  const overRecord = (call: Id) => { const o = over(call); return !!o && o.of !== ARRAY && o.of !== NUMBER && recordType(code, o.of); };
+  const overRecord = (call: Id) => { const o = over(call); return !!o && o.of !== ARRAY && o.of !== TENSOR && o.of !== NUMBER && recordType(code, o.of); };
   const overMany = (call: Id) => overArray(call) || overRecord(call);
   const asked = (n: Node | undefined) => isCall(n) && n.args.length === 1 && code.nodes[n.fn]?.kind === "ref" ? (code.nodes[n.fn] as NodeOf<"ref">).target : null;
   const calls = nodeIds(code.nodes).filter((id) => {
@@ -1046,6 +1048,6 @@ export function gradientOver(code: Code, info: Info, call: Id): { of: Id; item: 
   const t = f ? info.typeOf.get(f) : undefined;
   const z = t && info.subst.zonk(t);
   if (z?.t !== "fn" || z.params.length !== 1 || z.params[0].t !== "con") return null;
-  const p = z.params[0], item = p.id === ARRAY ? p.args[0] : undefined;
+  const p = z.params[0], item = p.id === ARRAY || p.id === TENSOR ? p.args[0] : undefined;
   return { of: p.id, item: item?.t === "con" ? item.id : null };
 }

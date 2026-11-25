@@ -96,7 +96,9 @@ this today with its hand-written pass, and it would keep doing it with
    are the result's slopes contracted with b over b's free axes, the axes
    then put back in a's order (`transposed by`), b's alike. Two
    contractions, where going through its sums would add each product's
-   slope in at its place. A tensor's slopes are an array of its items'.
+   slope in at its place. A tensor's slopes are an array of its items';
+   `gradient` over a tensor itself gives them back as a tensor of its
+   shape.
 6. **value and gradient** (11-25): f(p) with its slopes, the value taken
    where the pass back starts, inside the lets the run forward bound.
    mnist's `reverse` no longer runs `loss at` again for its loss: 10000
