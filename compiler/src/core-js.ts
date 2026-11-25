@@ -238,7 +238,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
   // giving one gives a new one each time it is named, as one-holder.ts
   // reads it (G3f).
   const written = new Set<number>();
-  const writes = (e: SExpr): void => { if (e.k === "rt") { const m = /^array\.(replaceOwned|pushFrontOwned)\.a(\d+)$/.exec(e.fn); if (m) written.add(Number(m[2])); } kids(e).forEach(writes); };
+  const writes = (e: SExpr): void => { if (e.k === "rt") { const m = /^array\.(replaceOwned|pushFrontOwned|pushOwned)\.a(\d+)$/.exec(e.fn); if (m) written.add(Number(m[2])); } kids(e).forEach(writes); };
   ir.funcs.forEach((f) => writes(f.body));
   const gens = names.map((n) => `${n}$h`);
   // A closure's code with a heap copy has it as `.h`, and a heap copy's
@@ -906,7 +906,7 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   writtenArrays(ir);
   // A replace in an array of a type whose every value has one holder,
   // written in place (owned-arrays.ts, C93 s4).
-  if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, code, info, names, roots[0], true);
+  if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, roots[0], true);
   // And each other replace whose array has one holder, decided per value
   // (holders.ts, C327f).
   if (!envSet("NO_OWN") && !envSet("NO_HOLDERS")) ownedPerValue(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));

@@ -29,7 +29,7 @@
 // Values start as having one holder and only move to more (a fixpoint, as
 // in Perceus's and Lean 4's borrow inference over a program's functions).
 
-import { isData, isFn, isRecord, kids, type CoreIR, type LType, type SExpr, type SFunc } from "./scalar.ts";
+import { isArray, isData, isFn, isRecord, kids, type CoreIR, type LType, type SExpr, type SFunc } from "./scalar.ts";
 
 // The abstract holders of a value: one ("U"), maybe more ("S"), not yet
 // known ("T", the start of the fixpoint), or a record's, field by field.
@@ -47,7 +47,12 @@ const same = (a: AV, b: AV): boolean => (typeof a === "object" && typeof b === "
 
 const ARRAY_OP = /^array\.(\w+)\.a\d+$/;
 // Only reading the array given first.
-const READS = new Set(["length", "lengthb", "get", "getb", "at", "atb", "first", "items", "has", "peek"]);
+// A rest, a drop or a slice is another view on the buffer, which a replace
+// in place sees (the runtime marks the buffer shared when it's made).
+const READS = new Set(["length", "lengthb", "get", "getb", "at", "atb", "first", "items", "has", "peek", "rest", "drop", "slice"]);
+// The runtime's maps on the threads (core-js.ts map.worth, map.pure, and
+// c.ts's par:*) read the array they're given and make a new one.
+const READS_RT = /^(map\.(worth|pure)$|par:)/;
 // Making a new one.
 const MAKES = new Set(["empty", "of", "ofItems", "from", "range", "rangeF", "concat"]);
 // Giving back the one given first, changed.
@@ -57,9 +62,14 @@ const op = (e: SExpr): string | null => (e.k === "rt" ? ARRAY_OP.exec(e.fn)?.[1]
 export interface Holders {
   // The replaces whose array has one holder.
   owned: Set<SExpr>;
+  // Whether what function i is given as input j always has one holder.
+  one: (i: number, j: number) => boolean;
 }
 
-export function holders(ir: CoreIR, roots: number[] = []): Holders {
+// takes: functions whose first input is to be counted as given away, not
+// read (owned-arrays.ts's maps, asking whether each map could write into
+// the array it was given).
+export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number>()): Holders {
   const { funcs } = ir;
   // Functions only called directly: their parameters come from their
   // calls. Others (roots, closures' code, the runtime's) get anything.
@@ -118,7 +128,7 @@ export function holders(ir: CoreIR, roots: number[] = []): Holders {
     return g.params.map((_, j) => !live.has(j));
   });
   // Which parameters a function only reads (borrows), to a fixpoint.
-  const reads = funcs.map((g) => g.params.map(() => true));
+  const reads = funcs.map((g, i) => g.params.map((_, j) => !(j === 0 && takes.has(i))));
   // Each function's locals (whole) and record locals' fields used once.
   const once = funcs.map((g) => g.locals.map(() => true));
   const fieldOnce = funcs.map(() => new Map<string, boolean>());
@@ -156,7 +166,7 @@ export function holders(ir: CoreIR, roots: number[] = []): Holders {
           return;
         }
         case "op": for (const a of e.args) walk(a, s, true); return;
-        case "rt": { const o = op(e); twice(e.args); inputs(e.args.map((a) => [a, o !== null && READS.has(o)]), s); return; }
+        case "rt": { const o = op(e), r = (o !== null && READS.has(o)) || READS_RT.test(e.fn); twice(e.args); inputs(e.args.map((a) => [a, r]), s); return; }
         // An input the callee never looks at isn't a use (a local there
         // may be given away beside it).
         case "call": twice(e.args, e.fn); inputs(e.args.flatMap((a, j): [SExpr, boolean][] => (dead[e.fn]?.[j] && a.k === "local" ? [] : [[a, (reads[e.fn]?.[j] ?? false) || !!dead[e.fn]?.[j]]])), s); return;
@@ -180,7 +190,7 @@ export function holders(ir: CoreIR, roots: number[] = []): Holders {
         case "get": if (e.rec.k === "local") { given.add(e.rec.i); return; } return gives(e.rec, false);
         case "if": gives(e.cond, true); gives(e.then, false); gives(e.else, false); return;
         case "op": for (const a of e.args) gives(a, true); return;
-        case "rt": { const o = op(e); e.args.forEach((a) => gives(a, o !== null && READS.has(o))); return; }
+        case "rt": { const o = op(e), r = (o !== null && READS.has(o)) || READS_RT.test(e.fn); e.args.forEach((a) => gives(a, r)); return; }
         case "call": e.args.forEach((a, j) => gives(a, reads[e.fn]?.[j] ?? false)); return;
         default: for (const k of kids(e)) gives(k, false);
       }
@@ -217,7 +227,10 @@ export function holders(ir: CoreIR, roots: number[] = []): Holders {
         case "call": {
           const xs = e.args.map((a) => av(self, a, env, at));
           xs.forEach((x, j) => { const p = params[e.fn]; if (p && !outside.has(e.fn)) { const m = meet(p[j], reads[e.fn][j] ? "S" : x); if (!same(m, p[j])) { p[j] = m; changed = true; } } });
-          return funcs[e.fn]?.params.length ? results[e.fn] : "S";
+          // A definition with no inputs is worked out once and kept, unless
+          // it gives an array of a type something writes in place (core-js.ts
+          // and wasm.ts `written`): made again at each call.
+          return funcs[e.fn]?.params.length || (funcs[e.fn] && isArray(funcs[e.fn].result)) ? results[e.fn] : "S";
         }
         case "apply": {
           av(self, e.fn, env, at);
@@ -242,9 +255,19 @@ export function holders(ir: CoreIR, roots: number[] = []): Holders {
     const env: AV[] = g.locals.map((_, j) => (j < g.params.length ? params[i][j] : "S"));
     return av(i, g.body, env, at);
   };
+  // What each function only reads, and which locals are used once, first:
+  // they don't hang on holders, and a parameter taken as only read while
+  // that was still being worked out would count what it's given as shared
+  // for good (moths' `filed`, given a new grid each tick).
   for (let rounds = 0; changed && rounds < 100; rounds++) {
     changed = false;
     funcs.forEach((_, i) => linear(i));
+  }
+  const none: Holders = { owned: new Set(), one: () => false };
+  if (changed) return none;
+  changed = true;
+  for (let rounds = 0; changed && rounds < 100; rounds++) {
+    changed = false;
     funcs.forEach((_, i) => {
       const r = meet(results[i], body(i, () => {}));
       if (!same(r, results[i])) { results[i] = r; changed = true; }
@@ -253,7 +276,7 @@ export function holders(ir: CoreIR, roots: number[] = []): Holders {
   // Each replace's array, as the fixpoint left it: it has one holder when
   // it arrived with one and the replace is the last that uses it.
   const owned = new Set<SExpr>();
-  if (changed) return { owned };
+  if (changed) return none;
   const vals = new Map<SExpr, AV>();
   funcs.forEach((_, i) => body(i, (e, v) => vals.set(e, v)));
   funcs.forEach((g) => {
@@ -263,7 +286,7 @@ export function holders(ir: CoreIR, roots: number[] = []): Holders {
     };
     look(g.body);
   });
-  return { owned };
+  return { owned, one: (i, j) => params[i]?.[j] === "U" };
 }
 
 // The replaces holders() finds, made `replaceOwned`, and the pushes it
