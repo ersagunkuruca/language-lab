@@ -39,11 +39,12 @@ const drawWithin = () => (globalThis as { tersDrawWithin?: number }).tersDrawWit
 // How long one update of the page may take on the editor's thread, in ms
 // (E319d, html.ts `within`), compiled or interpreted: past it, the part
 // stops as one out of steps does, and a handler says so under the page.
-// Open in a tab has no such limit. Under the thread probe's 200 ms with
-// room for the collection after (150 gave 244 and 301 ms tasks), and
-// over what most frames take (at 50, flock's and moths' interpreted
-// frames stopped every frame on a slow machine).
-const UPDATE_MS = 100;
+// Open in a tab has no such limit. A page's own work may be slow and
+// still be what it means (Digits: its first drawing 240 ms, a frame of
+// learning 50 to 180 ms, which a 100 ms limit stopped every time, I363),
+// so the limit stops a runaway, not a slow page: 1 s (Ersagun 11-25).
+// thread-probe.ts measures the preview's places against it.
+const UPDATE_MS = 1000;
 
 export interface PageHost {
   doc(): Doc;
