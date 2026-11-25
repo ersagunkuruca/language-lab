@@ -123,6 +123,20 @@ A finished item is removed from it, never logged there: its record is its
 row in DONE.md (Ersagun 2026-11-02 asked why BACKLOG.md opened with walls
 of text; they were these cells logging every finished row).
 
+### Targets and allocations (Ersagun 2026-11-25)
+
+- **The browser is not Ters's first target.** It is where demos are easy
+  to show, nothing more. A design or a speed step isn't chosen because it
+  suits JavaScript or the browser, and native and WebAssembly are not
+  "the other targets".
+- **Don't rely on the engine to absorb allocations.** V8, or any browser
+  engine, may make a short-lived value cheap today, but its JIT has a
+  small time budget and our compiler can analyse more ("It will hurt us
+  eventually"). An allocation idea that measures nothing on JavaScript or
+  WebAssembly because the engine hides it is not closed for that: judge
+  it on C, or by the allocations it removes, and build it for every
+  target where it applies.
+
 ## Doing an item
 
 - One item, one PR (one change per PR, never bundled). An L item may be
