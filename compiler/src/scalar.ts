@@ -1589,19 +1589,29 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         }
         const head = code.nodes[n.fn];
         if (head.kind === "lambda") {
-          // A let: each argument goes into a new local.
-          if (head.params.length !== n.args.length) throw new Refused("applies a function to the wrong number of inputs");
-          let inner = new Map(env);
+          // A let: each argument goes into a new local. Lets in a row are
+          // taken in a loop (C340): one exprAt frame each ran a definition
+          // of 110 lets out of stack.
           const lets: { i: number; value: SExpr }[] = [];
-          head.params.forEach((p, j) => {
-            const t = stype(zonk(p));
-            if (!t) throw new Refused(`lets ${nm(p)} be ${OTHER}`);
-            const value = expr(n.args[j], env, f, false);
-            const i = f.locals.push(t) - 1;
-            inner = new Map(inner).set(p, i);
-            lets.push({ i, value });
-          });
-          return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(head.body, inner, f, tail));
+          let at: Call = n, inner = env;
+          for (;;) {
+            const lam = code.nodes[at.fn] as Extract<(typeof code.nodes)[string], { kind: "lambda" }>, given = inner;
+            if (lam.params.length !== at.args.length) throw new Refused("applies a function to the wrong number of inputs");
+            inner = new Map(inner);
+            for (const [j, p] of lam.params.entries()) {
+              const t = stype(zonk(p));
+              if (!t) throw new Refused(`lets ${nm(p)} be ${OTHER}`);
+              const value = expr(at.args[j], given, f, false);
+              const i = f.locals.push(t) - 1;
+              inner.set(p, i);
+              lets.push({ i, value });
+            }
+            const next = code.nodes[lam.body];
+            if (next.kind !== "call" || code.nodes[next.fn].kind !== "lambda" || isUse(next) || pinned?.(lam.body) || (opts.host && !fibers && (halves ??= parallelHalves(code, info)).has(next.id))) break;
+            at = next;
+            here = { node: at.id, def: f.def };
+          }
+          return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr((code.nodes[at.fn] as Extract<(typeof code.nodes)[string], { kind: "lambda" }>).body, inner, f, tail));
         }
         // A fold of an array's items to a function, applied (`fold placed
         // from distance = 1`): a loop from the first item, C207f.

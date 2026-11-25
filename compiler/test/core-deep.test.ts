@@ -56,9 +56,9 @@ test("x + sum(rest) a hundred thousand deep on the core IR's JavaScript, as the 
 // making them, 1100 deep. Under the thousand plain calls it ran out of
 // Node's stack (housefit's pass back, 88 locals); a big frame counts for
 // more toward the thousand.
-test("a recursion with a big frame goes to the heap before the stack runs out", () => {
+function wideProgram(K: number) {
   const k = new Lang(LIBRARY.code);
-  const wide = k.def("wide"), K = 120;
+  const wide = k.def("wide");
   k.define(wide, k.fn(["n", "x"], (n, x) => {
     const vs: string[] = [];
     const lets = (i: number): string => {
@@ -74,8 +74,21 @@ test("a recursion with a big frame goes to the heap before the stack runs out", 
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const core = lowerCore(code, info, names, [wide]);
   assert.deepEqual([...core.refused.entries()], []);
-  assert.match(emitCoreJs(core).js, /depth \+= \d+/);
-  const at = loadCoreJs(core)[core.funcs.findIndex((f) => f.def === wide && !f.inner)];
+  const at = (): ((n: number, x: number) => unknown) => loadCoreJs(core)[core.funcs.findIndex((f) => f.def === wide && !f.inner)];
   const expect = (n: number, x: number): number => { let r = x + n; for (let m = 1; m <= n; m++) { const xm = x + n - m, v = (i: number) => xm * (i + 2) + m; let s = 0; for (let j = 0; j < K; j++) s += v(j) * v((j * 7) % K); r += s; } return r; };
+  return { core, at, expect };
+}
+
+test("a recursion with a big frame goes to the heap before the stack runs out", () => {
+  const { core, at: wideAt, expect } = wideProgram(120);
+  assert.match(emitCoreJs(core).js, /depth \+= \d+/);
+  const at = wideAt();
   for (const n of [0, 3, 1100]) assert.equal(Number(at(n, 1)), expect(n, 1), `wide ${n}`);
+});
+
+// Lets in a row lowered in a loop (C340): 300 of them ran the lowering
+// out of stack, a frame of its biggest function a let.
+test("a definition of 300 lets lowers", () => {
+  const { at, expect } = wideProgram(300);
+  for (const n of [0, 3]) assert.equal(Number(at()(n, 1)), expect(n, 1), `wide ${n}`);
 });
