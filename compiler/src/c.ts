@@ -1111,7 +1111,19 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // called (C317): swarm-pool's `holds`, a pool lookup's check, is a few
   // reads, which cc at -O2 left a call saving and restoring six registers.
   const leaf = new Map<number, boolean>();
-  const small = (i: number) => leaf.get(i) ?? leaf.set(i, ((es) => es.length <= SMALL_LEAF && !es.some((e) => e.k === "call" || e.k === "apply"))(walk(funcs[i].body))).get(i)!;
+  // A call of a small one on literals only counts too (C338): mnist's `at`
+  // on Duals, a read with 0 made a Dual when out of range, was a call a
+  // read. Any call of a small one was more: flock's `fits` put where it's
+  // called ran 5% slower.
+  const literal = (e: SExpr): boolean => e.k === "num" || e.k === "int" || (e.k === "rt" && e.fn === "i64.lit");
+  const small = (i: number): boolean => {
+    if (leaf.has(i)) return leaf.get(i)!;
+    leaf.set(i, false);
+    const es = walk(funcs[i].body);
+    const r = es.length <= SMALL_LEAF && es.every((e) => e.k !== "apply" && (e.k !== "call" || (e.fn !== i && e.args.every(literal) && !funcs[e.fn].apart && small(e.fn))));
+    leaf.set(i, r);
+    return r;
+  };
   const header = (i: number, lending = false) => {
     const f = funcs[i];
     return `static ${f.apart ? "LAB_APART " : lending && small(i) ? "inline " : ""}${ty(f.result)} ${lending ? bnames.get(i) : names.get(i)}(${f.params.map((t, j) => `${ty(t)} p${j}`).join(", ") || "void"})`;
@@ -4654,7 +4666,7 @@ static ${V} lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
     // buffer (Perceus's reuse), else in a copy; the array as it is outside
     // it.
     const dropX = (x: string) => (counted(a.item) ? drop(a.item, x) : "");
-    if (has("replaceAt")) out.push(`static ${V} lab_array_replaceAt_a${i}(${V} a, lab_int k, ${T} x) {
+    if (has("replaceAt")) out.push(`static inline ${V} lab_array_replaceAt_a${i}(${V} a, lab_int k, ${T} x) {
   if (!LAB_IS_SMALL(k) || LAB_VAL(k) < 0 || LAB_VAL(k) >= (int64_t)a.n) { lab_int_drop(k); ${dropX("x")} return a; }
   uint32_t at = (uint32_t)LAB_VAL(k);
   ${B} *b = ${buf("a")};
