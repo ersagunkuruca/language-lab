@@ -16,6 +16,7 @@ which also has how they compound per benchmark.
 
 | item | program, target | kind | gain measured | where |
 |---|---|---|---|---|
+| L271c | wav of at 32 bits, 10 s of stereo written, core JS | big Ints | each Float32 word made as its high and low 16 bits (a pair), never past 2^28, so no BigInt: 1.25 -> 1.19 s (about 5%; the BigInts gone, a pair made a sample instead); native has no BigInts to save. Not built 11-25 | BACKLOG L271c |
 | L266af | machine, recompile after a number edit | lowering kept | the scalar lowering (0.18 s of 0.55 s) made again with the new values put in where its literals were written: 0% on the bench once the bake's reads are honoured (the bake reads the literals the bench edits, so they lower again; leaving its reads out compiled household and mini wrongly), not built 11-25 | BACKLOG L266af |
 | C332 | bazaar, native / JS / wasi | representation | each plan step's rows an array, walks on the array: 17% slower / 13% slower / 0% at 200,000 orders | [LISTS-BETWEEN-STEPS-2026-11-25](LISTS-BETWEEN-STEPS-2026-11-25.md) |
 | C331 | nine gaps runs, core JS | checks | array bounds throws dropped: about 0% (-4% to 3%); finite guards before a stop: about 0% (mnist -8%); `R2.ck` failure test: about 0% | [CHECKS-2026-11-25](CHECKS-2026-11-25.md) |
