@@ -11,10 +11,15 @@
 //
 // The loop is untagged-ints.ts's copy, its counts int64_ts. What it must
 // be: its body `if n ≤ 0 then (no round again) else (…)`, each call of
-// itself last and in the else; each array it reads given again as it is,
+// itself in the else; each array it reads given again as it is,
 // each index given as `p + s` (s an int64 given as it is, or a literal),
 // n given as `n − 1`. Reads in the then are left checked: they come after
 // the walk.
+//
+// A call of itself in the else needn't be last (C338): mnist's `dot back`
+// reads its rows before it goes round and again after, as the gradient
+// comes back. Every round it makes is still one of the walk, in range
+// when the walk is.
 
 import { kids, mapKids, type CoreIR, type SExpr, type SFunc } from "./scalar.ts";
 
@@ -45,11 +50,17 @@ function readOf(ir: CoreIR, fn: number): number | null {
   return Number(AT.exec(b.fn)![1]);
 }
 
+const calls = (e: SExpr, fn: number): boolean => (e.k === "call" && e.fn === fn) || kids(e).some((k) => calls(k, fn));
+
 export function checkedOnce(ir: CoreIR, among: number[]): number {
   let made = 0;
   for (const i of among) {
-    const f = ir.funcs[i], b = f.body;
+    // The if may be a let's value, what's after it calling nothing of
+    // itself (`dot back`'s answer taken apart).
+    const f = ir.funcs[i], top = f.body;
+    const b = top.k === "let" && top.value.k === "if" && !calls(top.body, i) ? top.value : top;
     if (b.k !== "if") continue;
+    const wrap = (e: SExpr): SExpr => (b === top ? e : { ...(top as SExpr & { k: "let" }), value: e });
     const n = atMostZero(ir, b.cond);
     if (n === null || f.params[n] !== "i64") continue;
     const selfs: (SExpr & { k: "call" })[] = [];
@@ -59,7 +70,7 @@ export function checkedOnce(ir: CoreIR, among: number[]): number {
       kids(e).forEach((k) => walk(k, inElse));
     })(b.then, false);
     (function walk(e: SExpr) {
-      if (e.k === "call" && e.fn === i) { if (!e.tail) elsewhere = true; else selfs.push(e); }
+      if (e.k === "call" && e.fn === i) { if (e.cps) elsewhere = true; else selfs.push(e); }
       kids(e).forEach(walk);
     })(b.else);
     if (elsewhere || !selfs.length) continue;
@@ -102,12 +113,12 @@ export function checkedOnce(ir: CoreIR, among: number[]): number {
     };
     // Kept apart: put into its caller, gcc kept the walk's sum in memory,
     // a store and a load a round (mnist slower than with the checks).
-    const copy: SFunc = { ...f, name: `${f.name} in range`, inner: true, apart: true, body: { ...b, else: rw(b.else) } };
+    const copy: SFunc = { ...f, name: `${f.name} in range`, inner: true, apart: true, body: wrap({ ...b, else: rw(b.else) }) };
     ir.funcs.push(copy);
     // As written: to the copy when n ≤ 0 or every walk is in range.
     const cond = [...reads.values()].map(([, a, p]): SExpr => ({ k: "rt", fn: "i64.walkIn", args: [{ k: "local", i: a }, { k: "local", i: p }, step.get(p)!, { k: "local", i: n }] })).reduce((x, y) => ({ k: "op", op: "and", args: [x, y] }));
     const go: SExpr = { k: "call", fn: g, tail: true, args: f.params.map((_, j): SExpr => ({ k: "local", i: j })) };
-    ir.funcs[i] = { ...f, body: { k: "if", cond, then: go, else: b, t: f.result } };
+    ir.funcs[i] = { ...f, body: { k: "if", cond, then: go, else: top, t: f.result } };
     made++;
   }
   return made;

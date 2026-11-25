@@ -2,7 +2,8 @@
 // stepping by xs for n rounds as mnist's does, gets a copy reading without
 // the bounds check, taken when the whole walk is in range as it starts. A
 // walk past the end (its `at` 0 there) runs as written. `ters native`
-// prints what `ters run` prints, with the copy and without.
+// prints what `ters run` prints, with the copy and without. `back dot`
+// goes round before it adds (C338, as mnist's `dot back` does).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -25,11 +26,13 @@ function written(): string {
   ask("replace", { at: "at", find: "□", text: "first(item at(xs, i), else 0)" });
   ask("define", { name: "row dot", kind: "function", params: ["x", "xo", "xs", "w", "wo", "ws", "n", "acc"] });
   ask("replace", { at: "row dot", find: "□", text: "if n ≤ 0 then acc else row dot(x, xo + xs, xs, w, wo + ws, ws, n − 1, acc + at(x, xo) · at(w, wo))" });
+  ask("define", { name: "back dot", kind: "function", params: ["x", "xo", "xs", "w", "wo", "ws", "n"] });
+  ask("replace", { at: "back dot", find: "□", text: "if n ≤ 0 then 0 else back dot(x, xo + xs, xs, w, wo + ws, ws, n − 1) + at(x, xo) · at(w, wo)" });
   ask("define", { name: "main", kind: "function", params: ["arguments"] });
   ask("replace", { at: "main", find: "□", text: 'k = length(append(["a"], arguments)) * 4; □' });
   ask("replace", { at: "main", find: "□", text: "x = array of(map(range(k * k), (i) => i * 0.5)); □" });
   // A row times a column (in range), and a column walked past the end.
-  ask("replace", { at: "main", find: "□", text: 'print(join all([show(row dot(x, 0, 1, x, 0, k, k, 0)), show(row dot(x, k, 1, x, 1, k, k, 0)), show(row dot(x, 2, k, x, 3, k, k + 3, 0)), show(row dot(x, -2, 1, x, 0, 1, 4, 0))], " "))' });
+  ask("replace", { at: "main", find: "□", text: 'print(join all([show(row dot(x, 0, 1, x, 0, k, k, 0)), show(row dot(x, k, 1, x, 1, k, k, 0)), show(row dot(x, 2, k, x, 3, k, k + 3, 0)), show(row dot(x, -2, 1, x, 0, 1, 4, 0)), show(back dot(x, k, 1, x, 1, k, k)), show(back dot(x, 2, k, x, 3, k, k + 3))], " "))' });
   return dir;
 }
 
@@ -42,7 +45,9 @@ test("an array walk checked once: the same answers, in range and past the end", 
     const exe = join(mkdtempSync(join(tmpdir(), "checked-once-n-")), "walks");
     const b = spawnSync(process.execPath, [lab, "native", dir, "-o", exe], { encoding: "utf8", env: { ...process.env, ...env } });
     assert.equal(b.status, 0, b.stderr);
-    assert.equal(readFileSync(exe + ".c", "utf8").includes("lab__walk_in(("), !("NO_CHECKED_ONCE" in env), JSON.stringify(env));
+    const c = readFileSync(exe + ".c", "utf8");
+    assert.equal(c.includes("lab__walk_in(("), !("NO_CHECKED_ONCE" in env), JSON.stringify(env));
+    assert.equal(/lab_back_dot\w*in_range/.test(c), !("NO_CHECKED_ONCE" in env), JSON.stringify(env));
     const r = spawnSync(exe, args, { encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
     outs.push(r.stdout);
