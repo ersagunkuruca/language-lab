@@ -668,3 +668,49 @@ its count is 1.
 
 Node segfaulted on about one run in three of mnist's adam and reverse on
 WebAssembly, before this change as after (C344).
+
+The segfault was Node's, not the module's (C344, #3357). WASI's `fd_read`
+starts a collection inside V8's fast call, and that collection crashes. The
+slow mnist runs were data loading: on WASI a file's Bytes were a list,
+55 M cells for mnist's files (C345, #3358). Reverse at 300 digits now
+takes 0.41 s instead of 7.8 s.
+
+## C327g part 1, records read by their parts on WebAssembly (2026-11-25)
+
+Structs made by each place that makes one, counted with
+`TERS_COUNT_MAKES=1` and read by compiler/gaps/made.ts. The collector's
+share is from a CPU profile.
+
+| program | structs made | collector |
+|---|---|---|
+| scan 3,200 | 143.0 M | 5% |
+| mini 8,000 | 12.4 M | 10% |
+| bazaar 200,000 | 22.5 M | 52% |
+| pack 3,200 | 0.64 M | 13% |
+| strings 8 | 143.8 M | 31% |
+| typeset 1,000 at 300 | 29.8 M | 6% |
+| flock 100 ticks, 5,000 birds | 291.7 M | 13% |
+
+Most are lists, trees and orders that a value keeps, not frame-local.
+Two kinds are frame-local:
+
+1. A record that is read only by its parts.
+2. The frames of non-tail recursion turned into loops (`$down` functions).
+   These hold several values and have a case per call site, so C327d's one
+   growable stack doesn't take them. They are 41% of flock's structs.
+
+The first is chosen-parts.ts, which core JavaScript already ran. It now
+runs on WebAssembly too, after columns. It also takes a record made of
+values that aren't flat, such as array reads that may fail: those are
+worked out first, in order, as lets. One example is the pair of strings'
+FFT items in `difference at`'s zipped fold.
+
+| program | structs before | after | time before | after |
+|---|---|---|---|---|
+| strings 8 | 143.8 M | 93.5 M (−35%) | | |
+| strings 32 | | | 4.42 to 4.67 s | 3.99 to 4.43 s |
+| flock 100 × 5,000 | 291.7 M | 233.8 M (−20%) | 5.16 to 5.44 s | 5.17 to 5.46 s |
+
+The other six benchmarks make the same structs. All eight print the same.
+Left: the `$down` frames (several fields, a case a call site) as one stack,
+on C and on WebAssembly.

@@ -132,7 +132,7 @@ const flagged = (e: SExpr): boolean => e.k === "attempt" || (e.k === "rt" && /^a
 // `stops`: the lowering's stop sites (C143), so a stop says where.
 // `hosts`: the program's own operations its host answers (core-js.ts
 // hostOpsOf), which instantiate asks rt.hosts for (L69b2).
-export interface Module { bytes: Uint8Array; wat: string; exports: string[]; floats?: { name: string; partial: boolean }[]; stops?: { node: Id; def: Id }[]; hosts?: HostOps }
+export interface Module { bytes: Uint8Array; wat: string; exports: string[]; made?: string[]; floats?: { name: string; partial: boolean }[]; stops?: { node: Id; def: Id }[]; hosts?: HostOps }
 
 // `wasi`: a WASI command instead, its world written over
 // wasi_snapshot_preview1 (wasm-rt.ts) and `_start` running main as
@@ -588,6 +588,14 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const noStacks = typeof process !== "undefined" && !!process.env.NO_FOLD_STACKS;
   const stackOf = (t: LType): boolean => isData(t) && !!t.inner && t.key.endsWith(".frames") && t.cases.length === 2 && !t.cases[0].fields.length && t.cases[1].fields.length === 2 && t.cases[1].fields[1].t === t && isData(t.cases[1].fields[0].t) && !several.has(t.key) && !noStacks;
   const stacks = lowered.data.filter(stackOf);
+  // With TERS_COUNT_MAKES, each place that makes a struct (a record, a
+  // case, a closure) counts what it makes in an exported i64 global,
+  // `made.<k>`, the module's `made` naming each (C327g: structs made, not
+  // time; compiler/gaps/made.ts reads them).
+  const counting = typeof process !== "undefined" && !!process.env.TERS_COUNT_MAKES;
+  const made: string[] = [], madeAt = new Map<string, number>();
+  const site = (e: SExpr, f: SFunc): string | null => e.k === "make" ? `make ${e.t.name ?? e.t.key} in ${f.name}` : e.k === "new" && !stackOf(e.t) ? `new ${e.t.name ?? e.t.key}.${e.c} in ${f.name}` : e.k === "closure" ? `closure ${funcs[e.fn].name} in ${f.name}` : null;
+  if (counting) for (const f of funcs) (function walk(e: SExpr) { const k = site(e, f); if (k !== null && !madeAt.has(k)) { madeAt.set(k, made.length); made.push(k); } kids(e).forEach(walk); })(f.body);
   const fstack = (op: "push" | "top" | "pop", t: DType) => `fstack.${op}.${lowered.data.findIndex((x) => x.key === t.key)}`;
   const rtCalls = (e: SExpr): void => {
     if (e.k === "new" && stackOf(e.t) && e.c === 1) need(fstack("push", e.t));
@@ -1007,15 +1015,16 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const rtExports = rts.filter((f) => RT_EXPORTS[f.name]);
   // Only what can be called from outside a budget is exported.
   const entries = funcs.map((f, i) => [f, i] as const).filter(([f]) => !f.budgeted && !f.inner);
-  const exportSec = vec([
+  const exportSecOf = () => vec([
     ...entries.map(([f, i]) => [...str(exportName(f)), 0x00, ...u(fnIndex(i))]),
     ...helpers.map((x, k) => [...str(x.name), 0x00, ...u(fnIndex(funcs.length + k))]),
     ...rtExports.map((f) => [...str(RT_EXPORTS[f.name]), 0x00, ...u(rtIndex(f.name))]),
     ...(wasi ? [[...str("memory"), 0x02, 0x00]] : []),
+    ...made.map((_, k) => [...str(`made.${k}`), 0x03, ...u(madeBase + k)]),
   ]);
   // global 0: the fuel left, an f64. Outside any budget it's infinite, so
   // what the checker couldn't see end just runs (only `data` calls it there).
-  const globalSec = vec([
+  const globalsBefore = [
     ...(fuel ? [[0x7c, 0x01, 0x44, ...f64(Infinity), 0x0b]] : []),
     ...(aborts ? [[0x63, ...s(textIndex), 0x01, 0xd0, ...s(textIndex), 0x0b]] : []),
     ...(ryu ? [[0x64, ...s(i64sIndex), 0x00, ...POW5.flatMap((v) => [0x42, ...sBig(v)]), 0xfb, 0x08, ...u(i64sIndex), ...u(POW5.length), 0x0b]] : []),
@@ -1027,7 +1036,11 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...[...kept.keys()].map((i) => { const t = funcs[i].result as MType; return [...typeOf(t), 0x01, 0xd0, ...s(t === "text" ? textIndex : refIndex(t as RType)), 0x0b]; }),
     ...(stack ? [[0x64, ...s(hstackIndex), 0x00, 0x41, ...s(SLOTS), 0xfb, 0x07, ...u(hstackIndex), 0x0b], [0x7f, 0x01, 0x41, 0x00, 0x0b]] : []),
     ...stacks.flatMap((d) => { const k = caseIndex(d, 1), z = caseIndex(d, 0); return [[0x63, ...s(k), 0x01, 0xd0, ...s(k), 0x0b], [0x64, ...s(z), 0x00, 0x41, 0x00, 0xfb, 0x00, ...u(z), 0x0b]]; }),
-  ]);
+  ];
+  const madeBase = globalsBefore.length;
+  const globalSec = vec([...globalsBefore, ...made.map(() => [0x7e, 0x01, 0x42, 0x00, 0x0b])]);
+  // A made struct counted: made.<k> += 1, the struct left on the stack.
+  const count = (e: SExpr, f: SFunc): number[] => { const k = counting ? madeAt.get(site(e, f) ?? "") : undefined; if (k === undefined) return []; const g = u(madeBase + k); return [0x23, ...g, 0x42, 0x01, 0x7c, 0x24, ...g]; };
   const zero = (t: MType) => (t === "text" ? [0xd0, ...s(textIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" || t === "host" ? [0xd0, 0x6d] : t === "mag" ? [0xd0, ...s(u32sIndex)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
   // no answer, which the nearest handler sees)
@@ -1160,11 +1173,11 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         if (looped && e.tail && e.fn === self) { const to = (f as ViewFunc).viewSlots ?? e.args.map((_, j) => j); return [...e.args.flatMap(code1), ...e.args.flatMap((_, j) => [0x21, ...u(to[e.args.length - 1 - j])]), 0x0c, ...u(d - 1)]; }
         return [...e.args.flatMap(code1), tail ? 0x12 : 0x10, ...u(fnIndex(e.fn)), ...(g.partial && !tail ? check(d, fl) : [])];
       }
-      case "make": return [...e.args.flatMap(code1), ...(isFloat32(e.t) ? [0xb6] : []), ...(rawField && e.t.key === BYTES_T ? [0xd0, ...s(bytesIndex)] : []), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!)];
+      case "make": return [...e.args.flatMap(code1), ...(isFloat32(e.t) ? [0xb6] : []), ...(rawField && e.t.key === BYTES_T ? [0xd0, ...s(bytesIndex)] : []), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!), ...count(e, f)];
       case "get": return [...code1(e.rec), 0xfb, 0x02, ...u(recIndex.get(e.t.key)!), ...u(e.i), ...(isFloat32(e.t) ? [0xbb] : [])];
       case "new":
         if (stackOf(e.t)) return e.c === 0 ? [0x23, ...u(stackGlobals + 2 * stacks.findIndex((x) => x.key === e.t.key) + 1)] : [...e.args.flatMap(code1), 0x10, ...u(rtIndex(fstack("push", e.t)))];
-        return [0x41, ...s(e.c), ...e.args.flatMap(code1), 0xfb, 0x00, ...u(caseIndex(e.t, e.c))];
+        return [0x41, ...s(e.c), ...e.args.flatMap(code1), 0xfb, 0x00, ...u(caseIndex(e.t, e.c)), ...count(e, f)];
       // The items in order on the stack, then from the last: each into
       // `item`, made into a cons onto `acc` (L181b).
       case "list": {
@@ -1180,7 +1193,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "tag": return [...code1(e.rec), 0xfb, 0x02, ...u(baseIndex.get(e.t.key)!), 0x00];
       case "closure": {
         const maker = !derived.has(e.t.key) ? [] : e.d !== undefined ? [0xd2, ...u(fnIndex(e.d))] : [0xd0, ...s(cloIndex.get(e.t.key)! + 2)];
-        return [0xd2, ...u(fnIndex(e.fn)), ...maker, ...e.caps.flatMap(code1), 0xfb, 0x00, ...u(shapeIndex[e.shape])];
+        return [0xd2, ...u(fnIndex(e.fn)), ...maker, ...e.caps.flatMap(code1), 0xfb, 0x00, ...u(shapeIndex[e.shape]), ...count(e, f)];
       }
       // What a closure captured: the closure is the code's first input.
       case "cap": return [0x20, 0x00, 0xfb, 0x16, ...s(shapeIndex[e.shape]), 0xfb, 0x02, ...u(shapeIndex[e.shape]), ...u(e.i + capsAt(e.t))];
@@ -1299,7 +1312,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
     // WASI's memory, with the math functions' page when they're used.
     ...(wasi ? section(5, vec([[0x00, math ? 0x02 : 0x01]])) : []),
-    ...(fuel || aborts || ryu || math || escapes || flags || rand || kept.size || stack || stacks.length ? section(6, globalSec) : []), ...section(7, exportSec),
+    ...(fuel || aborts || ryu || math || escapes || flags || rand || kept.size || stack || stacks.length || made.length ? section(6, globalSec) : []), ...section(7, exportSecOf()),
     // ref.func needs the functions declared: one declarative segment.
     ...(declared.length ? section(9, vec([[0x03, 0x00, ...vec(declared.map((i) => u(fnIndex(i))))]])) : []),
     ...section(10, codeSec),
@@ -1495,7 +1508,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   ].join("\n");
 
   const floats = shader ? [] : entries.filter(([f]) => f.result === "f64").map(([f]) => ({ name: exportName(f), partial: !!f.partial }));
-  return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name), ...rtExports.map((f) => RT_EXPORTS[f.name])], floats, ...(lowered.stops?.length ? { stops: lowered.stops } : {}), ...(opts.hosts && worldOps.some((x) => x.op.startsWith("host:")) ? { hosts: opts.hosts } : {}) };
+  return { bytes, wat: text + "\n", ...(counting ? { made } : {}), exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name), ...rtExports.map((f) => RT_EXPORTS[f.name])], floats, ...(lowered.stops?.length ? { stops: lowered.stops } : {}), ...(opts.hosts && worldOps.some((x) => x.op.startsWith("host:")) ? { hosts: opts.hosts } : {}) };
 }
 
 // A loop's value stepped (C207k, untagged-ints.ts valueLoop): i64's least

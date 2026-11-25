@@ -101,9 +101,13 @@ function parts(f: SFunc, e: Extract<SExpr, { k: "let" }>, inlinable: (g: SFunc) 
   // (what is, a record made of them too, so the stand-in `nobody` is read
   // at the part, not made).
   const outer: { i: number; value: SExpr }[] = [];
+  const out = (x: SExpr, t: LType): SExpr => { if (flat(x)) return x; const i = f.locals.push(t) - 1; outer.push({ i, value: x }); return { k: "local", i }; };
+  // A record just made of what isn't flat (array reads that may fail, a
+  // call): its fields worked out first, in order, as lets (C327g: a
+  // zipped fold's pair of array items).
+  if (v.k === "make" && v.into === undefined && !v.t.mutable && !v.args.every(flat)) { const m = v; v = { ...m, args: m.args.map((y, k) => out(y, m.t.fields[k].t)) }; }
   if (v.k === "call" && !v.cps && !v.tail && inlinable(ir.funcs[v.fn])) {
     const g = ir.funcs[v.fn], at = g.locals.map((t) => f.locals.push(t) - 1);
-    const out = (x: SExpr, t: LType): SExpr => { if (flat(x)) return x; const i = f.locals.push(t) - 1; outer.push({ i, value: x }); return { k: "local", i }; };
     const arg = (x: SExpr, t: LType): SExpr => {
       if (x.k === "let" && !x.check && !x.seeded) { outer.push({ i: x.i, value: x.value }); return arg(x.body, t); }
       return x.k === "make" && x.into === undefined && !x.t.mutable ? { ...x, args: x.args.map((y, k) => out(y, x.t.fields[k].t)) } : out(x, t);
