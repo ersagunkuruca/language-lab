@@ -75,3 +75,20 @@ test("a WAV round trip: the Bytes choice carries the types of what only passes t
   assert.deepEqual(carried.printed, asWritten);
   assert.equal(asWritten[0], String(44 + 2400 * 2 * 4));
 });
+
+// Only written, never read back: sound of wav, which the program doesn't
+// reach, named the library's Sound after the program took its own copy
+// of it (own-holders.ts), and the copy's check crashed on it.
+test("a WAV only written compiles: what names the library's Sound and isn't reached leaves with it", async () => {
+  const { call } = await import("../mcp/server.ts");
+  const dir = mkdtempSync(join(tmpdir(), "wav-only-"));
+  writeFileSync(join(dir, "code.json"), '{"defs": [], "nodes": {}}\n');
+  writeFileSync(join(dir, "names.default.json"), "{}\n");
+  const ask = (name: string, args: Record<string, unknown>) => { const r = call(name, args); assert.ok(!r.error, r.text); return r.text as string; };
+  ask("open", { path: dir });
+  ask("define", { name: "main", kind: "function", params: [] });
+  ask("replace", { at: /□#(\w+)/.exec(ask("view", { at: "main", depth: 99 }))![1], text: "print(show(byte count(wav of(sound(8000, [map(range(100), (i) => 0.5 · sin(as float64(i)))]), 16))))" });
+  const c = compiled(dir, true);
+  assert.equal(c.refused, undefined);
+  assert.deepEqual(c.printed, [String(44 + 100 * 2)]);
+});
