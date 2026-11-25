@@ -125,11 +125,11 @@ test("contracted works on Int tensors too: the one + and ·", async () => {
 // Number a (L219). Different shapes stop, as an overflow does: no handler
 // catches it (Ersagun's choice, 2026-11-03).
 test("tensors of a Number add, subtract, multiply item by item and negate", async () => {
-  assert.equal(await both((k, t) => k.call(ARITH.add, t, t)), "tensor([2, 3], [2, 4, 6, 8, 10, 12])");
-  assert.equal(await both((k, t) => k.call(ARITH.sub, k.call(ARITH.mul, t, t), t)), "tensor([2, 3], [0, 2, 6, 12, 20, 30])");
-  assert.equal(await both((k, t) => k.call(ARITH.neg, t)), "tensor([2, 3], [-1, -2, -3, -4, -5, -6])");
+  assert.equal(await both((k, t) => k.call(ARITH.add, t, t)), "tensor([2, 3], array [2, 4, 6, 8, 10, 12])");
+  assert.equal(await both((k, t) => k.call(ARITH.sub, k.call(ARITH.mul, t, t), t)), "tensor([2, 3], array [0, 2, 6, 12, 20, 30])");
+  assert.equal(await both((k, t) => k.call(ARITH.neg, t)), "tensor([2, 3], array [-1, -2, -3, -4, -5, -6])");
   const ints = (k: Lang, ...xs: number[]) => k.listOf(...xs.map((x) => k.int(x)));
-  assert.equal(await both((k) => k.call(ARITH.add, k.call(lib("tensor of"), ints(k, 2), ints(k, 1, 2)), k.call(lib("tensor of"), ints(k, 2), ints(k, 10, 20)))), "tensor([2], [11, 22])");
+  assert.equal(await both((k) => k.call(ARITH.add, k.call(lib("tensor of"), ints(k, 2), ints(k, 1, 2)), k.call(lib("tensor of"), ints(k, 2), ints(k, 10, 20)))), "tensor([2], array [11, 22])");
 });
 
 test("+ on tensors of different shapes stops, naming both, evaluated and compiled", async () => {

@@ -440,8 +440,10 @@ A tensor is a shape, its axis lengths, and its items with the last axis changing
 
 - **Tensor** (type). A tensor of any rank: its shape (the axis lengths) and its items with the last axis changing fastest. Built with tensor of; a shape mismatch stops the program and names both shapes, as the shape isn't in the type yet.
 - **tensor of** : `(List Int, List a) -[Abort]-> Tensor a`. The tensor with this shape and these items, the last axis changing fastest: tensor of([2, 3], [1, 2, 3, 4, 5, 6]) has rows [1, 2, 3] and [4, 5, 6]. Stops when the items don't fill the shape.
+- **tensor of array** : `(List Int, Array a) -[Abort]-> Tensor a`. tensor of, its items an array: kept as they are, not copied. Stops when the items don't fill the shape.
 - **tensor shape** : `(Tensor a) -> List Int`. A tensor's axis lengths: [2, 3] for a 2 × 3 one, [] for a single number.
 - **tensor items** : `(Tensor a) -> List a`. A tensor's items, the last axis changing fastest.
+- **tensor items array** : `(Tensor a) -> Array a`. The items as an array, the last axis changing fastest: the tensor's own, not copied.
 - **rank** : `(Tensor a) -> Int`. How many axes a tensor has: 2 for a matrix, 1 for a vector, 0 for a single number.
 - **tensor size** : `(Tensor a) -> Int`. How many items a tensor has: its axis lengths multiplied.
 - **tensor entry** : `(Tensor a, List Int) -[Choice]-> a`. The item at an index, one position per axis from 0: tensor entry(t, [1, 2]) is row 1, column 2. No answer outside the shape.
