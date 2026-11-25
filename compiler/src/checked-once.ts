@@ -52,7 +52,7 @@ function readOf(ir: CoreIR, fn: number): number | null {
 
 const calls = (e: SExpr, fn: number): boolean => (e.k === "call" && e.fn === fn) || kids(e).some((k) => calls(k, fn));
 
-export function checkedOnce(ir: CoreIR, among: number[]): number {
+export function checkedOnce(ir: CoreIR, among: number[], opts: { lengths?: boolean } = {}): number {
   let made = 0;
   for (const i of among) {
     // The if may be a let's value, what's after it calling nothing of
@@ -116,7 +116,11 @@ export function checkedOnce(ir: CoreIR, among: number[]): number {
     const copy: SFunc = { ...f, name: `${f.name} in range`, inner: true, apart: true, body: wrap({ ...b, else: rw(b.else) }) };
     ir.funcs.push(copy);
     // As written: to the copy when n ≤ 0 or every walk is in range.
-    const cond = [...reads.values()].map(([, a, p]): SExpr => ({ k: "rt", fn: "i64.walkIn", args: [{ k: "local", i: a }, { k: "local", i: p }, step.get(p)!, { k: "local", i: n }] })).reduce((x, y) => ({ k: "op", op: "and", args: [x, y] }));
+    // On WebAssembly (C336b) the array's length is given, as an i64.
+    const walk = (k: number, a: number, p: number): SExpr => (opts.lengths
+      ? { k: "rt", fn: "i64.walkLen", args: [{ k: "rt", fn: "i64.unbox", args: [{ k: "rt", fn: `array.length.a${k}`, args: [{ k: "local", i: a }] }] }, { k: "local", i: p }, step.get(p)!, { k: "local", i: n }] }
+      : { k: "rt", fn: "i64.walkIn", args: [{ k: "local", i: a }, { k: "local", i: p }, step.get(p)!, { k: "local", i: n }] });
+    const cond = [...reads.values()].map(([k, a, p]) => walk(k, a, p)).reduce((x, y) => ({ k: "op", op: "and", args: [x, y] }));
     const go: SExpr = { k: "call", fn: g, tail: true, args: f.params.map((_, j): SExpr => ({ k: "local", i: j })) };
     ir.funcs[i] = { ...f, body: { k: "if", cond, then: go, else: top, t: f.result } };
     made++;
