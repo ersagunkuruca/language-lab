@@ -169,8 +169,14 @@ function paint(m: PaintAsk) {
 
 type Ask = RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk | TestAsk | PictureAsk | CheckAsk | TraceAsk | RunCodeAsk;
 export type KeepShippedAsk = { keepShipped: string };
+let reading: Promise<void> | null = null;
 function onAsk(e: MessageEvent<Ask | PaintAsk | KeepShippedAsk>) {
-  if ("keepShipped" in e.data) return keepShipped(e.data.keepShipped);
+  // What's asked while the shipped checks are read waits for them.
+  if (reading) return void asked.push(e);
+  if ("keepShipped" in e.data) {
+    reading = keepShipped(e.data.keepShipped).then(() => { reading = null; for (const e of asked.splice(0)) onAsk(e); });
+    return;
+  }
   if ("paint" in e.data || "rows" in e.data) paint(e.data); else answer(e as MessageEvent<Ask>);
 }
 function answer(e: MessageEvent<Ask>) {

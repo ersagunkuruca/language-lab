@@ -156,12 +156,17 @@ let shippedElsewhere = false;
 export function shippedKeptByWorker() { shippedElsewhere = true; }
 // The worker's side: what the page read from checks.json and this browser
 // doesn't keep yet, fetched again (from the browser's cache) and kept.
-export function keepShipped(url: string) {
-  if (!db || kept.has(`${BUILD}|kept|library-resolved|library`)) return;
-  void fetch(url).then((r) => (r.ok ? r.json() : null)).then((got: { build: string; kept: Record<string, unknown> } | null) => {
+// Done once they're in its memory, so a check asked meanwhile waits for
+// them instead of making the library's anew (I364: 3.7 s of Checking… on
+// a first Run, against 1.1 s with them).
+export function keepShipped(url: string): Promise<void> {
+  if (!db || kept.has(`${BUILD}|kept|library-resolved|library`)) return Promise.resolve();
+  const read = fetch(url).then((r) => (r.ok ? r.json() : null)).then((got: { build: string; kept: Record<string, unknown> } | null) => {
     if (got?.build !== BUILD) return;
     for (const [k, v] of Object.entries(got.kept)) if (!kept.has(k)) writeLater(k, unpack(v));
   }, () => {});
+  // A slow network checks as before rather than wait (shipped above).
+  return Promise.race([read, new Promise<void>((ok) => setTimeout(ok, 1500))]);
 }
 
 // JSON for what IndexedDB keeps as it is: Maps, Sets, undefined and the
