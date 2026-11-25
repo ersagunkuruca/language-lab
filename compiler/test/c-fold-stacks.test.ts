@@ -5,12 +5,15 @@
 // a hundred thousand coefficients: the evaluator's answers, and every
 // cell freed, the stack kept for the next fold not counted. Countdown's
 // permutations, a function with several answers, keep their frames.
+// WebAssembly keeps them the same way, one struct and a growable array
+// (its answers on these inputs are wasm.test.ts's).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeRunner, toList, type Value } from "../../ters/src/lang/run.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
+import { emitWasm } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
 import { build, hex, skip } from "./c-harness.ts";
 
@@ -42,4 +45,14 @@ test("a fold's frames are one stack in C, not a cell each", { skip }, () => {
   }
   // Several answers go on from the same stack: their frames stay cells.
   assert.doesNotMatch(emitC(lowered("countdown").ir).c, /lab_stack_push\(/, "countdown");
+});
+
+test("a fold's frames are one stack in WebAssembly, not a struct each", () => {
+  for (const name of ["sort", "calculus"]) {
+    const w = emitWasm(lowered(name).ir).wat;
+    assert.match(w, /call \$fstack\.push\.\d+/, `${name}: its folds push onto a stack`);
+    // Only `done`, made once in its global.
+    assert.deepEqual(w.match(/struct\.new \$\w*frames\w*\.\w+/g), [w.match(/struct\.new \$\w*frames\w*\.done/)![0]], name);
+  }
+  assert.doesNotMatch(emitWasm(lowered("countdown").ir).wat, /fstack/, "countdown");
 });
