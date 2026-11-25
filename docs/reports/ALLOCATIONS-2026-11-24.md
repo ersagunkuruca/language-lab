@@ -505,6 +505,34 @@ V8's young generation made these structs nearly free, so the times move
 within noise either way; the point is the engines whose collectors are
 slower (Ersagun 2026-11-25). Every benchmark prints the same.
 
+### C327c2 on WebAssembly, built in loops (2026-11-25)
+
+`compiler/src/wasm-views.ts` keeps a looping function's array views as
+three locals (the buffer, the start, the length) where the loop walks
+them by `rest` or pushes onto them, as flock's `merge sorted` and every
+`map` do. Reads, `rest` and the pushes work on the three (the array's
+own runtime functions, written again in `wasm.ts viewRt`), and a view is
+made only where one leaves the loop on a branch that doesn't go round
+again. A call of `array cons` and a let of another local are read
+through first. Views made, counted with `TERS_COUNT_VIEWS=1` (each
+`struct.new $arr` adds one to an i64 at address 120 of WASI's memory):
+
+| program | views before | after |
+|---|---|---|
+| flock 100 ticks, 5000 birds | 150.4 M | 55.6 M: **-63%** |
+| pack 3,200 | 209 k | 141 k: **-32%** |
+| strings 32 | 19.7 M | 16.2 M: **-18%** |
+| typeset 1,000 | 3.91 M | 3.80 M: -3% |
+| bazaar, scan, mini | the same | |
+
+Flock under Node, five alternating runs each: 5.01 to 5.83 s before,
+4.84 to 5.50 s after (about 5%). The others are within noise. Of flock's
+remaining 56 M, 29 M are views made where one leaves a loop (mostly
+small maps' answers), 14 M are new arrays (`of`, `range`, `slice`) and
+11 M are pushes in functions that aren't loops. Removing the first and
+the last needs views passed between functions by value (multi-value
+inputs and answers), which is left.
+
 ## How this was measured
 
 On this container (4 cores), gcc 13 at `ters native`'s flags. Cells by
