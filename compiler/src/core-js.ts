@@ -267,7 +267,10 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
     if (!deep.has(i)) return [func(f, i, null), ...plainCopy()];
     const ps = f.params.map((_, j) => `l${j}`).join(", ");
     const plain = func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$b(`);
-    return [`function ${names[i]}(${ps}) {\n  if (depth > ${DEPTH}) return R.drive(${gens[i]}(${ps}));\n  depth++;\n  const r = ${names[i]}$b(${ps});\n  depth--;\n  return r;\n}`, plain, ...plainCopy(), func(f, i, deep.get(i)!)];
+    // A big frame counts for more (C339): housefit's pass back, 88 locals
+    // 1008 calls deep, ran out of Node's stack under DEPTH plain calls.
+    const w = 1 + (f.locals.length >> 5), up = w === 1 ? "depth++" : `depth += ${w}`, down = w === 1 ? "depth--" : `depth -= ${w}`;
+    return [`function ${names[i]}(${ps}) {\n  if (depth > ${DEPTH}) return R.drive(${gens[i]}(${ps}));\n  ${up};\n  const r = ${names[i]}$b(${ps});\n  ${down};\n  return r;\n}`, plain, ...plainCopy(), func(f, i, deep.get(i)!)];
   });
   const text = parts.flat();
   const printed = (i: number) => !only || only.has(i);
