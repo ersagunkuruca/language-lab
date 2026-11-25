@@ -39,6 +39,7 @@ import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import { ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, CONSOLE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError, type EffectsAt, type Row, type Scheme, type SchemeEffectsAt, type Type, OverMap, OverSet } from "./types.ts";
+import { TENSOR } from "./std-ids.ts";
 const FILE_OP_IDS = new Set<Id>(Object.values(FILE_OPS));
 import { DECLARED, discharge } from "./ledger.ts";
 import type { CheckCache } from "./check-cache.ts";
@@ -1850,7 +1851,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // slopes are an array too, and may fail where a slope can't be read.
     // Over an array of another Number written there (Dual: forward over
     // reverse), the same pass at that number.
-    if (r.id === ARRAY) {
+    // Over a Tensor the same, its slopes a tensor of its shape.
+    if (r.id === ARRAY || r.id === TENSOR) {
       const item = s.resolve(r.args[0]);
       if (item.t !== "con") { try { s.unify(r.args[0], num); } catch { return null; } }
       else if (item.t === "con" && item.args.length) return null;

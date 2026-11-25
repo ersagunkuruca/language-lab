@@ -130,3 +130,39 @@ test("gradient through tensors: contracted, + − ·, tensor map (L285)", () => 
   assert.equal(built.status, 0, built.stderr);
   check("ters native", spawnSync(join(dir, "n"), [], { encoding: "utf8" }).stdout);
 });
+
+// Over a tensor itself (L285): its slopes a tensor of its shape, over
+// Float64 (2 (x w) wᵀ, worked out by hand) and over Dual (the Hessian
+// times a vector, as the test above has it).
+test("gradient over a tensor: a tensor of its shape (L285)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "tensor-input-gradient-")), folder = join(dir, "p");
+  mkdirSync(folder);
+  writeFileSync(join(folder, "code.json"), JSON.stringify({ defs: [], nodes: {} }));
+  writeFileSync(join(folder, "names.default.json"), "{}");
+  const s = new Session(folder);
+  const fill = (name: string, params: string[], text: string) => { s.define(name, "function", params); s.replace(/□#(\w+)/.exec(s.view(name))![1], text); };
+  fill("w", [], "tensor of(list of(3, 2), list of(1.0, −0.5, 0.25, 2.0, −1.5, 0.75))");
+  fill("squares", ["t"], "sum(tensor items(tensor map((v) => v · v, contracted(t, w(), list of((1, 0))))))");
+  fill("t0", [], "tensor of(list of(2, 3), list of(1.0, −0.5, 2.0, 0.25, 1.5, −1.0))");
+  fill("wd", [], "tensor of(list of(3, 2), map(range(6), (i) => dual(as float64(i) · 0.5 − 1.0, 0.0)))");
+  fill("cubes", ["t"], "sum(tensor items(tensor map((v) => v · v · v, contracted(t, wd(), list of((1, 0))))))");
+  fill("td", [], "tensor of(list of(2, 3), list of(dual(1.0, 1.0), dual(−0.5, 0.0), dual(2.0, 0.5), dual(0.25, 0.0), dual(1.5, −1.0), dual(−1.0, 0.0)))");
+  fill("main", [], 'print(show(first(gradient(squares)(t0()), else t0())) ++ "\\n" ++ show(first(gradient(cubes)(td()), else td())))');
+  assert.equal(s.errors(), "ok");
+  const want = [
+    "tensor([2, 3], array [-4.25, -1.0625, 6.375, 2.125, 9.5625, -3.1875])",
+    "tensor([2, 3], array [dual(-10.59375, 1.3125), dual(7.59375, 1.6875), dual(25.78125, 2.0625), dual(-5.8359375, -1.3125), dual(1.1484375, 1.3125), dual(8.1328125, 3.9375)])",
+  ];
+  assert.equal(s.eval("first(gradient(squares)(t0()), else t0())"), `= ${want[0]} : Tensor Float64`);
+  assert.equal(s.eval("first(gradient(cubes)(td()), else td())"), `= ${want[1]} : Tensor Dual`);
+  s.save();
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
+  for (const how of [[], ["--evaluator"]]) {
+    const r = spawnSync(process.execPath, [lab, "run", folder, ...how], { encoding: "utf8" });
+    assert.equal(r.stdout.trim(), want.join("\n"), `ters run ${how.join(" ")} ${r.stderr}`);
+  }
+  if (skip) return;
+  const built = spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "n")], { encoding: "utf8" });
+  assert.equal(built.status, 0, built.stderr);
+  assert.equal(spawnSync(join(dir, "n"), [], { encoding: "utf8" }).stdout.trim(), want.join("\n"));
+});

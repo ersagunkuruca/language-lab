@@ -39,7 +39,7 @@ import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
-import { ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT, PAIR_V } from "./std-ids.ts";
+import { ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT, PAIR_V, TENSOR, TENSOR_V } from "./std-ids.ts";
 import { COMPUTE_ONLY, FILE_OPS, KEPT_FILES, LOCALE_V, MY_LOCALE_OP, MY_LATENCY_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, ORDERED, CASE_NAME, SOME, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std-ids.ts";
 import { tupleVariant } from "./std-values.ts";
 import { ArrayView } from "./array-view.ts";
@@ -386,7 +386,7 @@ export function resolvedFor(code: Code, info: Info, names: Names | undefined): {
     // resolved with the rest, which code made as it runs isn't.
     // gradient(f) over an array of another Number, or over a record
     // (one pass back for all its fields, as compiled: pullback.ts).
-    const overOther = (call: Id) => { const o = gradientOver(code, info, call); return !!o && (o.of === ARRAY ? !!o.item && o.item !== NUMBER : o.of !== NUMBER); };
+    const overOther = (call: Id) => { const o = gradientOver(code, info, call); return !!o && (o.of === ARRAY || o.of === TENSOR ? !!o.item && o.item !== NUMBER : o.of !== NUMBER); };
     const grads = asksGradient(code) ? expandArrayGradients(code, names ?? {}, info, overOther) : { code, names: names ?? {}, expanded: [] };
     const [from, check] = grads.expanded.length ? [grads.code, infer(grads.code, grads.names, undefined, info.options)] : [code, info];
     const { code: c, info: i } = resolveArithmetic(from, check, grads.names);
@@ -522,7 +522,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (p instanceof ArrayView && p.n > 0 && typeof p.buf.items[p.start] !== "number") throw new Error("gradient over an array of another Number than Float64 needs its function written where gradient is called");
       let lambda: Id;
       try {
-        lambda = typeof p === "number" || !("lambda" in m) ? derivativeLambda(code, m) : p instanceof ArrayView ? arrayGradientLambda(code, m.lambda, (id) => info.copyOf?.get(id) ?? id, info) : gradientLambda(code, m, (p as Data).tag);
+        lambda = typeof p === "number" || !("lambda" in m) ? derivativeLambda(code, m) : p instanceof ArrayView || (p as Data).tag === TENSOR_V ? arrayGradientLambda(code, m.lambda, (id) => info.copyOf?.get(id) ?? id, info) : gradientLambda(code, m, (p as Data).tag);
       } catch (e) { if (e instanceof NotDifferentiable) return; throw e; }
       for (const g of run((machine) => machine.eval(lambda, env))) yield* (g as Fn)(p);
     } as Fn;
