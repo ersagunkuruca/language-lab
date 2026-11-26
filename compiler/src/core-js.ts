@@ -58,7 +58,7 @@ import * as I from "../../ters/src/lang/int.ts";
 import { gpuMaps } from "./gpu-maps.ts";
 import { gpuDraws, packsOf } from "./gpu-draws.ts";
 import { rangeArrays, rangeChoices } from "./range-choices.ts";
-import { originalOf, PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
+import { originalOf, PRELUDE_DEFS, typedOriginalOf } from "../../ters/src/lang/prelude-ids.ts";
 import { earlyAnd } from "./early-and.ts";
 import { ARRAY_RT, emptyArray, isArray, isTable, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, poolHeld, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import type { Type } from "../../ters/src/lang/types.ts";
@@ -933,6 +933,8 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
     // An array of a written list made from its items, with no list between
     // (C196: agent's triangle corners, three points an array each call).
     writtenArrays(ir);
+    // contracted's one pair of axes at Float64, several sums at once (C351a).
+    if (!envSet("NO_PRODUCTS")) stridedProducts(ir);
     // A replace in an array of a type whose every value has one holder,
     // written in place (owned-arrays.ts, C93 s4).
     // The passes after it read one holders() (sharedHolders).
@@ -1029,6 +1031,21 @@ function writtenArrays(ir: CoreIR): void {
     return x;
   };
   for (const f of ir.funcs) f.body = go(f.body);
+}
+
+// contracted's one pair of axes at Float64 (`strided products`, C351a;
+// C306 on C, c.ts stridedProductsC): the runtime's
+// `array.stridedProducts`, 2 rows by 4 columns of sums at once, each
+// added in the order the definition adds it, so the same bits (mnist's
+// weight gradient, 28% of Adam as the definition's map of sums).
+function stridedProducts(ir: CoreIR): void {
+  const f64s = (t: LType) => isArray(t) && t.item === "f64", ints = (t: LType) => isArray(t) && t.item === "int";
+  for (const f of ir.funcs) {
+    const p = f.params, r = f.result;
+    if (p.length !== 7 || typedOriginalOf(f.def) !== PRELUDE_DEFS["strided products"] || f.multi || f.budgeted) continue;
+    if (!f64s(p[0]) || !f64s(p[1]) || !ints(p[2]) || !ints(p[3]) || p.slice(4).some((t) => t !== "int") || !isArray(r) || r.item !== "f64") continue;
+    f.body = { k: "rt", fn: `array.stridedProducts.a${r.index}`, args: p.map((_, i): SExpr => ({ k: "local", i })) };
+  }
 }
 
 // What a variable starts as.
