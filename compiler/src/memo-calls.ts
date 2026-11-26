@@ -1,11 +1,17 @@
 // A function that only computes, works through a loop and is called
-// again with the very inputs it was last called with: its last answer
-// kept with those inputs, and given again (C352, compiled JavaScript).
+// again with inputs it was called with lately: its last eight answers
+// kept with their inputs, each given again (C352, C353, compiled
+// JavaScript).
 // fit's damped Gauss-Newton works out `sse of(model, q, pts)` to judge a
 // step, and the next `step(model, q, pts)` then works out the same sums
 // at the same parameters, the same record and the same points: every
 // measurement's model and slopes twice, where the hand-written ideal keeps
 // the sums it judged by (51 million model evaluations to its 20).
+//
+// fit's `report` fits every model to print it, and then fits every model
+// again to find the best (`fits of`): `tried(model, points)` called four
+// times, then the same four again (C353), which one kept answer never
+// meets.
 //
 // The same: a function that does nothing but compute (no world, no
 // closure applied, no effect handled, no box set, nothing written in
@@ -32,6 +38,14 @@ import { SAFE_RT } from "./share-calls.ts";
 
 // An array's reads by position, of rows or columns (columns.ts).
 const READS = /^array\.(get|getb|at|atb|length|lengthb|cget\d+|clength|cin|has|slice|from|drop)\.a\d+$/;
+// Arrays made, or written where the function holds the only hold on one
+// (owned): no input is an array of a kind any such write goes into
+// (writtenArrays below), so only what the function made is written. None
+// calls a closure.
+const BUILDS = /^array\.(push|pushFront|pushOwned|pushFrontOwned|replaceOwned|ofItems|concat|range|stridedProducts|stridedProductsDual)\.a\d+$/;
+
+// How many calls are kept: a check of each is an Object.is an input.
+export const MEMO_SIZE = 8;
 
 export function memoFuncs(ir: CoreIR, deep: ReadonlySet<number>): Set<number> {
   const n = ir.funcs.length;
@@ -39,7 +53,7 @@ export function memoFuncs(ir: CoreIR, deep: ReadonlySet<number>): Set<number> {
   const writtenArrays = new Set<number>(), writtenRecords = new Set<string>();
   const writes = (e: SExpr): void => {
     if (e.k === "rt") { const m = /^array\.(\w+)\.a(\d+)$/.exec(e.fn); if (m && /^(replaceOwned|pushFrontOwned|c(set[\d_]*|push|copy|front|build|new))$/.test(m[1])) writtenArrays.add(Number(m[2])); }
-    if (e.k === "make" && e.into !== undefined) writtenRecords.add(e.t.key);
+    if ((e.k === "make" || e.k === "new") && e.into !== undefined) writtenRecords.add(e.t.key);
     kids(e).forEach(writes);
   };
   ir.funcs.forEach((f) => writes(f.body));
@@ -49,8 +63,11 @@ export function memoFuncs(ir: CoreIR, deep: ReadonlySet<number>): Set<number> {
     const walk = (e: SExpr) => {
       if (!ok) return;
       switch (e.k) {
+        // A map that may share its items on workers gives what it does in
+        // turn (map.worth, scalar.ts; columns.ts reads it so too).
+        case "if": if (e.cond.k === "rt" && e.cond.fn === "map.worth") { walk(e.else); return; } break;
         case "world": case "apply": case "abort": case "handle": case "released": case "set": case "choose": case "search": case "budget": ok = false; return;
-        case "rt": if (e.host || e.own || !(SAFE_RT(e.fn) || READS.test(e.fn))) { ok = false; return; } break;
+        case "rt": if (e.host || e.own || !(SAFE_RT(e.fn) || READS.test(e.fn) || BUILDS.test(e.fn))) { ok = false; return; } break;
         case "call": if (e.cps) { ok = false; return; } calls[i].add(e.fn); break;
         case "attempt": if (e.spent || e.resumes) { ok = false; return; } break;
         case "make": case "new": if (e.into !== undefined) { ok = false; return; } break;
@@ -73,8 +90,11 @@ export function memoFuncs(ir: CoreIR, deep: ReadonlySet<number>): Set<number> {
   });
   const plain = (t: LType, depth = 0): boolean => {
     if (t === "f64" || t === "int" || t === "i32" || t === "int32" || t === "text") return true;
-    if (typeof t !== "object" || isFn(t) || isData(t) || depth > 4) return false;
+    if (typeof t !== "object" || isFn(t) || depth > 4) return false;
     if (isRecord(t)) return !t.mutable && !writtenRecords.has(t.key) && t.fields.every((x) => plain(x.t, depth + 1));
+    // A data value that doesn't hold itself (a list does, through the
+    // depth), of plain fields.
+    if (isData(t)) return !t.inner && !writtenRecords.has(t.key) && t.cases.every((c) => c.fields.every((x) => plain(x.t, depth + 1)));
     return false;
   };
   const input = (t: LType): boolean => plain(t) || (isArray(t) && !writtenArrays.has(t.index) && (plain(t.item) || t.item === "f64"));

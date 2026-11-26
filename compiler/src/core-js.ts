@@ -23,7 +23,7 @@ import { keepingWhole } from "../../ters/src/lang/check-cache.ts";
 import { keysOver } from "../../ters/src/lang/def-keys.ts";
 import { overLiterals } from "../../ters/src/lang/literals-again.ts";
 import { shareCalls } from "./share-calls.ts";
-import { memoFuncs } from "./memo-calls.ts";
+import { MEMO_SIZE, memoFuncs } from "./memo-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
 import { knownClosures } from "./known-closures.ts";
 import { itemPaths } from "./item-paths.ts";
@@ -279,13 +279,13 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
         ...(counted && kept.size && boundedReads(ir, i, kept, counted) ? [func(f, i, null, "checked").replace(`function ${names[i]}(`, `function ${names[i]}$c(`)] : []),
       ];
     };
-    // Its last inputs and answer kept, given again for the same inputs
-    // (memo-calls.ts, C352).
+    // Its last eight inputs and answers kept, each given again for the
+    // same inputs (memo-calls.ts, C352, C353).
     if (memo.has(i)) {
       const ps = f.params.map((_, j) => `l${j}`), m = `${names[i]}$k`;
-      const same = ps.map((p, j) => `Object.is(${m}${j}, ${p})`).join(" && ");
-      return [`let ${m} = false, ${[...ps.map((_, j) => `${m}${j}`), `${m}r`].join(", ")};`,
-        `function ${names[i]}(${ps.join(", ")}) {\n  if (${m} && ${same}) return ${m}r;\n  const r = ${names[i]}$m(${ps.join(", ")});\n  ${ps.map((p, j) => `${m}${j} = ${p};`).join(" ")} ${m}r = r; ${m} = true;\n  return r;\n}`,
+      const same = ps.map((p, j) => `Object.is(${m}${j}[j], ${p})`).join(" && ");
+      return [`const ${[...ps.map((_, j) => `${m}${j}`), `${m}r`].map((x) => `${x} = []`).join(", ")}; let ${m}n = 0;`,
+        `function ${names[i]}(${ps.join(", ")}) {\n  for (let j = 0, e = Math.min(${m}n, ${MEMO_SIZE}); j < e; j++) if (${same}) return ${m}r[j];\n  const r = ${names[i]}$m(${ps.join(", ")});\n  const j = ${m}n++ % ${MEMO_SIZE}; ${ps.map((p, j) => `${m}${j}[j] = ${p};`).join(" ")} ${m}r[j] = r;\n  return r;\n}`,
         func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$m(`), ...plainCopy()];
     }
     if (!deep.has(i)) return [func(f, i, null), ...plainCopy()];
