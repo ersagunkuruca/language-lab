@@ -130,9 +130,13 @@ function builtinOf(name: string): BuiltinOf | undefined {
 // swarm's motes, removed as they die, the keys there sliding up).
 export const tableSpec = (t: TType): TableSpec => {
   const keys = t.set ? [] : t.entries.map((d) => keyList(t, d));
-  const direct = t.keyT === "int" ? { direct: true as const } : {};
+  const direct = t.keyT === "int" ? { direct: true as const } : pairKey(t) ? { pair: true as const } : {};
   return keys.some((x) => x) ? { set: t.set, keys, ...direct } : { set: t.set, ...direct };
 };
+// A map's key a pair of Ints and Texts (rota's `(person, day)`): held by
+// its parts (table.ts PairMap). Not a set's, whose items are listed from
+// the key kept beside each.
+const pairKey = (t: TType): boolean => !t.set && typeof t.keyT === "object" && isRecord(t.keyT) && t.keyT.fields.length === 2 && t.keyT.fields.every((f) => f.t === "int" || f.t === "text");
 const tableSpecs = (ir: CoreIR): TableSpec[] => {
   return ir.tables.map((t) => tableSpec(t));
 };

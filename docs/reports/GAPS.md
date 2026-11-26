@@ -5171,10 +5171,13 @@ Tried by hand on the compiled module, the same output:
 - `sort by` as one array sort with the compiled compare, stable as the
   merge is. This took 1.05 to 1.03 s (5%).
 
-Neither reaches the 10% bar alone. The tables' reads are three Map reads
-each: a tuple key's spelling is found by its parts (two), then the
-table's own read by that spelling. A table of tables by the key's first
-part would read two, about a third of the 24%. What would close the gap
+Neither reaches the 10% bar alone. The tables' reads were three Map
+reads each: a tuple key's spelling found by its parts (two), then the
+table's own read by that spelling. Built: a map whose keys are pairs of
+Ints and Texts is a Map by the first part of Maps by the second
+(table.ts `PairMap`, given the pair as it is, core-js.ts tableSpec
+`pair`): bench-rota core at 21 x 18 0.95-1.06 s to 0.88-0.93 s (7.9-8.7x
+to 7.4-7.5x), the same output. What would close the gap
 is the ideal's representation: the people and the days are numbered, so
 each map is an array by position, with nothing hashed or spelled. That
 is the chooser's (a map whose keys come from a list the program never

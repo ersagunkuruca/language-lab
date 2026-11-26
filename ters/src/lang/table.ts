@@ -99,6 +99,52 @@ export class DirectMap {
 export const directTable = (): Table => new Table(new DirectMap() as unknown as Map<unknown, unknown>, true);
 export const directRead = (t: Table, key: unknown, none: unknown): unknown => { const m = t.m, v = m.get(key); return v === undefined && !m.has(key) ? none : v; };
 
+// A Map whose keys are pairs of Ints and Texts, held by their two parts:
+// a Map by the first part of Maps by the second (rota's `(person, day)`
+// and `(day, shift)`: a read by the key's spelling was three Map reads,
+// two to find the spelling kept by its parts and one by it, a quarter of
+// rota's run). Compiled JS makes one for each table of such keys
+// (core-js.ts tableSpec), whose reads and puts are given the pair itself,
+// not its spelling; each entry keeps its key beside its value (`Keyed`),
+// as a spelled one does, so it is listed the same way.
+const first = (k: unknown): unknown => (k as { f0?: unknown; fields: unknown[] }).f0 ?? (k as { fields: unknown[] }).fields[0];
+const second = (k: unknown): unknown => (k as { f1?: unknown; fields: unknown[] }).f1 ?? (k as { fields: unknown[] }).fields[1];
+export class PairMap {
+  o = new Map<unknown, Map<unknown, unknown>>();
+  size = 0;
+  constructor(from?: PairMap) { if (from) { for (const [a, m] of from.o) this.o.set(a, new Map(m)); this.size = from.size; } }
+  get(k: unknown): unknown { return this.o.get(first(k))?.get(second(k)); }
+  has(k: unknown): boolean { return this.o.get(first(k))?.has(second(k)) ?? false; }
+  set(k: unknown, v: unknown): this {
+    const a = first(k);
+    let m = this.o.get(a);
+    if (!m) this.o.set(a, (m = new Map()));
+    const b = second(k);
+    if (!m.has(b)) this.size++;
+    m.set(b, v);
+    return this;
+  }
+  delete(k: unknown): boolean {
+    const m = this.o.get(first(k));
+    if (!m || !m.delete(second(k))) return false;
+    this.size--;
+    return true;
+  }
+  *entries(): IterableIterator<[unknown, unknown]> { for (const m of this.o.values()) for (const v of m.values()) yield [keyOf(undefined, v), v]; }
+  [Symbol.iterator](): IterableIterator<[unknown, unknown]> { return this.entries(); }
+  *keys(): IterableIterator<unknown> { for (const [k] of this.entries()) yield k; }
+  *values(): IterableIterator<unknown> { for (const [, v] of this.entries()) yield v; }
+  forEach(f: (v: unknown, k: unknown, m: this) => void): void { for (const [k, v] of this.entries()) f(v, k, this); }
+}
+// An empty pair table, and its reads, puts and removes (core-rt.ts), given
+// the pair as it is.
+export const pairTable = (): Table => new Table(new PairMap() as unknown as Map<unknown, unknown>, true);
+export const pairRead = (t: Table, key: unknown, none: unknown): unknown => { const m = t.m, v = m.get(key); return v === undefined && !m.has(key) ? none : valueOf(v); };
+export const pairPut = (t: Table, key: unknown, v: unknown): Table => change(t, key, true, new Keyed(key, v));
+export const pairRemove = (t: Table, key: unknown): Table => change(t, key, false);
+export const pairPutOwned = (t: Table, key: unknown, v: unknown): Table => changeOwned(t, key, true, new Keyed(key, v));
+export const pairRemoveOwned = (t: Table, key: unknown): Table => changeOwned(t, key, false);
+
 // A hash table changed in place (C63b, IN-PLACE.md step 2): Map's
 // representation, its keys Ints and Texts, the ones a JS Map holds by value
 // (an Int has one spelling, int.ts), and tuples of them, held by their
@@ -155,7 +201,7 @@ function reroot(t: Table) {
 }
 // A put (set) or remove: a new newest version, t the change back to it.
 export function change(t: Table, key: unknown, set: boolean, v?: unknown): Table {
-  if (t.shared) { const m = t.m instanceof DirectMap ? new DirectMap(t.m) as unknown as Map<unknown, unknown> : new Map(t.m); if (set) m.set(key, v); else m.delete(key); return new Table(m); }
+  if (t.shared) { const m = t.m instanceof DirectMap ? new DirectMap(t.m) as unknown as Map<unknown, unknown> : t.m instanceof PairMap ? new PairMap(t.m) as unknown as Map<unknown, unknown> : new Map(t.m); if (set) m.set(key, v); else m.delete(key); return new Table(m); }
   const m = t.m, had = m.has(key), old = m.get(key);
   if (!set && !had) return t;
   if (set) m.set(key, v); else m.delete(key);
