@@ -56,6 +56,9 @@ const same = (a: AV, b: AV): boolean => {
 // Kept a few levels deep: a type holding another that holds it would
 // nest without end.
 const capped = (v: AV, n = 6): AV => (typeof v !== "object" ? v : n === 0 ? "S" : "f" in v ? { f: v.f.map((x) => capped(x, n - 1)) } : { it: capped(v.it, n - 1) });
+// What a call may lend its answer, as the caller then knows it shared: a
+// local, or a local's field.
+const lendable = (a: SExpr) => a.k === "local" || ((a.k === "get" || a.k === "field") && a.rec.k === "local");
 const fieldsOf = (r: AV): AV[] | null => (typeof r === "object" && "f" in r ? r.f : null);
 
 // Holding nothing written in place (no array, table or record, in it or
@@ -169,7 +172,10 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   const sited = new Set<string>([...(ir.drawSites ?? []).flatMap((d) => [d.at, d.vertex, d.fragment]), ...(ir.sharedSites ?? []).map((d) => d.at), ...(ir.nearSites ?? []).map((d) => d.at)].filter((x): x is string => !!x));
   // Each closure code's type.
   const codeOf = new Map<number, string>();
-  const scan = (g: SFunc, e: SExpr) => {
+  // The functions each function's `both`s run.
+  const bothOf = new Map<number, number[]>();
+  const scan = (g: SFunc, e: SExpr, self = funcs.indexOf(g)) => {
+    if (e.k === "rt" && e.fn === "both.pure") { const c = e.args[0]; (bothOf.get(self) ?? bothOf.set(self, []).get(self)!).push(c?.k === "closure" ? c.fn : -1); }
     if (e.k === "call") called.add(e.fn);
     if (e.k === "closure") { codeOf.set(e.fn, e.t.key); if (e.d !== undefined) outside.add(e.d); }
     // A function the runtime is handed by its number (a whole part of the
@@ -179,7 +185,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
       for (const a of e.args) handed(g, a);
       if (e.k === "world") looseIn(e.t);
     }
-    kids(e).forEach((k) => scan(g, k));
+    kids(e).forEach((k) => scan(g, k, self));
   };
   funcs.forEach((g) => scan(g, g.body));
   for (const r of roots) { funcs[r]?.params.forEach(looseIn); looseIn(funcs[r]?.result); }
@@ -213,9 +219,14 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   });
   // Which parameters a function only reads (borrows), to a fixpoint.
   const reads = funcs.map((g, i) => g.params.map((_, j) => !(j === 0 && takes.has(i))));
+  // And which it only reads or gives back part of (lends to its answer):
+  // the caller still holds it, and the answer shares it.
+  const lends = reads.map((r) => [...r]);
   // Each function's locals (whole) and record locals' fields used once.
   const once = funcs.map((g) => g.locals.map(() => true));
   const fieldOnce = funcs.map(() => new Map<string, boolean>());
+  // What each closure code gives away of what it captured.
+  const capGiven = funcs.map(() => new Set<number>());
   const params: AV[][] = funcs.map((g, i) => g.params.map((_, j) => (outside.has(i) || (codeOf.has(i) && j === 0) ? "S" : "T")));
   const results: AV[] = funcs.map(() => "T");
 
@@ -233,7 +244,11 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
     // after changing the other.
     const twice = (xs: SExpr[], to?: number) => {
       const seen = new Set<number>();
-      xs.forEach((x, j) => { if (x.k === "local" && !(to !== undefined && dead[to]?.[j])) { if (seen.has(x.i)) off(x.i); seen.add(x.i); } });
+      // A closure among them holds what it captured while the call runs.
+      xs.forEach((x, j) => {
+        if (to !== undefined && dead[to]?.[j]) return;
+        for (const y of x.k === "closure" ? x.caps : [x]) if (y.k === "local") { if (seen.has(y.i)) off(y.i); seen.add(y.i); }
+      });
     };
     const walk = (e: SExpr, s: St, read: boolean): void => {
       switch (e.k) {
@@ -259,12 +274,15 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
         case "op": for (const a of e.args) walk(a, s, true); return;
         // A closure capturing a record of plain fields captures a copy
         // where the record is written in place (owned-records.ts).
-        case "closure": for (const c of e.caps) walk(c, s, c.k === "local" && flat(g.locals[c.i])); return;
+        // So does one given to a function that only reads (calls) it, whose
+        // code only reads what it captured: it is gone when the call ends.
+        case "closure": e.caps.forEach((c, k) => walk(c, s, (c.k === "local" && flat(g.locals[c.i])) || (read && !capGiven[e.fn]?.has(k)))); return;
         case "rt": { const o = op(e), r = (o !== null && READS.has(o)) || READS_RT.test(e.fn); twice(e.args); inputs(e.args.map((a) => [a, r]), s); return; }
         // An input the callee never looks at isn't a use (a local there
         // may be given away beside it).
-        case "call": twice(e.args, e.fn); inputs(e.args.flatMap((a, j): [SExpr, boolean][] => (dead[e.fn]?.[j] && a.k === "local" ? [] : [[a, (reads[e.fn]?.[j] ?? false) || !!dead[e.fn]?.[j]]])), s); return;
-        case "apply": twice([e.fn, ...e.args]); inputs(kids(e).map((k) => [k, false]), s); return;
+        case "call": twice(e.args, e.fn); inputs(e.args.flatMap((a, j): [SExpr, boolean][] => (dead[e.fn]?.[j] && a.k === "local" ? [] : [[a, (reads[e.fn]?.[j] ?? false) || (!!lends[e.fn]?.[j] && lendable(a)) || !!dead[e.fn]?.[j]]])), s); return;
+        // Calling a function only reads it.
+        case "apply": twice([e.fn, ...e.args]); inputs([[e.fn, true], ...e.args.map((a): [SExpr, boolean] => [a, false])], s); return;
         // A record made from fields of one local of its type may be written
         // into it (owned-records.ts): that gives the local, whole; its
         // fields named there go with it.
@@ -292,29 +310,38 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
     };
     walk(g.body, { gone: new Set(), took: new Set() }, false);
     // A parameter only borrowed: never given away whole nor in part.
-    const given = new Set<number>();
-    // A part read out of a value gives the value only where the part is
-    // given (a let's local, a match's), and a number, a Bool or a text
-    // never: `first` of a set of texts only reads the set.
-    const gives = (e: SExpr, read: boolean): void => {
+    const given = new Set<number>(), lent = new Set<number>();
+    // How a value is used: only read (0), part of what the function gives
+    // back (1), or given away otherwise (2). A part read out of a value is
+    // used as the value only where the part is (a let's local, a match's),
+    // and a number, a Bool or a text never: `first` of a set of texts only
+    // reads the set; of a set of records, it lends it to its answer.
+    const gives = (e: SExpr, m: 0 | 1 | 2): void => {
+      const by = (x: number): 0 | 1 | 2 => (given.has(x) ? 2 : lent.has(x) ? 1 : 0);
       switch (e.k) {
-        case "local": if (!read && !plain(g.locals[e.i])) given.add(e.i); return;
+        case "local": if (m && !plain(g.locals[e.i])) (m === 2 ? given : lent).add(e.i); return;
         case "get": case "field": {
           const t = e.k === "get" ? e.t.fields[e.i]?.t : e.t.cases[e.c]?.fields[e.i]?.t;
-          return gives(e.rec, read || plain(t));
+          return gives(e.rec, plain(t) ? 0 : m);
         }
-        case "make": { const y = rebuilds(e); if (y !== null) given.add(y); for (const a of e.args) gives(a, false); return; }
-        case "let": gives(e.body, false); return gives(e.value, !given.has(e.i));
-        case "case": e.arms.forEach((a) => a && gives(a, false)); return gives(e.scrut, !given.has(e.s));
-        case "if": gives(e.cond, true); gives(e.then, false); gives(e.else, false); return;
-        case "op": for (const a of e.args) gives(a, true); return;
-        case "rt": { const o = op(e), r = (o !== null && READS.has(o)) || READS_RT.test(e.fn); e.args.forEach((a) => gives(a, r)); return; }
-        case "call": e.args.forEach((a, j) => gives(a, reads[e.fn]?.[j] ?? false)); return;
-        default: for (const k of kids(e)) gives(k, false);
+        case "make": { const y = rebuilds(e); if (y !== null) given.add(y); for (const a of e.args) gives(a, m); return; }
+        case "new": for (const a of e.args) gives(a, m); return;
+        case "let": gives(e.body, m); return gives(e.value, by(e.i));
+        case "case": e.arms.forEach((a) => a && gives(a, m)); return gives(e.scrut, by(e.s));
+        case "if": gives(e.cond, 0); gives(e.then, m); gives(e.else, m); return;
+        case "op": for (const a of e.args) gives(a, 0); return;
+        case "apply": gives(e.fn, 0); for (const a of e.args) gives(a, 2); return;
+        case "cap": if (m && !plain(ir.shapes[e.shape]?.caps[e.i]) && !capGiven[self].has(e.i)) { capGiven[self].add(e.i); changed = true; } return;
+        case "rt": { const o = op(e), r = (o !== null && READS.has(o)) || READS_RT.test(e.fn); e.args.forEach((a) => gives(a, r ? 0 : 2)); return; }
+        case "call": e.args.forEach((a, j) => gives(a, reads[e.fn]?.[j] ? 0 : lends[e.fn]?.[j] ? m : 2)); return;
+        default: for (const k of kids(e)) gives(k, 2);
       }
     };
-    gives(g.body, false);
-    g.params.forEach((_, j) => { if (reads[self][j] && given.has(j)) { reads[self][j] = false; changed = true; } });
+    gives(g.body, 1);
+    g.params.forEach((_, j) => {
+      if (reads[self][j] && (given.has(j) || lent.has(j))) { reads[self][j] = false; changed = true; }
+      if (lends[self][j] && given.has(j)) { lends[self][j] = false; changed = true; }
+    });
   };
 
   // The holders of e's value, with env the locals'.
@@ -363,7 +390,15 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
         case "fail": case "abort": kids(e).forEach((k) => av(self, k, env, at)); return "T";
         case "call": {
           const xs = e.args.map((a) => av(self, a, env, at));
-          xs.forEach((x, j) => { const p = params[e.fn]; if (p && !outside.has(e.fn)) { const m = meet(p[j], reads[e.fn][j] ? "S" : x); if (!same(m, p[j])) { p[j] = m; changed = true; } } });
+          xs.forEach((x, j) => { const p = params[e.fn]; if (p && !outside.has(e.fn)) { const m = meet(p[j], reads[e.fn][j] || (lends[e.fn][j] && lendable(e.args[j])) ? "S" : x); if (!same(m, p[j])) { p[j] = m; changed = true; } } });
+          // What it lent its answer is shared with the answer from here on:
+          // a local, or a local's field.
+          e.args.forEach((a, j) => {
+            if (reads[e.fn]?.[j] || !lends[e.fn]?.[j]) return;
+            if (a.k === "local") env[a.i] = "S";
+            else if (a.k === "get" && a.rec.k === "local") { const r = env[a.rec.i], fs = fieldsOf(r); if (fs) env[a.rec.i] = { f: fs.map((y, i) => (i === a.i ? "S" : y)) }; }
+            else if (a.k === "field" && a.rec.k === "local") env[a.rec.i] = "S";
+          });
           // A definition with no inputs is worked out once and kept, unless
           // it gives an array or a table of a type something writes in place
           // (core-js.ts and wasm.ts `written`; wasm.ts keeps no table):
@@ -380,6 +415,9 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
         case "rt": {
           const xs = e.args.map((a) => av(self, a, env, at));
           const o = op(e);
+          // `both` runs its function twice, on the threads or here: each
+          // answer is what the function gives (a copy, from a worker).
+          if (e.fn === "both.pure" || e.fn === "both.second") { const cs = bothOf.get(self) ?? [-1]; return cs.reduce<AV>((m, c) => meet(m, results[c] ?? "S"), "T"); }
           return o !== null && MAKES.has(o) ? "U" : o !== null && PASSES.has(o) ? xs[0] : "S";
         }
         default: kids(e).forEach((k) => av(self, k, env, at)); return "S";
