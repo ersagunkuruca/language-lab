@@ -50,7 +50,7 @@ test("machine: an edit of a number takes the choice again, as a fresh compile pr
   const got = compile(next, p.pres.names, p.options, main, own, { code: p.code, info: first.info });
   assert.equal(choicesAgain, was + 1, "the choice was made again");
   // So are lowering's front steps, as many as it takes (literals-again.ts).
-  assert.equal(stepsAgain, steps + 3, "lowering's front, its handlers and its prepared steps were made again");
+  assert.equal(stepsAgain, steps + 4, "lowering's front, its handlers, its prepared steps and the passes before lowering were made again");
   forgetKept();
   const fresh = compile(next, p.pres.names, p.options, main, own);
   assert.equal(got.text, fresh.text);
