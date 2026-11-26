@@ -170,9 +170,12 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     // (`sample at` passes its Bytes to `bytes as 16 bits`): Map's own `put`
     // keeps its pin, as crew-page's page needs.
     const changed = (d: Id) => r.code.nodes[d] !== code.nodes[d] || subtree(r.code, d).some((x) => r.code.nodes[x] !== code.nodes[x]);
-    const unpinned = unpinnedOf(info.options?.pins, new Set(r.reps.map((x) => x.of)), (d) => changed(d) || [...dependenciesOfAll(r.code, [d])].some((x) => x !== d && code.nodes[x]?.kind === "def" && changed(x)));
+    // Worked out only where read: lists chosen and checked need none
+    // (machine: a pin's walk of its definitions each, 25 ms of an edit).
+    let unpinned: Pins | null | undefined;
+    const unpinnedNow = () => (unpinned === undefined ? (unpinned = unpinnedOf(info.options?.pins, new Set(r.reps.map((x) => x.of)), (d) => changed(d) || [...dependenciesOfAll(r.code, [d])].some((x) => x !== d && code.nodes[x]?.kind === "def" && changed(x)))) : unpinned);
 
-    if (!carried && unpinned && checked.errors.length > info.errors.length) checked = infer(r.code, r.names, undefined, { ...checkWith, pins: unpinned });
+    if (!carried && checked.errors.length > info.errors.length && unpinnedNow()) checked = infer(r.code, r.names, undefined, { ...checkWith, pins: unpinnedNow()! });
     if (checked.errors.length <= info.errors.length) {
       // Lists go alone (choiceOf); with Map or Set chosen first, they're
       // chosen again on what that made, the Map and Set rows asked for as
@@ -184,7 +187,7 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
       const held = r.reps.some((x) => TOGETHER[x.of]) ? ownLibraryHolders(r.code, { ...checked, options: { ...checked.options, insiders } }, r.names, main, defs, r.reps.map((x) => x.type)) : null;
       // Those pins are dropped for the lists' choice on what this made, so
       // it checks those definitions by their bodies.
-      const next = held ? { code: held.code, info: held.info, names: held.names, defs: held.own } : { code: r.code, info: { ...checked, options: { ...checked.options, insiders, ...(unpinned ? { pins: unpinned } : {}) } }, names: r.names, defs };
+      const next = held ? { code: held.code, info: held.info, names: held.names, defs: held.own } : { code: r.code, info: { ...checked, options: { ...checked.options, insiders, ...(unpinnedNow() ? { pins: unpinnedNow()! } : {}) } }, names: r.names, defs };
       const lists = withLibraryRepresentations(next.code, next.info, next.names, main, next.defs, [...asked, ...r.reps], options);
       return lists.chosen.length
         ? { ...lists, chosen: [...r.chosen, ...lists.chosen], insiders: [...r.insiders, ...lists.insiders], picks: [...(r.picks ?? []), ...(lists.picks ?? [])] }
