@@ -14,12 +14,13 @@
 // meaning: tests check every implementation against the definition it
 // replaces, through `meaning`.
 
-import { children, changedFromLayer, parentLookup, dependenciesOfAll, freshId, layerOf, nodesWhere, nodesOfKind, scanningOnLayer, subtree, subtreeKept, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids, copyNodes, nodeValues } from "../model.ts";
+import { children, changedFromLayer, parentLookup, dependenciesOfAll, freshId, layerOf, nodesWhere, nodesOfKind, scanningOnLayer, subtree, subtreeKept, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids, copyNodes, nodeValues, sameValue } from "../model.ts";
 import { notePieces, type Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, LITERAL_V, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
 import { INT, NUMBER } from "./types.ts";
 import { COPIED_FROM, PRELUDE_DEFS } from "./prelude-ids.ts";
 import { add, compare, LADDER, NEVER, possible, steps, type Cost } from "./cost.ts";
+import { keptMap } from "../kept.ts";
 
 export interface Representation {
   name: string;
@@ -262,24 +263,90 @@ function fieldsOf(code: Code, t: Id, variants: Set<Id>): Map<Id, [Id, number]> {
 // of machine's compile). A reach's jobs are its definitions' own, in the
 // order they were found.
 const jobsKept = new WeakMap<Code, Map<string, Map<Id, string[]>>>();
-const repKeys = new WeakMap<Representation, number>();
-let repKeyNext = 0;
-const repKey = (r: Representation) => { let k = repKeys.get(r); if (k === undefined) repKeys.set(r, (k = repKeyNext++)); return k; };
+// What a definition's jobs are worked out of: its rows' costs and the
+// jobs they implement (a representation is made again for each program).
+const repKeys = new WeakMap<Representation, string>();
+const repKey = (r: Representation) => { let k = repKeys.get(r); if (k === undefined) repKeys.set(r, (k = JSON.stringify([r.of, r.cost, Object.keys(r.impl)]))); return k; };
+// A definition's own jobs, and what looped finds in it, kept from one
+// compile to the next (plan doc "Incremental compile after edits"): they
+// read its nodes, the nodes its refs name (a definition or not, a
+// binder's), and the cases its arms are of with their fields' types. Kept
+// while each of those is the same node, so an edit works out the jobs of
+// only the definitions it changed (machine: 90 ms of a body edit's choice).
+// Library definitions are the same nodes in every program, so theirs serve
+// every program. Some versions of each are kept: a definition may be in
+// two of the programs the chooser makes, referring to a different copy
+// in each (withTrees, rep-split.ts).
+type Deps = { ids: Id[]; nodes: (Node | undefined)[]; ver: number };
+const depsKept = keptMap<Id, Deps[]>(), factsKept = keptMap<string, Map<Id, { ver: number; v: unknown }[]>>();
+const versionsAt = new WeakMap<Code, Map<Id, number>>();
+let versions = 0;
+// How many were worked out (the tests).
+export let factsMade = 0;
+const VERSIONS = 4;
+function depsOf(code: Code, def: Id): Id[] {
+  const ids = subtree(code, def), out = [...ids];
+  for (const id of ids) {
+    const n = code.nodes[id];
+    if (n.kind === "ref") out.push(n.target);
+    else if (n.kind === "arm") {
+      out.push(n.variant);
+      const v = code.nodes[n.variant];
+      if (v?.kind === "variant") for (const fl of v.fields) { out.push(fl); const f = code.nodes[fl]; if (f?.kind === "field") out.push(f.type); }
+    }
+  }
+  return out;
+}
+function versionOf(code: Code, def: Id): number {
+  let at = versionsAt.get(code);
+  if (!at) versionsAt.set(code, (at = new Map()));
+  let v = at.get(def);
+  if (v !== undefined) return v;
+  const was = depsKept.get(def) ?? [];
+  // (A node made again as it was is the same: a copy's refs are made
+  // again in each program the chooser makes.)
+  v = was.find((w) => w.ids.every((id, i) => { const n = code.nodes[id]; return n === w.nodes[i] || sameValue(n, w.nodes[i]); }))?.ver;
+  if (v === undefined) {
+    if (depsKept.size > 100_000) { depsKept.clear(); factsKept.clear(); }
+    const ids = depsOf(code, def);
+    depsKept.set(def, [{ ids, nodes: ids.map((id) => code.nodes[id]), ver: (v = ++versions) }, ...was.slice(0, VERSIONS - 1)]);
+  }
+  at.set(def, v);
+  return v;
+}
+function keptFact<T>(code: Code, key: string, def: Id, make: () => T): T {
+  const ver = versionOf(code, def);
+  let m = factsKept.get(key);
+  if (!m) factsKept.set(key, (m = new Map()));
+  const was = m.get(def) ?? [];
+  const at = was.find((w) => w.ver === ver);
+  if (at) return at.v as T;
+  factsMade++;
+  const v = make();
+  m.set(def, [{ ver, v }, ...was.slice(0, VERSIONS - 1)]);
+  return v;
+}
 export function uses(code: Code, entry: Id, reps: Representation[], absorbed = false, opaque: Iterable<Id> = []): string[] {
   const t = reps[0].of;
   const opaques = [...opaque];
   const variants = new Set(variantsOf(code, t));
   const implemented = new Set([...reps.flatMap((r) => Object.keys(r.impl)), ...opaques]);
   const costed = new Set(reps.flatMap((r) => Object.keys(r.cost)));
-  const fieldOf = fieldsOf(code, t, variants);
+  let fieldOf: Map<Id, [Id, number]> | null = null;
   let byRows = jobsKept.get(code);
   if (!byRows) jobsKept.set(code, (byRows = new Map()));
   const key = `${absorbed}|${reps.map(repKey).join(",")}|${opaques.join(",")}`;
   let own = byRows.get(key);
   if (!own) byRows.set(key, (own = new Map()));
+  const factKey = `jobs ${key}|${[...variants].join(",")}`;
   const ownJobs = (def: Id): string[] => {
     let jobs = own!.get(def);
     if (jobs) return jobs;
+    own!.set(def, (jobs = keptFact(code, factKey, def, () => jobsIn(def))));
+    return jobs;
+  };
+  const jobsIn = (def: Id): string[] => {
+    fieldOf ??= fieldsOf(code, t, variants);
     // A list just made is the definition's own: the lets and calls that
     // make one are in it (freshUses).
     const fresh = absorbed ? freshUses(code, [def], reps) : new Set<Id>();
@@ -294,11 +361,10 @@ export function uses(code: Code, entry: Id, reps: Representation[], absorbed = f
       if (isCall(n)) {
         const c = code.nodes[n.fn];
         const v = c?.kind === "ref" && variants.has(c.target) ? c.target : null;
-        if (v) n.args.forEach((a, i) => { const r = code.nodes[a], f = r?.kind === "ref" ? fieldOf.get(r.target) : undefined; if (f?.[0] === v && f[1] === i) out.add(ontoField(v, i)); });
+        if (v) n.args.forEach((a, i) => { const r = code.nodes[a], f = r?.kind === "ref" ? fieldOf!.get(r.target) : undefined; if (f?.[0] === v && f[1] === i) out.add(ontoField(v, i)); });
       }
     }
-    own!.set(def, (jobs = [...out]));
-    return jobs;
+    return [...out];
   };
   // A function some representation implements is one job: don't look
   // inside it, since its body is what gets replaced (`add item` builds a
@@ -342,7 +408,34 @@ export function looped(code: Code, entry: Id, reps: Representation[], opaque: It
     while (todo.length) { const x = todo.pop()!; if (x === d) return true; if (seen.has(x)) continue; seen.add(x); todo.push(...(graph.get(x) ?? [])); }
     return false;
   };
-  const onFresh = freshUses(code, [...graph.keys()], reps);
+  // What a definition's body gives, walked in a loop or not: the jobs in
+  // a loop, and the definitions it refers to, each in a loop or not (a
+  // definition's refs only to definitions: any of them may be one the
+  // entry reaches).
+  type Walked = { jobs: string[]; calls: [Id, boolean][] };
+  const factKey = `looped ${reps.map(repKey).join(",")}|${[...variants].join(",")}`;
+  const walkedOf = (d: Id, body: Id, loop: boolean): Walked => {
+    const onFresh = freshUses(code, [d], reps), jobs = new Set<string>(), calls: [Id, boolean][] = [];
+    const walk = (id: Id, loop: boolean): void => {
+      const n = code.nodes[id];
+      if (!n) return;
+      if (loop) {
+        if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target)) && !onFresh.has(id)) jobs.add(jobOf(code, n, costed));
+        if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) jobs.add(foldJob(code, n, t));
+      }
+      if (n.kind === "ref" && code.nodes[n.target]?.kind === "def") calls.push([n.target, loop]);
+      if (n.kind === "fold") { walk(n.scrutinee, loop); for (const a of n.arms) walk(a, true); return; }
+      if (isCall(n)) {
+        walk(n.fn, loop);
+        // A thunk (no parameters) is run once or not at all: `first`'s.
+        for (const a of n.args) { const l = code.nodes[a]; walk(a, loop || (l?.kind === "lambda" && l.params.length > 0)); }
+        return;
+      }
+      for (const c of children(n)) walk(c, loop);
+    };
+    walk(body, loop);
+    return { jobs: [...jobs], calls };
+  };
   const done = new Set<string>();
   const visit = (d: Id, loop: boolean) => {
     loop ||= callsItself(d);
@@ -351,24 +444,11 @@ export function looped(code: Code, entry: Id, reps: Representation[], opaque: It
     done.add(key);
     if (implemented.has(d) && d !== entry) return;
     const def = code.nodes[d];
-    if (def?.kind === "def" && def.body) walk(def.body, loop);
-  };
-  const walk = (id: Id, loop: boolean): void => {
-    const n = code.nodes[id];
-    if (!n) return;
-    if (loop) {
-      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target)) && !onFresh.has(id)) out.add(jobOf(code, n, costed));
-      if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(foldJob(code, n, t));
-    }
-    if (n.kind === "ref" && graph.has(n.target)) visit(n.target, loop);
-    if (n.kind === "fold") { walk(n.scrutinee, loop); for (const a of n.arms) walk(a, true); return; }
-    if (isCall(n)) {
-      walk(n.fn, loop);
-      // A thunk (no parameters) is run once or not at all: `first`'s.
-      for (const a of n.args) { const l = code.nodes[a]; walk(a, loop || (l?.kind === "lambda" && l.params.length > 0)); }
-      return;
-    }
-    for (const c of children(n)) walk(c, loop);
+    if (def?.kind !== "def" || !def.body) return;
+    const body = def.body;
+    const w = keptFact(code, `${factKey}|${loop}`, d, () => walkedOf(d, body, loop));
+    for (const j of w.jobs) out.add(j);
+    for (const [x, l] of w.calls) if (graph.has(x)) visit(x, l);
   };
   visit(entry, false);
   return out;
