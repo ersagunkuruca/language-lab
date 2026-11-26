@@ -37,7 +37,7 @@
 // eliminate trees", 1990), here by the walker's shape, as fuse-steps.ts
 // does for folds.
 
-import { freshId, isCall, subtree, mapIds, type Code, type Id, type Node, type NodeOf, copyNodes, dropNode, changedOver } from "../../ters/src/model.ts";
+import { freshId, isCall, subtree, subtreeKept, mapIds, type Code, type Id, type Node, type NodeOf, copyNodes, dropNode, changedOver } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, inferRewritten, type Info, type Options } from "../../ters/src/lang/infer.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
@@ -61,22 +61,21 @@ interface Walker { def: Id; params: Id[]; k: number; m: number; head: Id; step: 
 export interface Fused { at: Id; walker: Id; over: string; made?: Id }
 export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): { code: Code; info: Info; names: Names; made: Id[]; fused: Fused[] } {
   const before = new Set(code.defs);
-  // Each definition's calls a candidate may be, kept between rounds for
-  // the definitions a round left alone (greenhouse-page: 18 rounds over
-  // the library's nodes too, 0.25 s a compile).
-  const calls = new Map<Id, Id[]>(), defsOf = new Map<Id, Id[]>();
-  const callsOf = (d: Id): Id[] => {
-    let xs = calls.get(d);
+  // Each definition's calls a candidate may be, kept by its walk (the
+  // same array while its nodes are the same, between rounds and from one
+  // compile to the next): greenhouse-page took 18 rounds over the
+  // library's nodes too (0.25 s a compile), and each compile walked every
+  // definition again (L266: a fortieth of machine's body edit).
+  const callsOf = (d: Id): readonly Id[] => {
+    const ids = subtreeKept(code, d);
+    let xs = callsKept.get(ids);
     if (xs) return xs;
     xs = [];
-    for (const id of subtree(code, d)) {
-      let ds = defsOf.get(id);
-      if (!ds) defsOf.set(id, (ds = []));
-      ds.push(d);
+    for (const id of ids) {
       const n = code.nodes[id];
       if (isCall(n) && n.args && !LIBRARY.code.nodes[id]) xs.push(id);
     }
-    calls.set(d, xs);
+    callsKept.set(ids, xs);
     return xs;
   };
   // The rounds of the last compile of this program but for its numbers,
@@ -122,8 +121,6 @@ export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): 
     if (checked.errors.length > info.errors.length) break;
     rounds.push(c);
     fused.push(fusedOf(c, code, next.code));
-    if (changed) for (const id of changed) for (const d of defsOf.get(id) ?? []) calls.delete(d);
-    else calls.clear();
     ({ code, names } = next);
     info = checked;
   }
@@ -194,8 +191,9 @@ function made(code: Code, info: Info, e: Id, deep = 0): Made | null {
 
 type Round = { at: Id; w: Walker; how: Made };
 const roundsKept = keptMap<string, Round[]>();
+const callsKept = new WeakMap<readonly Id[], Id[]>();
 
-function candidate(code: Code, info: Info, names: Names, callsOf: (d: Id) => Id[]): Round | null {
+function candidate(code: Code, info: Info, names: Names, callsOf: (d: Id) => readonly Id[]): Round | null {
   const walkers = new Map<Id, Walker | null>();
   const seen = new Set<Id>();
   for (const d of code.defs) for (const id of callsOf(d)) {
