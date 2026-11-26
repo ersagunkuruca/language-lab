@@ -5814,3 +5814,20 @@ on the GPU (0 bytes for them after the first frame, as by hand).
 1. I380 (FR3, FR4), the drawing: Editor lane, gpu-frame.ts.
 2. C347 (FR1), cells turned by their types: Compiler lane.
 3. FR2 and FR5: why the birds aren't columns here (C348).
+
+### After I380
+
+gpu-frame.ts reads each draw's instances once, and sends a list an
+earlier draw of the frame sent (same items, same leaves read) not at all.
+Lists are compared by their items: compiled code hands each draw its own
+list over the birds' array, so before, the birds went every frame even
+when no tick had moved them.
+
+| birds | bytes sent | draw ms | by hand |
+|---|---|---|---|
+| 2,000 | 144,436 → 25,898 | 1.32 → 0.60 | 48,008, 0.20 |
+| 20,000 | 1,440,480 → 480,096 | 11.9 → 4.6 | 480,016, 0.45 |
+
+At 2,000 birds the page now sends less than the one by hand, which sends
+the birds every frame though half its frames have no tick. What is left of
+the drawing is reading two objects a bird (FR5).
