@@ -25,7 +25,7 @@
 
 import { CONS, NIL } from "../../ters/src/lang/std-ids.ts";
 import { ArrayView, arrayOf } from "../../ters/src/lang/array-view.ts";
-import { Table } from "../../ters/src/lang/table.ts";
+import { PairMap, Table } from "../../ters/src/lang/table.ts";
 import { counted, OutOfSteps, setStepsLeft, stepsLeft, toList } from "../../ters/src/lang/run-values.ts";
 import { add, type Int } from "../../ters/src/lang/int.ts";
 import { Pending } from "../../ters/src/lang/cells.ts";
@@ -139,7 +139,8 @@ function encodeTable(t: Table, names: Map<Fn, string>): unknown {
   }
   const es: unknown[] = [];
   for (const [k, v] of m) { const ek = encode(k, names), ev = encode(v, names); if (ek === NO || ev === NO) return NO; es.push(ek, ev); }
-  return { $m: es };
+  // A pair table (table.ts PairMap) is made one again where it's read.
+  return m instanceof PairMap ? { $m: es, pair: true } : { $m: es };
 }
 // A run's answers that are records of one case whose fields are numbers
 // (herd's animals moved): their fields, record by record, in one
@@ -244,13 +245,13 @@ class SharedEntries {
 function decode(x: unknown, fns: Record<string, Fn>, closure: (code: Fn, caps: unknown[]) => Fn): unknown {
   if (x === null || typeof x !== "object" || ArrayBuffer.isView(x)) return x;
   if (Array.isArray(x)) return x.map((v) => decode(v, fns, closure));
-  const o = x as { $k?: Shape[]; $a?: unknown[]; $r?: Float64Array; $s?: SharedArrayBuffer; $m?: unknown[]; n?: number; w?: number; tag?: unknown; $f?: string; caps?: unknown[]; $t?: unknown; fields?: unknown[] };
+  const o = x as { $k?: Shape[]; $a?: unknown[]; $r?: Float64Array; $s?: SharedArrayBuffer; $m?: unknown[]; pair?: true; n?: number; w?: number; tag?: unknown; $f?: string; caps?: unknown[]; $t?: unknown; fields?: unknown[] };
   if (o.$k) { const xs = unshaped(o as never); return (o as { view?: true }).view ? arrayOf(xs) : xs; }
   if ((o as { $n?: Float64Array }).$n) { const xs = fromNumbers((o as { $n: Float64Array }).$n); return (o as { view?: true }).view ? arrayOf(xs) : xs; }
   if (o.$a) return arrayOf(o.$a.map((v) => decode(v, fns, closure)));
   if (o.$r) { const xs: unknown[] = [], c = o.$r, w = o.w!; for (let i = 0; i < c.length; i += w) { const fields = new Array<number>(w); for (let f = 0; f < w; f++) fields[f] = c[i + f]; xs.push({ tag: o.tag, fields }); } return xs; }
   if (o.$s) return new Table(new SharedEntries(o.$s, o.n!, o.w!, o.tag) as unknown as Map<unknown, unknown>, true);
-  if (o.$m) { const m = new Map<unknown, unknown>(); for (let i = 0; i < o.$m.length; i += 2) m.set(decode(o.$m[i], fns, closure), decode(o.$m[i + 1], fns, closure)); return new Table(m, true); }
+  if (o.$m) { const m = o.pair ? new PairMap() as unknown as Map<unknown, unknown> : new Map<unknown, unknown>(); for (let i = 0; i < o.$m.length; i += 2) m.set(decode(o.$m[i], fns, closure), decode(o.$m[i + 1], fns, closure)); return new Table(m, true); }
   if (o.$f !== undefined) return closure(fns[o.$f], o.caps!.map((v) => decode(v, fns, closure)));
   if ((o as { $l?: unknown[] }).$l) { const xs = (o as { $l: unknown[] }).$l; let out = decode((o as { end: unknown }).end, fns, closure); for (let i = xs.length - 1; i >= 0; i--) out = { tag: CONS, fields: [decode(xs[i], fns, closure), out] }; return out; }
   return { tag: o.$t, fields: o.fields!.map((v) => decode(v, fns, closure)) };

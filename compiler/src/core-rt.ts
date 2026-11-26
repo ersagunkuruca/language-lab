@@ -9,7 +9,7 @@ import { ARRAY_OPS, CELL_OPS, CONS, FALSE, LOCALE_V, NIL, NONE, SOME, TICKET_V, 
 import { madeItem } from "../../ters/src/lang/over.ts";
 import { ArrayView, arrayOf, arrayOfItems, rangeArray, arrayView, pushFrontOwned, pushOwned, replaceOwned, emptyFor } from "../../ters/src/lang/array-view.ts";
 import { hashset$items, show as showFloat, table$empty, table$entries, table$has, table$keys, table$put, table$remove, table$size } from "../../ters/src/lang/std-run.ts";
-import { directRead, directTable, tableRead, tablePutOwned, tableRemoveOwned, type Table } from "../../ters/src/lang/table.ts";
+import { directRead, directTable, pairPut, pairPutOwned, pairRead, pairRemove, pairRemoveOwned, pairTable, tableRead, tablePutOwned, tableRemoveOwned, type Table } from "../../ters/src/lang/table.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
 import { fileInfoValue, LIST_SHAPE, LIST_SHAPE_BOOLS, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Value } from "../../ters/src/lang/run-values.ts";
@@ -244,9 +244,21 @@ const TABLE = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
 // `keys`: which of a map's entries lists are its keys alone.
 // `direct`: an Int key's map none of whose kind is removed from, made a
 // DirectMap (std.ts, C215).
-export interface TableSpec { set: boolean; keys?: boolean[]; direct?: true }
+// `pair`: a map whose keys are pairs of Ints and Texts, made a PairMap
+// (table.ts), given each key as it is.
+export interface TableSpec { set: boolean; keys?: boolean[]; direct?: true; pair?: true }
 function tableFn(op: string, t: TableSpec, e?: number): (...xs: unknown[]) => unknown {
   const bool = (v: unknown) => (v as { tag: Id }).tag === TRUE;
+  if (t.pair) switch (op) {
+    case "empty": return pairTable;
+    case "put": return (m, k, v) => pairPut(m as Table, k, v);
+    case "remove": return (m, k) => pairRemove(m as Table, k);
+    case "putOwned": return (m, k, v) => pairPutOwned(m as Table, k, v);
+    case "removeOwned": return (m, k) => pairRemoveOwned(m as Table, k);
+    case "has": return (m, k) => (m as Table).m.has(k);
+    case "at": return (m, k) => { const v = pairRead(m as Table, k, FAIL); if (v === FAIL) throw FAIL; return v; };
+    case "atv": return (m, k) => pairRead(m as Table, k, FAIL);
+  }
   switch (op) {
     case "empty": return t.direct ? directTable : () => table$empty();
     case "put": return (m, k, v) => table$put(m as Table, k, v);
