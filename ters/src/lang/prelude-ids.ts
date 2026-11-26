@@ -90,8 +90,15 @@ export function fractionCase(code: Code): { variant: Id; type: Id } | undefined 
   if (!fractions.has(code)) {
     let found: { variant: Id; type: Id } | null = null;
     const read: [Id, Node | undefined][] = [];
-    const n = code.nodes[PRELUDE_DEFS["negate fraction"]];
-    read.push([PRELUDE_DEFS["negate fraction"], n]);
+    // Off the first of the fraction operations the program holds, as each
+    // matches its first fraction first: a compiled module ships only those
+    // it reaches (larder's multiply fractions, I373).
+    let n: Node | undefined;
+    for (const name of ["negate fraction", "multiply fractions", "add fractions", "subtract fractions", "divide fractions"] as const) {
+      n = code.nodes[PRELUDE_DEFS[name]];
+      read.push([PRELUDE_DEFS[name], n]);
+      if (n) break;
+    }
     const todo = n?.kind === "def" && n.body ? [n.body] : [];
     for (let id; !found && (id = todo.pop());) {
       const x = code.nodes[id];

@@ -39,7 +39,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I373 | Compiled `inverse` with a Rational answer gives none: `length(all(inverse((y) => y · two(), h)))` with `two() = as fraction(2)` is 1 in the evaluator, 0 in `ters run`; Float64 is 1 in both. Convert Rationals where the module meets the relational interpreter (larder's portions from the larder; its line left out of compiler/test/larder.test.ts) | GAPS round 25 L1 | 2026-11-26 |
 | I374 | `inverse` compiles to the relational interpreter shipped in the module (larder: 9.2 MB, 0.71 s for a one-line book) and `ters wasi`/`ters native` refuse it. Give a fraction product with one side unknown (a division) and a printer of `++` and `show` read backwards (a parser: cuts of a known text, `read whole number`) plans fixed before they run, so they compile on every target | GAPS round 25 L2 | 2026-11-26 |
 | I375 | `int.gcd` and `int.exact` in core-rt.ts go through BigInt for every size; a small-Int fast path, as c-rt.ts has, took larder's core IR from 1566 to 517 ms at 16x4 and 8325 to 2410 ms at 64x4 | GAPS round 25 L3 | 2026-11-26 |
 | I376 | The library's `sort by` calls its key twice per comparison (2·n·log n keys); key each item once (decorate, sort, undecorate). By hand in larder's `shopping`: 1.93 s to 0.52 s. Then maybe the first of a sort as one pass | GAPS round 25 L4 | 2026-11-26 |
