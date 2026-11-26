@@ -68,6 +68,32 @@ list each time, so the edits stop at the first one.
 Each step is its own PR and is measured. A step that doesn't reach 10% on
 board or another page bench is reported and closed, not merged.
 
+## Measured, 2026-11-26 night
+
+Step 1 was tried and is closed, not merged, under the rule above.
+
+- **Step 1 as a memo.** keep, map and flat map kept their last answers
+  with their list and closure (code and captures), and a list with items
+  put on its end was worked out for those items alone. It fired on board:
+  most calls were hits or grew by one card. It gave 0% at 2000 cards. The
+  walk to find where the old list ends, and the copy of the kept cells
+  before the new one, cost what the tests did. board's tests are a stage
+  compared and a filter that is `everything`, so the test was never the
+  cost; the cons cells were.
+- **Where an add goes**, profiled alone at 2000 cards: the views' own code
+  about 35%, html.ts about 25%, the `each` matching rows about 17%, GC
+  about 25%. The view code is spread over about eight views, each O(cards)
+  in list cells walked and made, not in calls.
+- **Step 3's html half as a redraw in place.** A part whose new value has
+  the same shape keeps its element and its texts, watches their
+  attributes and texts again, and puts in only the children that changed.
+  html.ts time per add went down by about a quarter. The whole add was the
+  same within noise (about ±10% between runs on this machine).
+
+So steps 1 to 3 as planned don't take board's add under O(cards): what is
+left is the walk and copy of cons cells in every view, which is the
+section below. The patches are kept in the Compiler lane's scratch.
+
 ## What stays O(n)
 
 A list in a view is a cons list, so a new list with one more item past
