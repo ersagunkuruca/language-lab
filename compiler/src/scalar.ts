@@ -3185,7 +3185,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // Where a segment ends: the goal with several answers at step `at`, the
   // values known there (their slots and types), its answer's type and how
   // the answer binds slots, and the state type carried to the next one.
-  type Pending = { at: number; slots: Id[]; types: LType[]; E: LType; bound: (x: SExpr) => [Id, SExpr][]; S: RType; marks: Id[]; call: boolean; fn?: number };
+  // again: the goal was a wait woken before step `at` ran (relate.ts
+  // settle), so the next segment starts at `at` itself, not after it.
+  type Pending = { at: number; again?: true; slots: Id[]; types: LType[]; E: LType; bound: (x: SExpr) => [Id, SExpr][]; S: RType; marks: Id[]; call: boolean; fn?: number };
   // Stream functions that drop an answer left with an unknown (a wait that
   // never ran: relate.ts's answers drop it at the end), and the calls of
   // them some goal with several answers or a pause follows, where dropping
@@ -3197,6 +3199,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const posted = new Map<Id, ModePlanT["steps"][number]>();
   const isMark = (x: Id) => x.startsWith("\u0000");
   const waitIds = new WeakMap<object, Id>();
+  // The plans of one woken wait, by the step of the stream's plan it was
+  // woken before.
+  const wokenAt = new WeakMap<ModePlanT, number>();
+  const samePlace = (a: Pending | undefined, b: Pending | null | undefined) => !!a && !!b && a.at === b.at && !!a.again === !!b.again;
   class Probed extends Error { p: Pending; constructor(p: Pending) { super("probe"); this.p = p; } }
   // Whether a posted wait can run now: relate.ts's needs and wake.
   function readyWait(an: ReturnType<typeof analyzer>, e: ModePlanT["steps"][number], env: Map<Id, number>): boolean {
@@ -3230,7 +3236,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       try {
         const r = f.locals.push(f.result) - 1;
         const body = modePlan(an, plan, env, (e, hh) => done(e, hh), f, i);
-        if (p && seg.pending?.at !== p.at) throw new ModeUnsupported("a plan whose paths reach different goals with several answers");
+        if (p && !samePlace(seg.pending, p)) throw new ModeUnsupported("a plan whose paths reach different goals with several answers");
         return { body: { k: "attempt", body, res: r, ok: lc(r), otherwise: { k: "new", t: f.result as DType, c: 0, args: [] }, t: f.result }, pending: seg.pending };
       } finally { streaming.delete(f); }
     };
@@ -3271,14 +3277,15 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // A wait the answer makes ready wakes, in relate.ts, where the slot
       // is bound: inside a call's own search, before the rest of it.
       if (p.call && p.marks.some((m) => readyWait(an, posted.get(m)!, pe.env))) throw new ModeUnsupported("a wait woken by a call's answer");
-      const next = probe(pl, pe.env, p.at + 1);
+      const from = p.again ? p.at : p.at + 1;
+      const next = probe(pl, pe.env, from);
       if (p.fn !== undefined && next) dropChecks.push(p.fn);
       const X: LType = next ? next.S : A;
       const gt = plainFn([p.S], kit(X).st);
       let nextPending: Pending | undefined;
-      const c = closureFn(`${h.name}, from step ${p.at + 1}`, gt, [], (g2, _caps, [st]) => {
+      const c = closureFn(`${h.name}, from step ${from}`, gt, [], (g2, _caps, [st]) => {
         const e = enter((t) => g2.locals.push(t) - 1);
-        const w = write(g2, e.env, p.at + 1, next);
+        const w = write(g2, e.env, from, next);
         nextPending = w.pending;
         // Each answer slot: a new local, or a test against the known one.
         const none: SExpr = { k: "new", t: g2.result as DType, c: 0, args: [] };
@@ -3287,7 +3294,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           : { k: "if", cond: same(lc(at), v, g2.locals[at], g2, false), then: acc, else: none, t: g2.result }, w.body);
         return e.reads.reduceRight<SExpr>((acc, [l, j]) => ({ k: "let", i: l, value: { k: "get", rec: lc(st), t: p.S, i: j }, body: acc }), bound);
       });
-      if (next && nextPending?.at !== next.at) throw new ModeUnsupported("a plan whose paths reach different goals with several answers");
+      if (next && !samePlace(nextPending, next)) throw new ModeUnsupported("a plan whose paths reach different goals with several answers");
       cur = { k: "call", fn: bindFn(curT, X), args: [cur, closed(c, [])], tail: false };
       curT = X;
       pending = nextPending;
@@ -3360,12 +3367,16 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const sg = streaming.get(g);
     const branchAt = (i: number, src: SExpr, E: LType, env: Map<Id, number>, bound: (x: SExpr) => [Id, SExpr][], call: boolean, fn?: number): SExpr => {
       if (!sg) throw new ModeUnsupported("a goal with several answers outside a stream");
-      if (plan !== sg.plan) throw new ModeUnsupported("a woken constraint with several answers");
+      // In a wait woken before step w of the stream's plan, the segment
+      // after it starts at w again.
+      const w = wokenAt.get(plan);
+      if (plan !== sg.plan && w === undefined) throw new ModeUnsupported("a woken constraint with several answers");
+      const at = w ?? i, again = w !== undefined;
       const live = [...env.entries()].filter(([x]) => !isMark(x)), marks = [...env.keys()].filter(isMark);
       const slots = live.map(([x]) => x), types = live.map(([, j]) => g.locals[j]);
-      if (sg.probe) throw new Probed({ at: i, slots, types, E, bound, S: stateType([...types, E]), marks, call, ...(fn !== undefined ? { fn } : {}) });
+      if (sg.probe) throw new Probed({ at, ...(again ? { again } : {}), slots, types, E, bound, S: stateType([...types, E]), marks, call, ...(fn !== undefined ? { fn } : {}) });
       const ex = sg.expect;
-      if (!ex || ex.at !== i || ex.slots.join() !== slots.join() || ex.marks.join() !== marks.join()) throw new ModeUnsupported("a plan whose paths reach different goals with several answers");
+      if (!ex || ex.at !== at || !!ex.again !== again || ex.slots.join() !== slots.join() || ex.marks.join() !== marks.join()) throw new ModeUnsupported("a plan whose paths reach different goals with several answers");
       sg.pending = { ...ex, bound, ...(fn !== undefined ? { fn } : {}) };
       const toS = closureFn(`${g.name}, a state`, plainFn([E], kit(ex.S).st), types, (_h, caps, [x]) => unitOf(ex.S, { k: "make", t: ex.S, args: [...caps.map(lc), lc(x)] }));
       return { k: "call", fn: bindFn(E, ex.S), args: [src, closed(toS, live.map(([, j]) => lc(j)))], tail: false };
@@ -3391,19 +3402,21 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       return true;
     };
     // The first posted wait that can run now, woken (relate.ts settle).
-    const settled = (env: Map<Id, number>, k: (env: Map<Id, number>) => SExpr): SExpr | null => {
+    const settled = (env: Map<Id, number>, k: (env: Map<Id, number>) => SExpr, at: number): SExpr | null => {
       for (const m of env.keys()) {
         if (!m.startsWith("\u0000wait")) continue;
         const w = posted.get(m)!;
         if (!readyWait(an, w, env)) continue;
         const rest = new Map(env);
         rest.delete(m);
-        return modePlan(an, { steps: [{ ...w, waits: undefined } as typeof w] }, rest, (e2) => settled(e2, k) ?? k(e2), g);
+        const woken: ModePlanT = { steps: [{ ...w, waits: undefined } as typeof w] };
+        wokenAt.set(woken, at);
+        return modePlan(an, woken, rest, (e2) => settled(e2, k, at) ?? k(e2), g);
       }
       return null;
     };
     const steps = (i: number, env: Map<Id, number>): SExpr => {
-      if (sg) { const w = settled(env, (e2) => steps(i, e2)); if (w) return w; }
+      if (sg) { const w = settled(env, (e2) => steps(i, e2), i); if (w) return w; }
       if (i === plan.steps.length) return plan.branch ? arms(plan.branch, env) : done(env, g);
       const e = plan.steps[i], next = (env: Map<Id, number>) => steps(i + 1, env);
       // A goal that can't run yet is posted, to wait for what it needs.
@@ -3556,6 +3569,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
               const x = g.locals.push("f64") - 1;
               return { k: "let", i: x, value: { k: "rt", fn: "text.readNumber", args: [R] }, body: test({ k: "rt", fn: "text.equal", args: [{ k: "rt", fn: "number.show", args: [local(x)] }, R] }, bind(env, n.args[0], local(x), next)) };
             }
+            // An Int's the same way (relate.ts's INT_OPS.show: only the
+            // spelling show writes, so "007" and "-0" read back as nothing).
+            if (head.target === INT_OPS.show && a === undefined && typeOf(n.id) === "text") {
+              const x = g.locals.push("int") - 1;
+              return { k: "let", i: x, value: { k: "rt", fn: "int.read", args: [R] }, body: test({ k: "rt", fn: "text.equal", args: [{ k: "rt", fn: "int.show", args: [local(x)] }, R] }, bind(env, n.args[0], local(x), next)) };
+            }
             // Text joined with neither side known, every answer wanted:
             // each cut, the shortest first side first, with the rest after.
             if (head.target === S.concat && a === undefined && b === undefined && sg) {
@@ -3574,7 +3593,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
                   if (w?.k !== "call") continue;
                   const m = code.nodes[w.node] as Call, hd = code.nodes[m.fn];
                   if (hd?.kind !== "ref" || an.slot(m.id) !== sl) continue;
-                  if (hd.target === S.show) {
+                  if (hd.target === S.show || hd.target === INT_OPS.show) {
                     const r = g.locals.push("int") - 1;
                     return { k: "attempt", body: { k: "rt", fn: "text.find", args: [R, { k: "text", v: " " }] }, res: r, ok: local(r), otherwise: len(R), t: "int" };
                   }
@@ -3904,10 +3923,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // A join of texts or a show that can't run yet with what's known.
   function waitsHere(node: Id, get: (x: Id) => number | undefined): boolean {
     const n = code.nodes[node] as Call, h = code.nodes[n.fn];
-    if (h?.kind !== "ref" || (h.target !== S.concat && h.target !== S.show)) return false;
+    if (h?.kind !== "ref" || (h.target !== S.concat && h.target !== S.show && h.target !== INT_OPS.show)) return false;
     const args = n.args.map(get), res = get(n.id);
     if (args.every((x) => x !== undefined)) return false;
-    if (h.target === S.show) return res === undefined;
+    if (h.target === S.show || h.target === INT_OPS.show) return res === undefined;
     return res === undefined;
   }
   function cleanFn(): number {
