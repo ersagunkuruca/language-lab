@@ -20,7 +20,7 @@
 // then the fields, one C struct per case. A case with no fields is one
 // static cell whose count is 0, which means it is never counted or freed.
 import { TICKET_V } from "../../ters/src/lang/std.ts";
-import { originalOf, PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
+import { originalOf, PRELUDE_DEFS, typedOriginalOf } from "../../ters/src/lang/prelude-ids.ts";
 // Values are owned: whoever holds one gives it on (to a call, a field, a
 // let) or drops it, so a function owns its inputs. Each use of a local is
 // the last one or a `dup`, and a local that one branch doesn't use is
@@ -112,6 +112,39 @@ const PRINTED = new Set<SExpr["k"]>([
 const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
 // The library's `grid found` (neighbours on a grid), which gridC writes.
 const GRID_FOUND = PRELUDE_DEFS["grid found"];
+// The library's `strided products` (contracted's one pair of axes), which
+// stridedProductsC writes.
+const STRIDED_PRODUCTS = PRELUDE_DEFS["strided products"];
+// Each item's sum as the definition adds it, from 0 and one product at a
+// time in order, but two rows' by four columns' at once (C306): eight
+// sums in turn, each waiting on its own last add only, and each a's and
+// b's item read once for all four or both. A sum reading past either
+// end has no item there: 0.
+const PRODUCTS_C = `#ifndef LAB_PRODUCTS_C
+#define LAB_PRODUCTS_C
+static int lab_sp_in(int64_t at, int64_t step, int64_t count, int64_t n) {
+  if (count <= 0) return 1;
+  if (at < 0 || at >= n) return 0;
+  __int128 last = (__int128)at + (__int128)(count - 1) * step;
+  return last >= 0 && last < n;
+}
+static double lab_sp_one(const double *x, int64_t a, int64_t sa, const double *y, int64_t b, int64_t sb, int64_t count) {
+  double s = 0;
+  for (int64_t k = 0; k < count; k++, a += sa, b += sb) s = s + x[a] * y[b];
+  return s;
+}
+static void lab_sp_eight(const double *x, int64_t a0, int64_t a1, int64_t sa, const double *y, const int64_t *b, int64_t sb, int64_t count, double *o0, double *o1) {
+  double s00 = 0, s01 = 0, s02 = 0, s03 = 0, s10 = 0, s11 = 0, s12 = 0, s13 = 0;
+  int64_t b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3];
+  for (int64_t k = 0; k < count; k++, a0 += sa, a1 += sa, b0 += sb, b1 += sb, b2 += sb, b3 += sb) {
+    double u = x[a0], v = x[a1], p = y[b0], q = y[b1], w = y[b2], z = y[b3];
+    s00 = s00 + u * p; s01 = s01 + u * q; s02 = s02 + u * w; s03 = s03 + u * z;
+    s10 = s10 + v * p; s11 = s11 + v * q; s12 = s12 + v * w; s13 = s13 + v * z;
+  }
+  o0[0] = s00; o0[1] = s01; o0[2] = s02; o0[3] = s03;
+  o1[0] = s10; o1[1] = s11; o1[2] = s12; o1[3] = s13;
+}
+#endif`;
 // A place by its cell's key, and its number; sorted by key, then number.
 const GRID_C = `#ifndef LAB_GRID_SIDE
 #define LAB_GRID_SIDE ((int64_t)1 << 18)
@@ -2502,6 +2535,48 @@ int main(int argc, char **argv) {
     };
   }
 
+  // contracted's one pair of axes at Float64 (`strided products`, C306):
+  // result item r is the sum over count of a's items from a starts[r ÷
+  // b's count] and b's from b starts[r mod it], a stride apart, as the
+  // definition adds them (PRODUCTS_C). Otherwise as compiled.
+  function stridedProductsC(f: SFunc): { body: string[]; out: number } | null {
+    const [xa, xb, sa, sb] = f.params, r = f.result;
+    if (f.params.length !== 7 || typedOriginalOf(f.def) !== STRIDED_PRODUCTS || f.params.slice(4).some((t) => t !== "int")) return null;
+    if (!isArray(xa) || xa.item !== "f64" || !isArray(xb) || xb.item !== "f64" || !isArray(sa) || sa.item !== "int" || !isArray(sb) || sb.item !== "int" || !isArray(r) || r.item !== "f64") return null;
+    if (![xa, xb, sa, sb, r].every((t) => aname.has(t.key))) return null;
+    arrayFns.add(`array.getb.a${sa.index}`).add(`array.getb.a${sb.index}`);
+    const XB = aname.get(xa.key)!.buf, YB = aname.get(xb.key)!.buf, OB = aname.get(r.key)!.buf;
+    return {
+      out: r.index,
+      body: [
+        "  uint32_t na = p2.n, nb = p3.n;",
+        "  if ((uint64_t)na * nb > UINT32_MAX) lab_oom();",
+        "  uint32_t n = na * nb;",
+        `  const double *xs = ((${XB} *)p0.b)->it + p0.s, *ys = ((${YB} *)p1.b)->it + p1.s;`,
+        "  int64_t xn = p0.n, yn = p1.n, sa = lab__clamp(p4), sb = lab__clamp(p5), count = lab__clamp(p6);",
+        `  ${OB} *ob = lab__buf_a${r.index}(n, 0);`,
+        "  double *out = ob->it + ob->lo;",
+        "  int64_t *bs = malloc(((size_t)nb + 1) * sizeof(int64_t));",
+        "  char *bok = malloc((size_t)nb + 1);",
+        "  if (!bs || !bok) lab_oom();",
+        `  for (uint32_t j = 0; j < nb; j++) { bs[j] = lab__clamp(lab_array_getb_a${sb.index}(p3, LAB_SMALL(j))); bok[j] = (char)lab_sp_in(bs[j], sb, count, yn); }`,
+        "  for (uint32_t i = 0; i < na; i += 2) {",
+        "    int two = i + 1 < na;",
+        `    int64_t a0 = lab__clamp(lab_array_getb_a${sa.index}(p2, LAB_SMALL(i))), a1 = two ? lab__clamp(lab_array_getb_a${sa.index}(p2, LAB_SMALL(i + 1))) : 0;`,
+        "    int ok0 = lab_sp_in(a0, sa, count, xn), ok1 = two && lab_sp_in(a1, sa, count, xn);",
+        "    double *o0 = out + (size_t)i * nb, *o1 = two ? o0 + nb : 0;",
+        "    uint32_t j = 0;",
+        "    if (ok0 && ok1) for (; j + 4 <= nb; j += 4) if (bok[j] && bok[j + 1] && bok[j + 2] && bok[j + 3]) lab_sp_eight(xs, a0, a1, sa, ys, bs + j, sb, count, o0 + j, o1 + j); else break;",
+        "    for (; j < nb; j++) {",
+        "      o0[j] = ok0 && bok[j] ? lab_sp_one(xs, a0, sa, ys, bs[j], sb, count) : 0;",
+        "      if (two) o1[j] = ok1 && bok[j] ? lab_sp_one(xs, a1, sa, ys, bs[j], sb, count) : 0;",
+        "    }",
+        "  }",
+        "  free(bs); free(bok);",
+      ],
+    };
+  }
+
   function func(f: SFunc, i: number): string {
     const loops = calls(f.body).some((x) => x.fn === i && x.tail);
     const local = (j: number) => (j < f.params.length ? `p${j}` : `l${j}`);
@@ -2515,6 +2590,14 @@ int main(int argc, char **argv) {
     // A lent input isn't this function's to give on or drop, nor is a
     // local that holds it or a part of it without a count (C241).
     const mine = lent.get(i);
+    const products = stridedProductsC(f);
+    if (products) {
+      const body = [...products.body, ...f.params.flatMap((t, j) => (counted(t) && !mine?.has(j) ? [`  ${drop(t, `p${j}`)}`] : [])), `  return lab__view_a${products.out}((lab_cell *)ob, ob->lo, n);`];
+      const text = [PRODUCTS_C, `// ${f.name.replace(/\n/g, " ")}, eight sums at once`, `${header(i, !!mine)} {`, ...body, "}"].join("\n");
+      if (!mine) return text;
+      const ps = f.params.map((_, j) => `p${j}`);
+      return [text, `${header(i)} {`, `  ${ty(f.result)} r = ${bnames.get(i)}(${ps.join(", ")});`, ...[...mine].map((j) => `  ${drop(f.params[j], `p${j}`)}`), "  return r;", "}"].join("\n");
+    }
     const grid = gridC(f, i);
     if (grid) {
       const body = [...grid.body, ...f.params.flatMap((t, j) => (counted(t) && !mine?.has(j) ? [`  ${drop(t, `p${j}`)}`] : [])), `  return lab__view_a${(f.result as AType).index}((lab_cell *)ob, ob->lo, n);`];
