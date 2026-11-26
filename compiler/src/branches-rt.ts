@@ -469,7 +469,12 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
   const saves = unit !== undefined && !KNOBS.has("send") ? unit * left * (1 - 1 / (helpers.length + 1)) : Infinity;
   late = sent + saves / 3;
   let payload: Payload | typeof NO = NO;
-  try { payload = left > 0 && helpers.length ? send() : NO; } finally { late = Infinity; if (gaveUp) { gaveUp = false; quick.add(site!); payload = NO; } }
+  // One unit left is never worth sending: the main thread would only wait
+  // for it, and the main thread takes its units first anyway (below), so
+  // it ran here after its payload was written for nothing (C330: wav of's
+  // map over a Sound's two channels, each channel's 2.88 million numbers
+  // written out for the second, 0.6 s of a minute's 3.1 s).
+  try { payload = left > 1 && helpers.length ? send() : NO; } finally { late = Infinity; if (gaveUp) { gaveUp = false; quick.add(site!); payload = NO; } }
   // What the workers are sent, counted (C323). Each worker reads it back
   // whole before its first unit, and reading takes longer than writing
   // (objects made, every worker's collector at once): taken as three
@@ -477,7 +482,8 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
   // than the units here, they run here, now and from now on: bazaar's
   // per-row maps close over a filed index of 200,000 rows, written out
   // at every call (20.2 s with the workers, 3.1 s without).
-  if (payload !== NO && unit !== undefined && !KNOBS.has("send") && 3 * (performance.now() - sent) + (unit * left) / (helpers.length + 1) >= unit * left) { quick.add(site!); payload = NO; }
+  const wrote = performance.now() - sent;
+  if (payload !== NO && unit !== undefined && !KNOBS.has("send") && 3 * wrote + (unit * left) / (helpers.length + 1) >= unit * left) { quick.add(site!); payload = NO; }
   if (payload === NO) for (; left > 0; left--) values[left - 1] = attempt(() => here(left - 1));
   const mine = new Set<number>(), id = ++job;
   let theirs = 0;
@@ -485,7 +491,17 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
     // claims[0] unused, [1] how many units workers finished, [2 + i]
     // whether unit i is taken.
     const claims = new Int32Array(new SharedArrayBuffer(4 * (2 + left))), t0 = performance.now();
-    for (const h of helpers) h.port.postMessage({ ...(payload as object), job: id, units: left, base: 0, claims });
+    // Posting copies the payload once a worker, on this thread: the first
+    // post's time, taken for each, joins the count above, and where the
+    // units are then no faster shared, the rest aren't posted (C330: wav
+    // of's words, 30 units of 4 ms, 0.1 s written and 0.12 s posted, the
+    // job 0.43 s shared against 0.13 s here). The first worker still
+    // helps; the units left are the main thread's first.
+    for (let k = 0; k < helpers.length; k++) {
+      const p0 = performance.now();
+      helpers[k].port.postMessage({ ...(payload as object), job: id, units: left, base: 0, claims });
+      if (k === 0 && unit !== undefined && !KNOBS.has("send") && 3 * wrote + (performance.now() - p0) * helpers.length + (unit * left) / (helpers.length + 1) >= unit * left) { quick.add(site!); break; }
+    }
     inJob = true;
     try { for (let i = left - 1; i >= 0; i--) if (Atomics.compareExchange(claims, 2 + i, 0, 1) === 0) { mine.add(i); values[i] = attempt(() => here(i)); } } finally { inJob = false; }
     theirs = left - mine.size;
