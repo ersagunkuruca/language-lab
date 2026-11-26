@@ -1588,9 +1588,11 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
   return (${o.record}){ acc };
 }`,
   },
-  "world.writeBytes": {
+  // Bytes written as a file, logged as op with the path given: write
+  // bytes's, and offer file's under the name alone (L271c).
+  "world.putBytes": {
     uses: ["world.fail", "world.logBytes"],
-    c: (o) => `static void lab_world_writeBytes(lab_cell *path, ${o.record} b) {
+    c: (o) => `static void lab__put_bytes(const char *op, lab_cell *given, lab_cell *path, ${o.record} b) {
   size_t n = 0;
   for (lab_cell *c = b.f0; c->tag == ${o.tag}; c = ((${o.cons} *)c)->f${1 - o.head}) n++;
   uint8_t *buf = malloc(n ? n : 1);
@@ -1598,7 +1600,8 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
   n = 0;
   for (lab_cell *c = b.f0; c->tag == ${o.tag}; c = ((${o.cons} *)c)->f${1 - o.head}) buf[n++] = (uint8_t)LAB_VAL(((${o.cons} *)c)->f${o.head});
   lab_drop(b.f0);
-  if (lab__log_begin("writeBytes")) { lab__log_text(path); lab__log_raw(","); lab__log_bytes(buf, n); lab__log_write(); }
+  if (lab__log_begin(op)) { lab__log_text(given); lab__log_raw(","); lab__log_bytes(buf, n); lab__log_write(); }
+  if (given != path) lab_drop(given);
   char *p = lab__path(path);
   FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : lab__fopen(p, "wb");
   free(p);
@@ -1608,6 +1611,44 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
   free(buf);
   if (fclose(f) != 0 || !ok) { lab__fail(e ? e : EIO, path); return; }
   lab_drop(path);
+}`,
+  },
+  "world.writeBytes": {
+    uses: ["world.putBytes"],
+    c: (o) => `static void lab_world_writeBytes(lab_cell *path, ${o.record} b) { lab__put_bytes("writeBytes", path, path, b); }`,
+  },
+  // A file handed to the person (L271a, as world.ts on the command line):
+  // written in the folder the program runs in, under its name alone
+  // ("file" when it has none).
+  "world.offerFile": {
+    uses: ["world.putBytes"],
+    c: (o) => `static void lab_world_offerFile(lab_cell *name, ${o.record} b) {
+  const char *s = (const char *)LAB_TB(name);
+  size_t end = LAB_TN(name), start;
+#ifdef _WIN32
+#define LAB_SEP(c) ((c) == '/' || (c) == '\\\\')
+#else
+#define LAB_SEP(c) ((c) == '/')
+#endif
+  while (end > 0 && LAB_SEP(s[end - 1])) end--;
+  for (start = end; start > 0 && !LAB_SEP(s[start - 1]); start--) {}
+#undef LAB_SEP
+  lab__put_bytes("offerFile", name, end > start ? lab__text_of(s + start, end - start) : lab__text_of("file", 4), b);
+}`,
+  },
+  // A file the person chooses (L271a): on the command line there's no one
+  // to choose, so it aborts, as world.ts does.
+  "world.askForFile": {
+    uses: ["world.fail"],
+    c: (o) => `static ${o.record} lab_world_askForFile(lab_cell *kinds) {
+  if (lab__log_begin("askForFile")) lab__log_text(kinds);
+  lab_drop(kinds);
+  static const char why[] = "there's no one to choose a file on the command line: read one with read bytes";
+  lab_drop(lab_reason);
+  lab_reason = lab__text_of(why, sizeof why - 1);
+  if (lab_log_open) { lab__log_raw("],\\"threw\\":"); lab__log_text(lab_reason); lab__log_raw("}"); lab_log_open = 0; }
+  lab_st = 2;
+  return (${o.record}){ &${o.nil} };
 }`,
   },
   // A zone's offset from UTC at an instant, in seconds (L188): the host's

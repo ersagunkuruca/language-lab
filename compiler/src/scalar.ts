@@ -2063,10 +2063,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
           return { k: "world", op: target === MY_LOCALE_OP ? "myLocale" : "myTimeZone", aborts: false, args: [], t };
         }
-        if (opts.handlers && (target === IO.readBytes || target === IO.writeBytes)) {
+        // And a file handed to the person and one they choose (L271c).
+        const bytesOp = target === IO.readBytes ? "readBytes" : target === IO.writeBytes ? "writeBytes" : target === IO.offerFile ? "offerFile" : target === IO.askForFile ? "askForFile" : null;
+        if (opts.handlers && bytesOp) {
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
-          return { k: "world", op: target === IO.readBytes ? "readBytes" : "writeBytes", aborts: true, args: args(), t, ins: n.args.map((x) => stype(zonk(x))!) };
+          return { k: "world", op: bytesOp, aborts: true, args: args(), t, ins: n.args.map((x) => stype(zonk(x))!) };
         }
         // A log line nothing handles (L213a3, for a release that logs): the
         // world's log, as the evaluator writes it.
