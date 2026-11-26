@@ -2595,6 +2595,57 @@ lacks something:
 4. C105 with L167, then C107.
 5. E221, E223, E224, L174, L176, L177.
 
+### clinic again, 11-26 (Language lane)
+
+The 11-26 sweep had clinic at 7.9x the ideal in core JS. `bench-clinic.ts` now:
+
+| hours | core IR | ideal | ratio |
+|---|---|---|---|
+| 8 | 206 ms | 30 ms | 6.9x |
+| 40 | 457 ms | 43 ms | 10.6x |
+| 200 | 1752 ms | 295 ms | 5.9x |
+| 1000 | 5985 ms | 1334 ms | 4.5x |
+
+The core IR column includes starting node (about 90 ms for an hour's
+clinic), and the ideal runs in the bench's own process.
+
+**Workers.** At 40 hours a run is 0.45 s with workers and 0.34 s with
+TERS_WORKERS=0. At 200 hours the two are about even (1.57 against
+1.50 s), and at 1000 hours workers win (4.6 against 5.2 s). With them the
+process uses twice the CPU. Each of the three maps that get shared (the six
+ways, the desk sweep, the ten seeds) runs once, so a site's first job is
+its only job, and a worker meets each site's code cold. At 200 hours the
+first, six units of 31 ms alone, takes 231 ms shared: the main thread
+does its unit by 40 ms, waits out the patience (twice a unit), runs one
+of the workers' units again, and waits again. Taking a site's first
+units back at once instead of waiting was tried: 6% faster at 40 hours,
+even at 200, 8% slower at 1000. Not kept.
+
+**One thread, by part.** Profiled at 200 hours with TERS_WORKERS=0 (the
+main thread 1.15 s, the ideal 0.22 s):
+
+- `day` is 712 ms against the ideal's 168 (4.2x). Of that, `assigned` is
+  282 ms (the ideal's assign is 31), and the collector is 23% of the
+  whole: every event makes the `Clinic` again (K3), along with the heaps
+  and the log line's text.
+- `heap size` is about 75 ms. The program counts its waiting room by
+  walking the heap at every event, where the ideal keeps a count. That's
+  the program as written.
+- `percentile` is 170 ms: `sort` on lists stored as arrays. The library's
+  merge sort cons-builds its result, which on an array is a call deep for
+  every item, past 1000 deep a generator step each. A profile makes this
+  look like 60% of the run (deep stacks are slow to sample); timed, it is
+  about 12%. Swapping it by hand for the JS array's own sort in the
+  printed module: 200 hours 1353 → 1192 ms, 1000 hours 5909 → 5474 ms,
+  40 hours −4%, the same report. A bottom-up merge sort over positions,
+  written in the language as `array of List`'s sort, was slower than the
+  merge as compiled (a tuple and two failing reads a step). Not kept.
+
+What would clear the bar is a sort that runs as the target's own over an
+array (stable, by `compare`, so the same order as the merge): about 12%
+at 200 hours. That's C355: a builtin on every target (JS, C, wasm) and a job
+on `array of List`. The rest is spread out, and is mostly K3's copies.
+
 ## Round 11: crew, workers as fibers (2026-11-05)
 
 `compiler/gaps/crew` reads a project plan (each task's minutes and what
