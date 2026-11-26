@@ -49,6 +49,8 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "replace at": "@35sedp97bd5r0h3hrka4eg489k",
  // Neighbours on a grid's lists, which C and WebAssembly write by hand (compiler/src/c.ts gridC, wasm.ts gridWat, C293).
  "grid found": "@becuel3pf83eurot308g7d1sd8",
+ // One pair of axes' products, every item's sum (contracted), which C works several sums at once (C306).
+ "strided products": "@f997trq640jda04gv9sf8mte6k",
 };
 
 // A definition copied by a pass (library-reps.ts copies the library's list
@@ -63,6 +65,14 @@ export const originalOf = (id: string): string => COPIED_FROM.get(id) ?? id;
 // way and give it another: known only where what they give is no list
 // (all pass, any pass).
 export const SPLIT_COPIED_FROM = new Map<string, string>();
+// And arith.ts's copies of a generic definition at its types ("strided
+// products at Float64"), by the copy's id: a printer that writes one
+// definition by hand at a type (c.ts stridedProductsC) knows it so.
+export const TYPED_COPY_OF = new Map<string, string>();
+export const typedOriginalOf = (id: string): string => {
+  for (let n = 0; n < 16; n++) { const up = TYPED_COPY_OF.get(id) ?? COPIED_FROM.get(id); if (up === undefined) break; id = up; }
+  return id;
+};
 // And each node of library-reps.ts's copies, by its copy's id: what the
 // compiler's decisions are about (L280a), a placement's node or a call
 // of neighbours, is the node as written, so an entry a module's author

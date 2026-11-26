@@ -30,6 +30,7 @@ import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { bodyFacts, codeChecked, implementationOf, joinBodyFacts, sccs, terminates, type Info } from "./infer.ts";
 import { keptAcrossRuns } from "./kept.ts";
+import { TYPED_COPY_OF } from "./prelude-ids.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
 import { ARITH, ARITH_FIELD, BOOL, CONS, EMBEDDING, EMBEDDING_MAP, FALSE, INT_OPS, LIST, LITERAL, LITERAL_V, NIL, S, TRUE } from "./std.ts";
 import { INT, NUMBER, OverMap, type Row, type Scheme, type Type } from "./types.ts";
@@ -400,6 +401,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     nodes[id] = { id, kind: "def", body };
     defs.push(id);
     outNames[id] = `${names[def] ?? def} at ${vars.map((v) => show(at(v))).join(", ")}`;
+    TYPED_COPY_OF.set(id, def);
     const type = close(sc.type, env);
     const left = (xs?: number[]) => (xs ?? []).filter((v) => !env.has(v));
     const needs = (sc.needs ?? []).filter(([v]) => !env.has(v));

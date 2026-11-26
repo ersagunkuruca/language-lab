@@ -1587,6 +1587,17 @@ export function buildPrelude(): Module {
     k.if(k.call(atMost, n, k.int(0)), acc,
       k.call(stridedSum, xa, xb, iAdd(ao, sa), iAdd(bo, sb), sa, sb, k.call(INT_OPS.sub, n, k.int(1)), k.call(ARITH.add, acc, k.call(ARITH.mul,
         k.call(itemRead, xa, ao), k.call(itemRead, xb, bo)))))));
+  // One pair's products, every result item's sum (C306): result item r
+  // starts at a's starts[r ÷ b's count] and b's starts[r mod it]. On its
+  // own, so C can work several items' sums at once, each still added in
+  // its order (c.ts stridedProductsC).
+  const stridedProducts = k.def("strided products");
+  k.define(stridedProducts, k.fn(["a items", "b items", "a starts", "b starts", "a stride", "b stride", "count"], (xs, ys, abs, bbs, sa1, sb1, n) =>
+    k.let("b count", alen(bbs), (nb) =>
+      k.call(ARRAY_OPS.of, k.call(map, k.call(INT_OPS.range, iMul(alen(abs), nb)), k.fn(["at"], (r) =>
+        k.let("a base", first(k.call(ARRAY_OPS.at, abs, first(k.call(INT_OPS.quotient, r, nb), k.int(0))), k.int(0)), (ba) =>
+        k.let("b base", first(k.call(ARRAY_OPS.at, bbs, first(k.call(INT_OPS.remainder, r, nb), k.int(0))), k.int(0)), (bb) =>
+          first(k.call(stridedSum, xs, ys, ba, bb, sa1, sb1, n, k.lit(0)), k.lit(0))))))))));
   const contracted = def("contracted", ["first", "second", "pairs"], (a, b, ps) => tenOf(a, (sa, xs) => tenOf(b, (sb, ys) =>
     k.let("a axes", firsts(ps), (as) => k.let("b axes", seconds(ps), (bs) =>
       k.let("a rank", k.call(length, sa), (ra) => k.let("b rank", k.call(length, sb), (rb) =>
@@ -1604,11 +1615,12 @@ export function buildPrelude(): Module {
               // b's, starts at a's (r ÷ b's count) and b's (r mod it).
               k.let("a starts", k.call(ARRAY_OPS.of, k.call(map, k.call(indicesOf, lengthsAt(sa, fa)), k.fn(["at"], (ix) => k.call(strided, ix, lengthsAt(sta, fa), k.int(0))))), (abs) =>
               k.let("b starts", k.call(ARRAY_OPS.of, k.call(map, k.call(indicesOf, lengthsAt(sb, fb)), k.fn(["at"], (ix) => k.call(strided, ix, lengthsAt(stb, fb), k.int(0))))), (bbs) =>
+              k.if(one, k.call(stridedProducts, xs, ys, abs, bbs, sa1, sb1, iAdd(last, k.int(1))),
               k.let("b count", alen(bbs), (nb) =>
               k.call(ARRAY_OPS.of, k.call(map, k.call(INT_OPS.range, iMul(alen(abs), nb)), k.fn(["at"], (r) =>
                 k.let("a base", first(k.call(ARRAY_OPS.at, abs, first(k.call(INT_OPS.quotient, r, nb), k.int(0))), k.int(0)), (ba) =>
                 k.let("b base", first(k.call(ARRAY_OPS.at, bbs, first(k.call(INT_OPS.remainder, r, nb), k.int(0))), k.int(0)), (bb) =>
-                  k.if(one, first(k.call(stridedSum, xs, ys, ba, bb, sa1, sb1, iAdd(last, k.int(1)), k.lit(0)), k.lit(0)), k.call(contractionSum, xs, ys, ka, kb, ba, bb, last, k.lit(0))))))))))))))))))))))))),
+                  k.call(contractionSum, xs, ys, ka, kb, ba, bb, last, k.lit(0))))))))))))))))))))))))),
           k.call(ABORT_OP, texts(k.lit("contracted: the pairs don't fit a "), k.call(shapeText, sa), k.lit(" tensor and a "), k.call(shapeText, sb), k.lit(" one: each pair needs an axis of each, of the same length, each axis in one pair at most")))))))))));
   // Axis order[k] of the tensor becomes axis k.
   const transposedBy = def("transposed by", ["tensor", "order"], (t, order) => tenOf(t, (sa, xs) => k.let("rank", k.call(length, sa), (r) =>
