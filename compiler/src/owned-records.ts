@@ -39,7 +39,7 @@ export function ownedRecords(ir: CoreIR, code: Code, info: Info, names: Record<I
     // holders.ts doesn't follow (it knows no holders of items yet): there
     // one-holder.ts, by type, still decides.
     const rebuilt = new Set<Id>();
-    const byType = !process.env.TERS_RECORDS_BY_VALUE && oneHolder(code, info, main, new Set([d.def]), new Set(), new Map(), names, undefined, true, rebuilt).ok;
+    const byType = oneHolder(code, info, main, new Set([d.def]), new Set(), new Map(), names, undefined, true, rebuilt).ok;
     let here = 0;
     for (const f of ir.funcs) f.body = inPlace(f, f.body, d, (m, y) => { const b = f.binders?.[y]; if (!into.has(m) && !(byType && b && rebuilt.has(b))) return false; here++; return true; });
     if (!here) continue;
