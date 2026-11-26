@@ -47,6 +47,8 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  // A map over a list numbered that replaces one item, read as replace at (compiler/src/replace-reads.ts, C330).
  "numbered": "@ssemhlqkj8mqo139vtu32vk2ji",
  "replace at": "@35sedp97bd5r0h3hrka4eg489k",
+ // Neighbours on a grid's lists, which C and WebAssembly write by hand (compiler/src/c.ts gridC, wasm.ts gridWat, C293).
+ "grid found": "@a699r8jjfegftefqaa23edjg9o",
 };
 
 // A definition copied by a pass (library-reps.ts copies the library's list
