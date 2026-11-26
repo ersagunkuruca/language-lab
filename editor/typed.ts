@@ -20,6 +20,7 @@ import { pinsOf, showPin, type Pins } from "../ters/src/lang/signatures.ts";
 import { dropLoose, setLoose, wireIn } from "./drafts.ts";
 import { addVariant, fillHole } from "../ters/src/lang/refactor.ts";
 import { partNamed } from "../ters/src/lang/results.ts";
+import { portLabel } from "../ters/src/lang/equations.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
 import { solveMode } from "../ters/src/lang/modes.ts";
 import { std, ARITH, ARITHMETIC, ASSOCIATIVE, LEFT_ONLY, CONS, DIVIDE, FALSE, LITERAL, NIL, S, SIGS, TRUE, TUPLE_MAX } from "../ters/src/lang/std.ts";
@@ -458,7 +459,12 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
     const found = firstFitting(meant, (t) => written(code, names, info, hole, text, t, wholes(t), defId).ok || (wholes(t) && written(code, names, info, hole, text, t, false, defId).ok));
     if (found) return fitOf(found);
   }
-  return refusal(first! as TEdit & { ok: false }, why, overloaded(r, all));
+  return listsJoined(refusal(first! as TEdit & { ok: false }, why, overloaded(r, all)));
+}
+// ++ joins texts; lists are joined by append (I377: `++` between lists was
+// "join text needs Text here, got List (Item, Int)", append being meant).
+function listsJoined(e: TEdit): TEdit {
+  return !e.ok && /\bjoin text needs Text here, got List\b/.test(e.reason) ? { ...e, reason: `${e.reason} (++ joins texts: two lists join with append(a, b))` } : e;
 }
 
 // A field several types have, read on any value of what's typed (an
@@ -496,6 +502,7 @@ function fieldsByProbe(code: Code, names: Names, info: Info, hole: Id, t: Typed,
     if (y) return y;
     if ("op" in x) return { ...x, args: x.args.map((a) => map(a, f)) };
     if ("apply" in x) return { apply: map(x.apply, f), args: x.args.map((a) => map(a, f)) };
+    if ("use" in x) return { ...x, args: x.args.map((a) => map(a, f)) };
     if ("params" in x) return { ...x, body: map(x.body, f) };
     if ("cond" in x) return { cond: map(x.cond, f), then: map(x.then, f), else: map(x.else, f) };
     if ("let" in x) return { ...x, be: map(x.be, f), rest: map(x.rest, f) };
@@ -579,6 +586,7 @@ function overloaded(t: Typed, names: Names): string[] {
   const go = (x: Typed): void => {
     if ("op" in x) { if (x.alts && x.alts.length > 1) out.add(names[x.op] ?? x.op); x.args.forEach(go); }
     else if ("apply" in x) [x.apply, ...x.args].forEach(go);
+    else if ("use" in x) x.args.forEach(go);
     else if ("params" in x) go(x.body);
     else if ("cond" in x) [x.cond, x.then, x.else].forEach(go);
     else if ("let" in x) { go(x.be); go(x.rest); }
@@ -683,6 +691,7 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
     if ("cond" in t) return [t.cond, t.then, t.else].forEach(look);
     if ("let" in t) return [t.be, t.rest].forEach(look);
     if ("apply" in t) return [t.apply, ...t.args].forEach(look);
+    if ("use" in t) return t.args.forEach(look);
     if (!("op" in t)) return;
     const alts = t.alts ?? [t.op];
     t.args.forEach((a, i) => {
@@ -703,6 +712,7 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
     if ("let" in t) { const be = go(t.be); if (be.heads) bound.set(t.let.id, be.heads); const rest = go(t.rest); return { t: { ...t, be: be.t, rest: rest.t }, heads: rest.heads }; }
     if ("params" in t) return { t: { ...t, body: go(t.body).t }, heads: null };
     if ("apply" in t) return { t: { apply: go(t.apply).t, args: t.args.map((a) => go(a).t) }, heads: null };
+    if ("use" in t) return { t: { ...t, args: t.args.map((a) => go(a).t) }, heads: null };
     if ("cond" in t) {
       const [c, a, b] = [t.cond, t.then, t.else].map(go);
       return { t: { cond: c.t, then: a.t, else: b.t }, heads: a.heads && b.heads ? new Set([...a.heads, ...b.heads]) : null };
@@ -774,6 +784,7 @@ function leaveOpen(info: Info, t: Typed): Typed {
   if ("cond" in t) return { cond: leaveOpen(info, t.cond), then: leaveOpen(info, t.then), else: leaveOpen(info, t.else) };
   if ("let" in t) return { ...t, be: leaveOpen(info, t.be), rest: leaveOpen(info, t.rest) };
   if ("apply" in t) return { apply: leaveOpen(info, t.apply), args: t.args.map((a) => leaveOpen(info, a)) };
+  if ("use" in t) return { ...t, args: t.args.map((a) => leaveOpen(info, a)) };
   if (!("op" in t)) return t;
   const args = t.args.map((a) => leaveOpen(info, a));
   if (!t.alts || t.alts.length < 2) return { ...t, args };
@@ -832,6 +843,7 @@ function guessedAt(t: Typed): string | null {
     if ("cond" in x) return [x.cond, x.then, x.else].forEach(go);
     if ("let" in x) return [x.be, x.rest].forEach(go);
     if ("apply" in x) return [x.apply, ...x.args].forEach(go);
+    if ("use" in x) return x.args.forEach(go);
     if (!("op" in x)) return;
     x.args.forEach(go);
     const ty = x.guess?.[x.op];
@@ -849,6 +861,7 @@ function readingCount(t: Typed): number {
   if ("cond" in t) return times([t.cond, t.then, t.else]);
   if ("let" in t) return times([t.be, t.rest]);
   if ("apply" in t) return times([t.apply, ...t.args]);
+  if ("use" in t) return times(t.args);
   if (!("op" in t)) return 1;
   return Math.min(1e6, (t.alts?.length ?? 1) * times(t.args));
 }
@@ -862,7 +875,7 @@ function firstFitting(top: Typed, fits: (t: Typed) => boolean): Typed | null {
   const order: Typed[] = [];
   const collect = (x: Typed): void => {
     if ("op" in x && x.alts && x.alts.length > 1) order.push(x);
-    if ("op" in x || "apply" in x) { if ("apply" in x) collect(x.apply); x.args.forEach(collect); }
+    if ("op" in x || "apply" in x || "use" in x) { if ("apply" in x) collect(x.apply); x.args.forEach(collect); }
     else if ("params" in x) collect(x.body);
     else if ("cond" in x) [x.cond, x.then, x.else].forEach(collect);
     else if ("let" in x) { collect(x.be); collect(x.rest); }
@@ -875,6 +888,7 @@ function firstFitting(top: Typed, fits: (t: Typed) => boolean): Typed | null {
       return { op: chosen.get(x) ?? x.op, args: x.args.map(build), ...(x.guess ? { guess: x.guess } : {}) };
     }
     if ("apply" in x) return { apply: build(x.apply), args: x.args.map(build) };
+    if ("use" in x) return { ...x, args: x.args.map(build) };
     if ("params" in x) return { ...x, body: build(x.body) };
     if ("cond" in x) return { cond: build(x.cond), then: build(x.then), else: build(x.else) };
     if ("let" in x) return { ...x, be: build(x.be), rest: build(x.rest) };
@@ -913,6 +927,7 @@ function fieldOwners(code: Code, info: Info, names: Names) {
       if ("cond" in x) return [x.cond, x.then, x.else].forEach(go);
       if ("let" in x) return [x.be, x.rest].forEach(go);
       if ("apply" in x) return [x.apply, ...x.args].forEach(go);
+      if ("use" in x) return x.args.forEach(go);
       if (!("op" in x)) return;
       x.args.forEach(go);
       const v = ownerOf.get(x.op);
@@ -939,6 +954,7 @@ function readings(t: Typed): Typed[] {
   if ("cond" in t) return each([t.cond, t.then, t.else]).map(([cond, then, els]) => ({ cond, then, else: els }));
   if ("let" in t) return each([t.be, t.rest]).map(([be, rest]) => ({ ...t, be, rest }));
   if ("apply" in t) return each([t.apply, ...t.args]).map(([apply, ...args]) => ({ apply, args }));
+  if ("use" in t) return each(t.args).map((args) => ({ ...t, args }));
   if (!("op" in t)) return [t];
   const out = each(t.args);
   return (t.alts ?? [t.op]).flatMap((op) => out.map((args) => ({ op, args, ...(t.guess ? { guess: t.guess } : {}) }))).slice(0, 16);
@@ -956,7 +972,7 @@ function readings(t: Typed): Typed[] {
 // time · time, gives that many (L128b, the text L128c prints): the parts
 // written out are its tuple. A relation, (s, d) → a, b = condition, has
 // its results among its inputs and the condition as its body (L225e).
-type Typed = { value: Value; float?: true; unit?: Unit } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[]; guess?: Record<Id, Id>; glyph?: true } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed } | { apply: Typed; args: Typed[] };
+type Typed = { value: Value; float?: true; unit?: Unit } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[]; guess?: Record<Id, Id>; glyph?: true } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed } | { apply: Typed; args: Typed[] } | { use: Id; ports: string[]; args: Typed[] };
 // The operators are read from the notation itself (styles/blocks.json),
 // loosest first: each glyph is every function drawn with it, and the first
 // that type-checks is the one meant. The generic arithmetic comes first, so
@@ -1282,6 +1298,17 @@ function reading(text: string, code: Code, names: Names, scope: Map<string, Id>)
     const alts = [...new Set([...(named ? [named] : []), ...Object.keys(names).filter((id) => names[id] === call[1] && callable(id))])]
       .filter((id) => !(fromLibrary(id) && (code.nodes[id] as NodeOf<"variant"> | undefined)?.private))
       .sort((x, y) => +fromLibrary(x) - +fromLibrary(y) || +isOperation(code, y) - +isOperation(code, x));
+    // A use as the view prints a definition run another way, its ports
+    // named: greet(result = greeting) (I377, GAPS round 25 L5). Read so
+    // when a part says `result =`, or every part names a port of the
+    // function and none is a name in scope (then `x = 3` is a comparison).
+    const use = alts.length ? usedAs(code, names, alts[0], parts, scope) : null;
+    if (use) {
+      const args = use.map(([, x]) => typedOut(x, code, names, scope));
+      const bad = args.find((a) => "error" in a);
+      if (bad) return bad;
+      return { use: alts[0], ports: use.map(([k]) => k), args: args as Typed[] };
+    }
     // A word the notation prints before an input, first(x, else y), is
     // read past (E178).
     const words = alts.flatMap((id) => (blocksStyle.notation as Record<Id, Notation>)[id]?.words ?? []);
@@ -1334,6 +1361,25 @@ function reading(text: string, code: Code, names: Names, scope: Map<string, Id>)
   if (fns.length) return { ref: fns[0] };
   if (/^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(t) && !/^(if|then|else)$/.test(t)) return { error: `nothing is named ${t} here${closest(t, scope.keys(), scope)}` };
   return inner ?? r;
+}
+
+// The ports `parts` give `fn`, as `label = text` each, when they read as a
+// use of it (I377): each label is a port's (`result` its answer), and one
+// is `result` or none is a name in scope. null when they don't.
+function usedAs(code: Code, names: Names, fn: Id, parts: string[], scope: Map<string, Id>): [string, string][] | null {
+  const n = code.nodes[fn];
+  const lam = n?.kind === "def" && n.body ? code.nodes[n.body] : null;
+  const keys = lam?.kind === "lambda" ? [...lam.params, ...(lam.results ?? []).filter((r) => !lam.params.includes(r))] : ["0", "1", "2", "3", "4", "5", "6", "7"];
+  const out: [string, string][] = [];
+  for (const p of parts) {
+    const m = /^\s*([\p{L}_][\p{L}\p{N}_' ]*?)\s*=(?![=<>])\s*(\S[\s\S]*)$/u.exec(p);
+    if (!m) return null;
+    const key = m[1] === "result" ? "out" : keys.find((k) => portLabel(code, names, fn, k) === m[1]);
+    if (!key || out.some(([k]) => k === key)) return null;
+    out.push([key, m[2]]);
+  }
+  if (!out.length || !(out.some(([k]) => k === "out") || parts.every((p) => !scope.has(p.split("=")[0].trim())))) return null;
+  return out;
 }
 
 // The names closest to one that isn't there, to say "did you mean": in
@@ -1569,6 +1615,8 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
     }
     // A call of a call's result, derivative(f)(x) (I250).
     if ("apply" in t) { const id = place ?? freshId(); nodes[id] = { id, kind: "call", fn: tree(t.apply), args: t.args.map((a) => tree(a)) }; return id; }
+    // A use as the view prints it, greet(result = greeting) (I377).
+    if ("use" in t) { const id = place ?? freshId(), fn = freshId(); nodes[fn] = { id: fn, kind: "ref", target: t.use }; nodes[id] = { id, kind: "call", fn, given: Object.fromEntries(t.ports.map((k, i) => [k, tree(t.args[i])])) }; return id; }
     const [p, q] = t.args.map(isWhole);
     if (fit && t.op === B.div && t.args.length === 2 && p !== null && q !== null) {
       const id = place ?? freshId();
