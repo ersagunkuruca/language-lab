@@ -61,7 +61,7 @@ export function overLiterals<S extends Stage>(place: string, given: S, run: () =
   try { ran = run(); } finally { if (tracked) { reading = outer; if (outer) for (const id of mine!) outer.add(id); } }
   const { reads: told, ...out } = ran;
   const reads = mine ? new Set([...mine, ...(told ?? [])]) : told;
-  if (kept.size >= 8 && !kept.has(place)) kept.clear();
+  if (kept.size >= 16 && !kept.has(place)) kept.clear();
   kept.set(place, { given, out, ids: [from, idsPlace()], ...(reads ? { reads } : {}) });
   return handed(out as unknown as S);
 }

@@ -910,36 +910,42 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // result derive.ts can follow); they then work on the derivatives too.
   const carried = !opts.shader && carry.derive ? carriedDerivatives(code, info, names, roots) : null;
   if (carried) ({ code, names, info } = carried);
-  // A list named first and then walked is put where it's walked, so the
-  // fold over `characters` sees it (inline-lets.ts, C49).
-  const lets = inlineLists(code, info);
-  if (lets.inlined) {
-    code = lets.code;
-    info = infer(code, names, undefined, recheck);
-  }
-  // A fold of a map made one fold (fuse-steps.ts, C207c).
-  const fusedSteps = envSet("NO_FUSE") ? null : fuseSteps(code, info);
-  if (fusedSteps?.fused) {
-    code = fusedSteps.code;
-    // Its nodes' types carried (stage 2 of the compiler redesign), vouched
-    // for by the verifier as the passes before; checked again where they
-    // couldn't be carried, or the verifier finds a problem.
-    if (fusedSteps.types && !envSet("TERS_RECHECK")) {
-      const typeOf = new OverMap(info.typeOf);
-      for (const [id, t] of fusedSteps.types) typeOf.set(id, t);
-      const carried = { ...info, typeOf }, v = verdictOf("fused steps", code, carried);
-      lastFused = { fused: fusedSteps.fused, carried: !v.problems };
-      info = v.problems ? infer(code, names, undefined, recheck) : carried;
-    } else info = infer(code, names, undefined, recheck);
-  }
-  // A fold's costly work on each item shared out as a map, where a target
-  // shares a list's maps out: JavaScript (fold-items.ts, C42e); C shares
-  // an array's only.
-  const sharedItems = opts.host && !opts.shader && !envSet("NO_FOLD_ITEMS") ? shareFoldItems(code, info) : null;
-  if (sharedItems?.shared) {
-    code = sharedItems.code;
-    info = infer(code, names, undefined, recheck);
-  }
+  // The passes up to the lowering itself read numbers only through the
+  // check: an edit of a number takes their last answer with the new value
+  // put in (literals-again.ts; machine's 15 ms a number edit).
+  ({ code, info, names } = overLiterals(`middle ${roots.join(" ")} ${!!opts.host} ${!!opts.shader}`, { code, info, names }, () => {
+    // A list named first and then walked is put where it's walked, so the
+    // fold over `characters` sees it (inline-lets.ts, C49).
+    const lets = inlineLists(code, info);
+    if (lets.inlined) {
+      code = lets.code;
+      info = infer(code, names, undefined, recheck);
+    }
+    // A fold of a map made one fold (fuse-steps.ts, C207c).
+    const fusedSteps = envSet("NO_FUSE") ? null : fuseSteps(code, info);
+    if (fusedSteps?.fused) {
+      code = fusedSteps.code;
+      // Its nodes' types carried (stage 2 of the compiler redesign), vouched
+      // for by the verifier as the passes before; checked again where they
+      // couldn't be carried, or the verifier finds a problem.
+      if (fusedSteps.types && !envSet("TERS_RECHECK")) {
+        const typeOf = new OverMap(info.typeOf);
+        for (const [id, t] of fusedSteps.types) typeOf.set(id, t);
+        const carried = { ...info, typeOf }, v = verdictOf("fused steps", code, carried);
+        lastFused = { fused: fusedSteps.fused, carried: !v.problems };
+        info = v.problems ? infer(code, names, undefined, recheck) : carried;
+      } else info = infer(code, names, undefined, recheck);
+    }
+    // A fold's costly work on each item shared out as a map, where a target
+    // shares a list's maps out: JavaScript (fold-items.ts, C42e); C shares
+    // an array's only.
+    const sharedItems = opts.host && !opts.shader && !envSet("NO_FOLD_ITEMS") ? shareFoldItems(code, info) : null;
+    if (sharedItems?.shared) {
+      code = sharedItems.code;
+      info = infer(code, names, undefined, recheck);
+    }
+    return { code, info, names };
+  }));
   const derivativeOf = carried?.derivativeOf ?? new Map<Id, { lambda: Id; stand: Map<Id, Id> }>();
   // The closure types it is asked of, and the code of the derivatives
   // made (which carry none: no derivative of one is asked, carried-
