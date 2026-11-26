@@ -972,7 +972,7 @@ function readings(t: Typed): Typed[] {
 // time · time, gives that many (L128b, the text L128c prints): the parts
 // written out are its tuple. A relation, (s, d) → a, b = condition, has
 // its results among its inputs and the condition as its body (L225e).
-type Typed = { value: Value; float?: true; unit?: Unit } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[]; guess?: Record<Id, Id>; glyph?: true } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed } | { apply: Typed; args: Typed[] } | { use: Id; ports: string[]; args: Typed[] };
+type Typed = { value: Value; float?: true; unit?: Unit } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[]; guess?: Record<Id, Id>; glyph?: true } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed } | { apply: Typed; args: Typed[] } | { use: Id; ports: string[]; args: Typed[]; binds?: { port: string; id: Id; name: string }[] };
 // The operators are read from the notation itself (styles/blocks.json),
 // loosest first: each glyph is every function drawn with it, and the first
 // that type-checks is the one meant. The generic arithmetic comes first, so
@@ -1102,6 +1102,11 @@ function reading(text: string, code: Code, names: Names, scope: Map<string, Id>)
   // Steps in braces, { a; b }, as the blocks print them (E299).
   if (/^\{[\s\S]*\}$/.test(t) && topLevel(t.slice(1, -1), ";")) return typedOut(t.slice(1, -1).trim(), code, names, scope);
   const steps = topLevel(t, ";");
+  // solve f(x = 3) for a, b as a step (LANGUAGE.md "Relations inside
+  // programs"): the steps after it are its body, a and b in scope there
+  // (I377, GAPS round 25 L5).
+  const solved = solveOf(t, steps);
+  if (solved) return solveRead(solved, code, names, scope);
   // A step with no name, write(a, x); write(b, y), is done for what it
   // does: its value is named _, read by nothing (E190), as E183 prints it.
   const step = steps && steps.length > 1 ? /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(steps[0].trim()) ?? [steps[0], "_", steps[0]] : null;
@@ -1366,20 +1371,88 @@ function reading(text: string, code: Code, names: Names, scope: Map<string, Id>)
 // The ports `parts` give `fn`, as `label = text` each, when they read as a
 // use of it (I377): each label is a port's (`result` its answer), and one
 // is `result` or none is a name in scope. null when they don't.
-function usedAs(code: Code, names: Names, fn: Id, parts: string[], scope: Map<string, Id>): [string, string][] | null {
-  const n = code.nodes[fn];
-  const lam = n?.kind === "def" && n.body ? code.nodes[n.body] : null;
-  const keys = lam?.kind === "lambda" ? [...lam.params, ...(lam.results ?? []).filter((r) => !lam.params.includes(r))] : ["0", "1", "2", "3", "4", "5", "6", "7"];
+function usedAs(code: Code, names: Names, fn: Id, parts: string[], scope: Map<string, Id>, solve = false): [string, string][] | null {
   const out: [string, string][] = [];
   for (const p of parts) {
     const m = /^\s*([\p{L}_][\p{L}\p{N}_' ]*?)\s*=(?![=<>])\s*(\S[\s\S]*)$/u.exec(p);
-    if (!m) return null;
-    const key = m[1] === "result" ? "out" : keys.find((k) => portLabel(code, names, fn, k) === m[1]);
-    if (!key || out.some(([k]) => k === key)) return null;
+    const key = m && portKey(code, names, fn, m[1], scope);
+    if (!m || !key || out.some(([k]) => k === key)) return null;
     out.push([key, m[2]]);
   }
+  if (solve) return out;
   if (!out.length || !(out.some(([k]) => k === "out") || parts.every((p) => !scope.has(p.split("=")[0].trim())))) return null;
   return out;
+}
+// The port of fn a label names: `result` (or `out`, as the functional view
+// prints it, when nothing in scope is called out), a parameter or a named
+// result as portLabel says it.
+function portKey(code: Code, names: Names, fn: Id, label: string, scope: Map<string, Id>): string | undefined {
+  if (label === "result" || (label === "out" && !scope.has("out"))) return "out";
+  const n = code.nodes[fn];
+  const lam = n?.kind === "def" && n.body ? code.nodes[n.body] : null;
+  const keys = lam?.kind === "lambda" ? [...lam.params, ...(lam.results ?? []).filter((r) => !lam.params.includes(r))] : ["0", "1", "2", "3", "4", "5", "6", "7"];
+  return keys.find((k) => portLabel(code, names, fn, k) === label);
+}
+
+// solve f(x = 3), solve f(x = 3) for a, b → body, or that last as a step
+// with the steps after it for its body (LANGUAGE.md "Relations inside
+// programs"): the name, its parts, the ports solved for and the body's text.
+type SolveText = { name: string; parts: string[]; wanted: string[]; body?: string };
+function solveOf(t: string, steps: string[] | undefined): SolveText | null {
+  const head = steps && steps.length > 1 ? steps[0].trim() : t;
+  const m = /^solve\s+‹?([^()[\],"‹›]+?)›?\s*\(/su.exec(head);
+  if (!m) return null;
+  const open = m[0].length - 1;
+  let depth = 0, quoted = false, close = -1;
+  for (let i = open; i < head.length && close < 0; i++) {
+    const c = head[i];
+    if (c === '"' && head[i - 1] !== "\\") quoted = !quoted;
+    if (quoted) continue;
+    if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c) && --depth === 0) close = i;
+  }
+  const parts = close < 0 ? undefined : topLevel(head.slice(open + 1, close));
+  if (!parts) return null;
+  const after = head.slice(close + 1).trim();
+  if (!after) return steps && steps.length > 1 ? null : { name: m[1].trim(), parts, wanted: [] };
+  const f = /^for\s+([^→]+?)\s*(?:→\s*([\s\S]+))?$/u.exec(after);
+  if (!f || (f[2] !== undefined) === !!(steps && steps.length > 1)) return null;
+  const body = f[2] ?? steps!.slice(1).join(";");
+  return { name: m[1].trim(), parts, wanted: f[1].split(",").map((w) => w.trim()), body };
+}
+function solveRead(s: SolveText, code: Code, names: Names, scope: Map<string, Id>): Typed | { error: string } {
+  const named = scope.get(s.name);
+  const fn = [...(named ? [named] : []), ...Object.keys(names).filter((id) => names[id] === s.name && !["binder", "field", "variant"].includes(code.nodes[id]?.kind))]
+    .sort((x, y) => +fromLibrary(x) - +fromLibrary(y))[0];
+  if (!fn) return { error: `nothing is named ${s.name} here${closest(s.name, Object.values(names), scope)}` };
+  const given = usedAs(code, names, fn, s.parts, scope, true);
+  if (!given) {
+    const label = s.parts.map((p) => /^\s*([^=]*?)\s*=(?![=<>])/.exec(p)?.[1]).find((l) => !l || !portKey(code, names, fn, l, scope));
+    return { error: label ? `${s.name} has no port ${label}: its ports are ${portList(code, names, fn)}` : `solve ${s.name}(…) names each port it's given once, port = value: ${portList(code, names, fn)}` };
+  }
+  const binds: { port: string; id: Id; name: string }[] = [];
+  for (const w of s.wanted) {
+    const port = portKey(code, names, fn, w, scope);
+    if (!port) return { error: `${s.name} has no port ${w}: its ports are ${portList(code, names, fn)}` };
+    if (given.some(([k]) => k === port) || binds.some((b) => b.port === port)) return { error: `${w} is named twice in solve ${s.name}` };
+    binds.push({ port, id: freshId(), name: w });
+  }
+  const args = given.map(([, x]) => typedOut(x, code, names, scope));
+  const bad = args.find((a) => "error" in a);
+  if (bad) return bad;
+  if (s.body === undefined) return { use: fn, ports: given.map(([k]) => k), args: args as Typed[] };
+  const inner = new Map(scope);
+  for (const b of binds) inner.set(b.name, b.id);
+  const body = typedOut(s.body, code, names, inner);
+  if ("error" in body) return body;
+  return { use: fn, ports: given.map(([k]) => k), args: [...(args as Typed[]), body], binds };
+}
+// A function's ports as solve names them: its parameters, then result.
+function portList(code: Code, names: Names, fn: Id): string {
+  const n = code.nodes[fn];
+  const lam = n?.kind === "def" && n.body ? code.nodes[n.body] : null;
+  const keys = lam?.kind === "lambda" ? [...lam.params, ...(lam.results ?? []).filter((r) => !lam.params.includes(r))] : [];
+  return [...keys.map((k) => portLabel(code, names, fn, k)), "result"].join(", ");
 }
 
 // The names closest to one that isn't there, to say "did you mean": in
@@ -1616,7 +1689,16 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
     // A call of a call's result, derivative(f)(x) (I250).
     if ("apply" in t) { const id = place ?? freshId(); nodes[id] = { id, kind: "call", fn: tree(t.apply), args: t.args.map((a) => tree(a)) }; return id; }
     // A use as the view prints it, greet(result = greeting) (I377).
-    if ("use" in t) { const id = place ?? freshId(), fn = freshId(); nodes[fn] = { id: fn, kind: "ref", target: t.use }; nodes[id] = { id, kind: "call", fn, given: Object.fromEntries(t.ports.map((k, i) => [k, tree(t.args[i])])) }; return id; }
+    // Solved for some ports, its body last among the args (I377).
+    if ("use" in t) {
+      const id = place ?? freshId(), fn = freshId();
+      nodes[fn] = { id: fn, kind: "ref", target: t.use };
+      const given = Object.fromEntries(t.ports.map((k, i) => [k, tree(t.args[i])]));
+      if (!t.binds) { nodes[id] = { id, kind: "call", fn, given }; return id; }
+      for (const b of t.binds) { nodes[b.id] = { id: b.id, kind: "binder" }; nn[b.id] = b.name; }
+      nodes[id] = { id, kind: "call", fn, given, binds: Object.fromEntries(t.binds.map((b) => [b.port, b.id])), body: tree(t.args[t.ports.length]) };
+      return id;
+    }
     const [p, q] = t.args.map(isWhole);
     if (fit && t.op === B.div && t.args.length === 2 && p !== null && q !== null) {
       const id = place ?? freshId();
