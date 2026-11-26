@@ -77,7 +77,7 @@ test("a case that says what the otherwise says is drawn once", () => {
 });
 
 
-test("a node's comment is a mark on it, and a folded frame's mark says the comments of the nodes it hides (QA 11-22b L3)", () => {
+test("a node's comment is its top line, and a folded frame's mark says the comments of the nodes it hides (QA 11-22b L3, E316)", () => {
   const p = loadProgram(join(root, "examples", "queens"));
   const safe = p.named("safe");
   const abs = subtree(p.code, safe).find((x) => { const n = p.code.nodes[x]; return isCall(n) && p.pres.names[(p.code.nodes[n.fn] as { target?: string }).target ?? ""] === "abs"; })!;
@@ -88,7 +88,19 @@ test("a node's comment is a mark on it, and a folded frame's mark says the comme
   } as never).root as unknown as El;
   const notes = (e: El) => e.all().filter((x) => /\bcmt-mark\b/.test(x.getAttribute("class") ?? "")).map((x) => x.children.find((c) => c.tagName === "title")!.textContent);
   const open = svg(new Set());
-  assert.deepEqual(notes(open), ["how far apart"]);
+  // The line above the node, its text shown, the whole on hover, and the
+  // node's body drawn below it.
+  const lines = open.all().filter((x) => /\bcmt-line\b/.test(x.getAttribute("class") ?? ""));
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].children.find((c) => c.tagName === "title")!.textContent, "how far apart");
+  assert.equal(lines[0].children.find((c) => c.tagName === "text")!.textContent, "how far apart");
+  const at = (e: El) => /translate\(([-\d.]+),([-\d.]+)\)/.exec(e.getAttribute("transform") ?? "")!.slice(1).map(Number);
+  const body = open.all().find((x) => x.tagName === "g" && x.children.some((c) => c.getAttribute("data-id") === abs || c.getAttribute("data-slot") === abs));
+  assert.ok(body, "abs's node");
+  const [lx, ly] = at(lines[0]), [bx, by] = at(body!);
+  assert.equal(bx, lx);
+  assert.equal(by, ly + 16);
+  assert.deepEqual(notes(open), []);
   // Every frame folded: the box that holds abs says its comment.
   const frames = new Set(open.all().map((x) => x.getAttribute("data-frame")).filter((x): x is string => !!x && x !== safe));
   assert.ok(frames.size > 0);

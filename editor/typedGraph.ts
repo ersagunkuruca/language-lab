@@ -233,7 +233,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
     const part = build(code, pres, info, l, hooks, true, scene.frames.has(defId) ? defId : null);
     // Below what's drawn so far, the first time it's placed; after that it
     // stays where it was drawn, as every node does.
-    const bottom = Math.max(0, ...[...scene.items.values()].map((it) => it.auto.y + it.h));
+    const bottom = Math.max(0, ...[...scene.items.values()].map((it) => it.auto.y + tall(it)));
     for (const it of part.items.values()) it.auto = { x: it.auto.x, y: it.auto.y + bottom + 40 };
     for (const k of ["items", "frames", "sources"] as const) for (const [id, v] of part[k] as Map<Id, never>) (scene[k] as Map<Id, never>).set(id, v);
     scene.wires.push(...part.wires.map((w) => ({ ...w, cls: `${w.cls} faded` })));
@@ -304,7 +304,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   // task of 300 ms (E319k). Fitted and mapped once all of it is in.
   canvas.planned = () => {
     const sc = shown(hooks.at), { pos, boxes } = placeAll(sc, hooks.at);
-    const rs = [...[...sc.items.values()].map((it) => ({ ...pos.get(it.key)!, w: it.w, h: it.h })), ...boxes.values()];
+    const rs = [...[...sc.items.values()].map((it) => ({ ...pos.get(it.key)!, w: wide(it), h: tall(it) })), ...boxes.values()];
     if (!rs.length) return null;
     // Past the boxes on the left: the definition's inputs, their dots and values.
     const x = Math.min(...rs.map((r) => r.x)) - PLAN_LEFT, y = Math.min(...rs.map((r) => r.y));
@@ -389,6 +389,8 @@ interface Item {
   label?: Box;          // words drawn outside it (a dot's name), relative to it
   name?: string;        // what it is called, for a folded box that holds it
   note?: string;       // its own comment (E291), said by a folded box that holds it
+  top?: number;         // its comment's line above its body (E316): pos is the line's top, ends and body start below it
+  lineW?: number;       // that line's width, past a narrow body's
   ran?: number;         // its place in the order effects run (E265), shown
   own?: { w: number; h: number }; // its own size, when it can be resized
 }
@@ -534,22 +536,21 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     handle.append(s("rect", { x: w - 16, y: h - 16, width: 18, height: 18, class: "grip-hit" }), s("path", { d: `M${w - 12} ${h - 2} L${w - 2} ${h - 12} M${w - 7} ${h - 2} L${w - 2} ${h - 7}` }));
     g.append(titled(handle, "Drag to resize this node; double-click for its own size"));
   };
-  // A node's own comment, a speech mark on its top right corner, the
-  // comment on hover (Ersagun 2026-11-22, picked over E291's grey line
-  // above it, which ran into wires and neighbours).
+  // A node's choices (E292), a fork on its top right corner. Its comment
+  // is the line above it (E316, Ersagun 2026-11-26), drawn by render.
   const noteMark = (g: SVGGElement, key: Id, w: number) => {
-    const c = key !== defId ? pres.comments[key] : undefined;
-    if (c) g.append(commentMark(w, resolveRefs(c, (r) => pres.names[r] ?? r)));
-    // Its choices (E292), left of the comment's mark.
     const ch = hooks.choices?.get(key);
-    if (ch) g.append(choiceMark(key, (c ? w - 22 : w) - 9, -7, ch));
+    if (ch) g.append(choiceMark(key, w - 9, -7, ch));
   };
   const item = (key: Id, w: number, h: number, draw: (g: SVGGElement) => void, extra: Partial<Item> = {}): Sub => {
     const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); noteMark(g, key, w); };
     const own = natural.get(key);
     const c = key !== defId ? pres.comments[key] : undefined;
-    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...(own && hooks.resized ? { own } : {}), ...(c ? { note: resolveRefs(c, (r) => pres.names[r] ?? r) } : {}), ...extra });
-    return { w, h, outX: w, outY: h / 2, out: { item: key, dx: w, dy: h / 2 }, at: new Map([[key, { x: 0, y: 0 }]]) };
+    // A comment is a line above the body, as wide as the node, that the
+    // layout and Tidy count like the rest of it (E316).
+    const top = c ? NOTEH : 0;
+    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...(own && hooks.resized ? { own } : {}), ...(c ? { note: resolveRefs(c, (r) => pres.names[r] ?? r), top, lineW: noteWidth(w, resolveRefs(c, (r) => pres.names[r] ?? r)) } : {}), ...extra });
+    return { w: c ? noteWidth(w, resolveRefs(c, (r) => pres.names[r] ?? r)) : w, h: h + top, outX: w, outY: top + h / 2, out: { item: key, dx: w, dy: h / 2 }, at: new Map([[key, { x: 0, y: 0 }]]) };
   };
   // A use of a binding wired into (item, dx, dy): a wire from its source,
   // or nothing here when the use is drawn as a get node.
@@ -1410,7 +1411,23 @@ function group(scene: Scene, g: Id, members: Id[]) {
 // box, not on its corner: there it sat on a title above it, a frame's or
 // the signature line (QA 11-15 Q4), and the box's own words start inside.
 // Its inputs come in lower down the same edge.
-// A speech mark on a box's top right corner, saying it has a comment (how
+// A node's comment as the line above it (E316): as wide as the node, cut
+// with an ellipsis, the whole comment on hover.
+const NOTEH = 16;
+const tall = (it: { h: number; top?: number }) => it.h + (it.top ?? 0);
+const wide = (it: { w: number; lineW?: number }) => Math.max(it.w, it.lineW ?? 0);
+// A short comment shown whole over a narrow node, a long one up to 180.
+const NOTEPX = 6.2;
+const noteWidth = (w: number, text: string) => Math.max(w, Math.min(180, Math.ceil(tw(text.split("\n")[0], NOTEPX) + 6)));
+function noteLine(p: Pos, w: number, text: string, faded?: boolean): SVGElement {
+  const first = text.split("\n")[0];
+  const fits = Math.max(1, Math.floor((w - 4) / NOTEPX));
+  const shown = first.length > fits || first !== text ? `${first.slice(0, Math.max(1, fits - 1)).trimEnd()}…` : first;
+  const o = s("g", { class: `cmt-line${faded ? " faded" : ""}`, transform: `translate(${p.x},${p.y})` });
+  o.append(s("rect", { x: 0, y: 0, width: w, height: NOTEH - 2, class: "cmt-hit" }), s("text", { x: 2, y: NOTEH - 5 }, shown), s("title", {}, text));
+  return o;
+}
+// A speech mark on a folded box's top right corner, saying it hides nodes with comments (how
 // many, past one); the comment on hover.
 function commentMark(w: number, text: string, n = 1): SVGElement {
   const o = s("g", { class: "cmt-mark", transform: `translate(${w - 9} -7)` });
@@ -1568,12 +1585,12 @@ function placeAll(scene: Scene, at: Record<Id, Pos>): Placed {
   const pos = new Map<Id, Pos>();
   for (const [k, it] of scene.items) pos.set(k, at[k] ?? it.auto);
   const fb = frameBoxes(
-    [...scene.items.values()].map((it) => ({ id: it.key, ...pos.get(it.key)!, w: it.w, h: it.h, frame: it.frame })),
+    [...scene.items.values()].map((it) => ({ id: it.key, ...pos.get(it.key)!, w: wide(it), h: tall(it), frame: it.frame })),
     [...scene.frames.values()].map((f) => ({ id: f.id, parent: f.parent, pad: f.pad, minH: f.minH })),
   );
   for (const [id, b] of fb) { const f = scene.frames.get(id)!; if (b.w < f.minW) b.w = f.minW; }
   const point = (e: End): Pos => {
-    if ("item" in e) { const p = pos.get(e.item) ?? { x: 0, y: 0 }; return { x: p.x + e.dx, y: p.y + e.dy }; }
+    if ("item" in e) { const p = pos.get(e.item) ?? { x: 0, y: 0 }; return { x: p.x + e.dx, y: p.y + e.dy + (scene.items.get(e.item)?.top ?? 0) }; }
     if ("frame" in e) { const b = fb.get(e.frame)!; return { x: b.x + (e.right ? b.w : 0), y: b.y + HEADH + 4 + e.port * 22 + 11 }; }
     const b = fb.get(e.frameOut)!, f = scene.frames.get(e.frameOut)!;
     // Below the result ports, when there are some, so the two don't meet.
@@ -1633,7 +1650,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
   const wireL = pair("wires");
   const marks = s("g", { class: "tunnels" });
   const solid: { key: Id; box: Box }[] = [];
-  for (const it of scene.items.values()) if (it.solid) { const p = pos.get(it.key)!; solid.push({ key: it.key, box: { x: p.x, y: p.y, w: it.w, h: it.h } }); }
+  for (const it of scene.items.values()) if (it.solid) { const p = pos.get(it.key)!; solid.push({ key: it.key, box: { x: p.x, y: p.y, w: wide(it), h: tall(it) } }); }
   const endItem = (e: End) => ("item" in e ? e.item : null);
   const drawn: { pts: ReturnType<typeof curvePoints> }[] = [];
   const titles: Box[] = [...scene.frames.values()].map((f) => { const b = boxes.get(f.id)!; return { x: b.x + 6, y: b.y + 2, w: tw(f.title, 6.6) + 8, h: 16 }; });
@@ -1698,12 +1715,13 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
   for (const it of scene.items.values()) {
     const itemG = itemL(liftItem(it.key));
     const p = pos.get(it.key)!;
-    const g = s("g", { transform: `translate(${p.x},${p.y})` }) as SVGGElement;
+    const g = s("g", { transform: `translate(${p.x},${p.y + (it.top ?? 0)})` }) as SVGGElement;
     if (scene.faded?.has(it.key)) g.classList.add("faded");
+    if (it.top && it.note) itemG.append(noteLine(p, wide(it), it.note, scene.faded?.has(it.key)));
     it.draw(g);
     // A folded frame is drawn as an item: selected, it's outlined like one.
     if (hooks.selected === it.key) g.querySelector("rect.folded")?.classList.add("sel");
-    if (picked.has(it.key)) g.prepend(s("rect", { x: -4, y: -4, width: it.w + 8, height: it.h + 8, rx: 9, class: "picked" }));
+    if (picked.has(it.key)) g.prepend(s("rect", { x: -4, y: -4 - (it.top ?? 0), width: wide(it) + 8, height: tall(it) + 8, rx: 9, class: "picked" }));
     if (scene.lit.has(it.key)) g.classList.add("lit");
     itemG.append(g);
   }
@@ -1743,7 +1761,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
       const kind = hooks.kinds?.get(id);
       want.push({ text, full: kind ? `${v}\n${kind}` : v, at, w: tw(text, 6.4) + 8, h: 15, left });
     };
-    for (const it of scene.items.values()) if (it.value && it.out) { const p = pos.get(it.key)!; add(it.value, { x: p.x + it.out.x, y: p.y + it.out.y }); }
+    for (const it of scene.items.values()) if (it.value && it.out) { const p = pos.get(it.key)!; add(it.value, { x: p.x + it.out.x, y: p.y + (it.top ?? 0) + it.out.y }); }
     for (const f of scene.frames.values()) f.binders.forEach((bd, i) => add(bd, point({ frame: f.id, port: i }), true));
     for (const f of scene.frames.values()) f.results?.forEach((bd, i) => add(bd, point({ frame: f.id, port: i, right: true })));
     for (const [b, e] of scene.sources) if ("item" in e && e.item !== b && !scene.items.has(b)) add(b, point(e));
@@ -1756,7 +1774,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
       f.labels.forEach((l, i) => { const p = point({ frame: f.id, port: i }); obstacles.push({ x: p.x + 6, y: p.y - 17, w: tw(l, 6.8) + 6, h: 14 }); });
     }
     if (scene.result) { const r = point(scene.result); obstacles.push({ x: r.x + 6, y: r.y - 8, w: 50, h: 16 }); }
-    for (const it of scene.items.values()) if (it.label) { const p = pos.get(it.key)!; obstacles.push({ ...it.label, x: p.x + it.label.x, y: p.y + it.label.y }); }
+    for (const it of scene.items.values()) if (it.label) { const p = pos.get(it.key)!; obstacles.push({ ...it.label, x: p.x + it.label.x, y: p.y + (it.top ?? 0) + it.label.y }); }
     const spots = placeLabels(want, obstacles);
     want.forEach((v, i) => {
       const sp = spots[i];
@@ -1845,7 +1863,7 @@ function spreadUnits(scene: Scene, at: Record<Id, Pos>, picked: Set<Id>): { id: 
   const under = (id: Id) => { for (let f = parent(id); f; f = scene.frames.get(f)?.parent ?? null) if (picked.has(f)) return true; return false; };
   return [...picked].filter((id) => !under(id)).flatMap((id) => {
     const it = scene.items.get(id), p = pos.get(id);
-    const box = it && p ? { x: p.x, y: p.y, w: it.w, h: it.h } : boxes.get(id);
+    const box = it && p ? { x: p.x, y: p.y, w: wide(it), h: tall(it) } : boxes.get(id);
     return box ? [{ id, box, keys: [...expand(scene, [id])] }] : [];
   });
 }
@@ -1857,12 +1875,12 @@ const union = (bs: Box[]): Box => {
 // The scene as tidy and arrange see it: boxes, frames and wires.
 function asLayout(scene: Scene, at: Record<Id, Pos>) {
   const { pos, boxes } = placeAll(scene, at);
-  const nodes: TNode[] = [...scene.items.values()].map((it) => ({ id: it.key, ...pos.get(it.key)!, w: it.w, h: it.h, frame: it.frame }));
+  const nodes: TNode[] = [...scene.items.values()].map((it) => ({ id: it.key, ...pos.get(it.key)!, w: wide(it), h: tall(it), frame: it.frame }));
   const frames: TFrame[] = [...scene.frames.values()].map((f) => ({ id: f.id, parent: f.parent, pad: f.pad, minH: f.minH }));
   const wires: TWire[] = [];
   for (const w of scene.wires) {
     const end = (e: End): [string, number, number] | null => {
-      if ("item" in e) return [e.item, e.dx, e.dy];
+      if ("item" in e) return [e.item, e.dx, e.dy + (scene.items.get(e.item)?.top ?? 0)];
       if ("frame" in e) { const b = boxes.get(e.frame); return b ? [e.frame, e.right ? b.w : 0, HEADH + 4 + e.port * 22 + 11] : null; }
       const b = boxes.get(e.frameOut);
       return b ? [e.frameOut, b.w, b.h / 2] : null;
@@ -2251,7 +2269,7 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
         const b = world(canvas, e);
         const r = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
         const { pos } = placeAll(scene, hooks.at);
-        for (const it of scene.items.values()) { const p = pos.get(it.key)!; if (overlaps(r, { x: p.x, y: p.y, w: it.w, h: it.h })) picked.add(it.key); }
+        for (const it of scene.items.values()) { const p = pos.get(it.key)!; if (overlaps(r, { x: p.x, y: p.y, w: wide(it), h: tall(it) })) picked.add(it.key); }
         draw(hooks.at);
       });
     }

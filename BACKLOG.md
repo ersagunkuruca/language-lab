@@ -58,7 +58,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E316 | A node's comment in the graph readable at a glance, without overlapping anything (Ersagun 2026-11-22 on E306's speech mark: "Not ideal but an improvement. We can go back to this later"). The other two ways he was offered: the comment as the node's top line, which layout and Tidy count, cut with the rest on hover; or a note beside the node, joined by a line, with room Tidy keeps. His pick when it's taken up | Ersagun 11-22 | P3 | M | |
 
 ### Trying a program where it runs ([RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md))
 
