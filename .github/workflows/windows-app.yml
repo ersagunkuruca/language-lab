@@ -30,12 +30,14 @@ permissions:
 jobs:
   app:
     # A pull request checks dice and folders, each tap a mouse click at
-    # the view's middle (a click finding no view fails it); a run by hand,
-    # the program and taps asked for.
+    # the view's middle (a click finding no view fails it), and the sound
+    # of metronome (the speaker) and tuner (the microphone) started and
+    # stopped (C297b: a runner may have no sound device, and then says
+    # so); a run by hand, the program and taps asked for.
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('[{{"program":{0},"taps":{1}}}]', toJSON(inputs.program), toJSON(inputs.taps || 'Roll|resize 420|Throw 100')) || '[{"program":"dice","taps":"Roll|resize 420|Throw 100"},{"program":"folders","taps":"Open folder|shot wide|key ArrowDown|key ArrowDown|key ArrowDown|key ArrowDown|key ArrowDown|key ArrowDown|shot chosen|resize 700|shot narrow"}]') }}
+        include: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('[{{"program":{0},"taps":{1}}}]', toJSON(inputs.program), toJSON(inputs.taps || 'Roll|resize 420|Throw 100')) || '[{"program":"dice","taps":"Roll|resize 420|Throw 100"},{"program":"folders","taps":"Open folder|shot wide|key ArrowDown|key ArrowDown|key ArrowDown|key ArrowDown|key ArrowDown|key ArrowDown|shot chosen|resize 700|shot narrow"},{"program":"metronome","taps":"Start|Start"},{"program":"tuner","taps":"Listen|Listen"}]') }}
     runs-on: windows-latest
     timeout-minutes: 30
     steps:

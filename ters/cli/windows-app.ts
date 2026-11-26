@@ -6,13 +6,13 @@
 // controls placed over it. It follows macos-app.ts's Screen.m call by
 // call. The folder builds with MinGW-w64's gcc (build.bat on Windows,
 // build.sh elsewhere), one `.exe` with nothing beside it; the "Windows
-// app" workflow is its check. Sound (WASAPI) is a part of its own, not
-// yet here: a page's sounds don't play (ters_ui's sound is null).
+// app" workflow is its check. A page's sound plays through WASAPI
+// (C297b), its recordings in recordings\ beside the .exe.
 
-import { nativeAppId } from "./native-app.ts";
+import { nativeAppId, type AppSound } from "./native-app.ts";
 import { tersUiDecl } from "./ios-app.ts";
 
-export function windowsAppFolder(title: string, c: string): Record<string, string> {
+export function windowsAppFolder(title: string, c: string, sound?: AppSound): Record<string, string | Uint8Array> {
   const id = nativeAppId(title);
   const exe = `${title.replace(/["$`\\/:*?<>|%]/g, "").trim() || "page"}.exe`;
   // Built as the command line's native programs are (main.ts "native"),
@@ -21,7 +21,9 @@ export function windowsAppFolder(title: string, c: string): Record<string, strin
   const libs = "-ld2d1 -ldwrite -ldwmapi -lgdi32 -lole32 -luuid -lm";
   return {
     "page.c": c,
-    "screen.c": SCREEN_C(tersUiDecl(c), id, title),
+    "screen.c": SCREEN_C(tersUiDecl(c), id, title, !!sound),
+    // The recordings the page plays (C217), read from beside the .exe.
+    ...Object.fromEntries(Object.entries(sound?.files ?? {}).map(([a, b]) => [`recordings/${a}`, b])),
     "build.bat": `@echo off\r
 rem ${exe} here, with MinGW-w64's gcc on the PATH (or CC set to another).\r
 cd /d "%~dp0"\r
@@ -45,7 +47,7 @@ program is C (page.c), which also styles and lays out its page, and the
 page is one window drawn with Direct2D and DirectWrite (screen.c), with no
 webview. \`build.bat\` with MinGW-w64's gcc on the PATH (or \`sh build.sh\`,
 also from Linux or a Mac with MinGW-w64) builds ${exe}, which needs nothing
-beside it. It isn't signed, so Windows warns before the first start.
+beside it${Object.keys(sound?.files ?? {}).length ? " but the recordings folder, the sounds it plays" : ""}. It isn't signed, so Windows warns before the first start.
 What the page keeps goes in %APPDATA%\\${id}.
 `,
   };
@@ -60,7 +62,7 @@ const cString = (s: string) => `"${s.replace(/[\\"]/g, (m) => `\\${m}`).replace(
 // views are a tree kept here, drawn whole on each paint; places and sizes
 // are in device-independent pixels (a 96 dpi pixel), which are the page's
 // px, and the window follows the display's scale.
-const SCREEN_C = (decl: string, id: string, title: string) => String.raw`// The page: made and laid out in C (page.c) and drawn here, on one window,
+const SCREEN_C = (decl: string, id: string, title: string, sound: boolean) => String.raw`// The page: made and laid out in C (page.c) and drawn here, on one window,
 // which C asks for through ters_ui.
 #define COBJMACROS
 #define UNICODE
@@ -73,6 +75,8 @@ const SCREEN_C = (decl: string, id: string, title: string) => String.raw`// The 
 #include <d2d1.h>
 #include <dwrite.h>
 #include <dwmapi.h>
+#include <mmdeviceapi.h>
+#include <audioclient.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -527,7 +531,8 @@ static int u_ask(void *c, const char *s, size_t n) {
   say("ask %.*s: Windows has no dialog for it\n", (int)n, s);
   return 0;
 }
-static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, 0, u_focus, u_reveal, u_hint };
+${sound ? SOUND_C : ""}
+static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, ${sound ? "u_sound" : "0"}, u_focus, u_reveal, u_hint };
 
 // The keys held now, told to the page before what comes with them (C312).
 static void held(void) {
@@ -1531,5 +1536,268 @@ int main(void) {
   MSG msg;
   while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
   return MISSED ? 3 : 0;
+}
+`;
+
+const SOUND_C = String.raw`// A page's sound (C217, C297b) through WASAPI, in shared mode: one output
+// stream at the speaker's own rate, which every sound plays at, filled on
+// a thread of its own by asking ters_sound_play for each sound playing
+// and adding them; a microphone, when the page names one, a capture
+// stream at the same rate (Windows converting), kept in a ring the output
+// thread reads. Both threads are COM's own; the page, under its lock, only
+// turns a sound on or off.
+void ters_sound_say(int n, const char *why);
+void ters_sound_play_stereo(int n, const float *in, const float *in2, float *out, float *out2, int frames);
+int ters_sound_stereo(int n);
+int ters_sound_heard(int n, double *in, double *out, double *by);
+int ters_sound_recording(int n, const unsigned char *b, size_t len, double rate);
+void ters_page_sound_latency(double s);
+#define S_SOUNDS 64
+#define S_RING 32768
+#define S_CHUNK 4096
+// Float samples, which WASAPI's mix format is in shared mode.
+DEFINE_GUID(S_FLOAT, 0x00000003, 0x0000, 0x0010, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71);
+typedef struct { float ring[S_RING]; volatile LONG w, r; } s_ring;
+static s_ring S_MIC;
+static volatile LONG s_on[S_SOUNDS], s_mic = -1, s_stereo[S_SOUNDS], s_mic_up, s_mic_gen;
+static double S_RATE;
+static int S_CHANNELS;
+static HANDLE S_READY;
+// Why the speaker didn't start, said by the page (the thread can't take
+// its lock while u_sound waits under it).
+static char S_WHY[160];
+static void s_why(char *to, size_t n, const char *what, HRESULT h) {
+  WCHAR *m = NULL;
+  FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, (DWORD)h, 0, (WCHAR *)&m, 0, NULL);
+  char *u = m ? narrow(m, (int)wcslen(m)) : NULL;
+  if (u) for (size_t k = strlen(u); k > 0 && (u[k - 1] == '\n' || u[k - 1] == '\r' || u[k - 1] == '.'); k--) u[k - 1] = 0;
+  snprintf(to, n, "%s: %s", what, u && *u ? u : "no reason given");
+  free(u);
+  if (m) LocalFree(m);
+}
+// The default device for flow (eRender, eCapture), as a client of float
+// samples at rate (or the device's own, rate 0) in channels (0: the
+// device's), told by ev when there is room or more.
+static HRESULT s_client(EDataFlow flow, double rate, int channels, HANDLE ev, IAudioClient **out, WAVEFORMATEX *got) {
+  IMMDeviceEnumerator *en = NULL;
+  IMMDevice *dev = NULL;
+  IAudioClient *a = NULL;
+  WAVEFORMATEX *mix = NULL;
+  HRESULT h = CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, &IID_IMMDeviceEnumerator, (void **)&en);
+  if (SUCCEEDED(h)) h = IMMDeviceEnumerator_GetDefaultAudioEndpoint(en, flow, eConsole, &dev);
+  if (SUCCEEDED(h)) h = IMMDevice_Activate(dev, &IID_IAudioClient, CLSCTX_ALL, NULL, (void **)&a);
+  if (SUCCEEDED(h)) h = IAudioClient_GetMixFormat(a, &mix);
+  if (SUCCEEDED(h)) {
+    WAVEFORMATEXTENSIBLE f = { 0 };
+    f.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+    f.Format.nChannels = (WORD)(channels ? channels : mix->nChannels);
+    f.Format.nSamplesPerSec = rate > 0 ? (DWORD)rate : mix->nSamplesPerSec;
+    f.Format.wBitsPerSample = 32;
+    f.Format.nBlockAlign = (WORD)(4 * f.Format.nChannels);
+    f.Format.nAvgBytesPerSec = f.Format.nSamplesPerSec * f.Format.nBlockAlign;
+    f.Format.cbSize = sizeof f - sizeof f.Format;
+    f.Samples.wValidBitsPerSample = 32;
+    f.dwChannelMask = f.Format.nChannels == 1 ? SPEAKER_FRONT_CENTER : f.Format.nChannels == 2 ? SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT : 0;
+    f.SubFormat = S_FLOAT;
+    // 20 ms of room; Windows converting the rate and the channels where
+    // the device's differ.
+    h = IAudioClient_Initialize(a, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, 200000, 0, &f.Format, NULL);
+    if (SUCCEEDED(h)) h = IAudioClient_SetEventHandle(a, ev);
+    if (SUCCEEDED(h)) *got = f.Format;
+  }
+  if (mix) CoTaskMemFree(mix);
+  if (dev) IMMDevice_Release(dev);
+  if (en) IMMDeviceEnumerator_Release(en);
+  if (FAILED(h) && a) { IAudioClient_Release(a); a = NULL; }
+  *out = a;
+  return h;
+}
+// The platform's sound latency (C260b): the output stream's, its buffer's,
+// and the input's and its buffer's while the microphone plays.
+static double S_OUT_LATENCY, S_IN_LATENCY;
+static void s_latency(void) { ters_page_sound_latency(S_OUT_LATENCY + (s_mic >= 0 && s_mic_up == s_mic_gen ? S_IN_LATENCY : 0)); }
+static double s_stream_latency(IAudioClient *a, double rate) {
+  REFERENCE_TIME t = 0;
+  UINT32 frames = 0;
+  IAudioClient_GetStreamLatency(a, &t);
+  IAudioClient_GetBufferSize(a, &frames);
+  return t / 1e7 + (rate > 0 ? frames / rate : 0);
+}
+// The microphone into the ring, its first channel, while a sound hears it
+// (till the page lets it go: s_mic_gen moves on).
+static DWORD WINAPI s_listen(void *arg) {
+  LONG gen = (LONG)((intptr_t)arg / S_SOUNDS), n = (LONG)((intptr_t)arg % S_SOUNDS);
+  HRESULT co = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+  HANDLE ev = CreateEventW(NULL, FALSE, FALSE, NULL);
+  IAudioClient *a = NULL;
+  IAudioCaptureClient *cap = NULL;
+  WAVEFORMATEX f;
+  char why[200];
+  HRESULT h = s_client(eCapture, S_RATE, 1, ev, &a, &f);
+  if (SUCCEEDED(h)) h = IAudioClient_GetService(a, &IID_IAudioCaptureClient, (void **)&cap);
+  if (SUCCEEDED(h)) h = IAudioClient_Start(a);
+  if (FAILED(h)) {
+    if (h == E_ACCESSDENIED) snprintf(why, sizeof why, "the microphone wasn't allowed: allow it in Settings, then click again");
+    else if (h == E_NOTFOUND || h == AUDCLNT_E_DEVICE_INVALIDATED) snprintf(why, sizeof why, "this computer has no microphone");
+    else s_why(why, sizeof why, "the microphone couldn't start", h);
+    ters_sound_say(n, why);
+  } else {
+    S_IN_LATENCY = s_stream_latency(a, S_RATE);
+    s_mic_up = gen;
+    say("sound %d hears the microphone\n", n);
+    s_latency();
+    while (s_mic_gen == gen) {
+      if (WaitForSingleObject(ev, 200) != WAIT_OBJECT_0) continue;
+      UINT32 k = 0;
+      while (SUCCEEDED(IAudioCaptureClient_GetNextPacketSize(cap, &k)) && k) {
+        BYTE *d; UINT32 frames; DWORD flags;
+        if (FAILED(IAudioCaptureClient_GetBuffer(cap, &d, &frames, &flags, NULL, NULL))) break;
+        const float *x = (const float *)d;
+        ULONG w = (ULONG)S_MIC.w;
+        for (UINT32 i = 0; i < frames; i++) S_MIC.ring[(w + i) % S_RING] = flags & AUDCLNT_BUFFERFLAGS_SILENT ? 0 : x[i * f.nChannels];
+        InterlockedExchange(&S_MIC.w, (LONG)(w + frames));
+        IAudioCaptureClient_ReleaseBuffer(cap, frames);
+      }
+    }
+    IAudioClient_Stop(a);
+  }
+  if (cap) IAudioCaptureClient_Release(cap);
+  if (a) IAudioClient_Release(a);
+  CloseHandle(ev);
+  if (SUCCEEDED(co)) CoUninitialize();
+  return 0;
+}
+// The speaker: each sound playing, a chunk at a time, added into the
+// stream's room; its first two channels left and right, any others the
+// left again.
+static DWORD WINAPI s_play(void *arg) {
+  (void)arg;
+  HRESULT co = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+  SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+  HANDLE ev = CreateEventW(NULL, FALSE, FALSE, NULL);
+  IAudioClient *a = NULL;
+  IAudioRenderClient *ren = NULL;
+  WAVEFORMATEX f;
+  UINT32 room = 0;
+  HRESULT h = s_client(eRender, 0, 0, ev, &a, &f);
+  if (SUCCEEDED(h)) h = IAudioClient_GetBufferSize(a, &room);
+  if (SUCCEEDED(h)) h = IAudioClient_GetService(a, &IID_IAudioRenderClient, (void **)&ren);
+  if (SUCCEEDED(h)) h = IAudioClient_Start(a);
+  if (FAILED(h)) {
+    if (h == E_NOTFOUND) snprintf(S_WHY, sizeof S_WHY, "this computer has no speaker");
+    else s_why(S_WHY, sizeof S_WHY, "the speaker couldn't start", h);
+    SetEvent(S_READY);
+    if (ren) IAudioRenderClient_Release(ren);
+    if (a) IAudioClient_Release(a);
+    CloseHandle(ev);
+    if (SUCCEEDED(co)) CoUninitialize();
+    return 0;
+  }
+  S_RATE = f.nSamplesPerSec;
+  S_CHANNELS = f.nChannels;
+  S_OUT_LATENCY = s_stream_latency(a, S_RATE);
+  SetEvent(S_READY);
+  static float l[S_CHUNK], r[S_CHUNK], heard[S_CHUNK];
+  ULONGLONG second = GetTickCount64() + 1000;
+  for (;;) {
+    WaitForSingleObject(ev, 200);
+    UINT32 pad = 0;
+    if (FAILED(IAudioClient_GetCurrentPadding(a, &pad))) break;
+    UINT32 frames = room - pad;
+    BYTE *d;
+    if (!frames || FAILED(IAudioRenderClient_GetBuffer(ren, frames, &d))) continue;
+    float *o = (float *)d;
+    memset(o, 0, (size_t)frames * f.nBlockAlign);
+    for (int n = 0; n < S_SOUNDS; n++) {
+      if (!s_on[n]) continue;
+      int two = s_stereo[n];
+      for (UINT32 at = 0; at < frames;) {
+        int k = frames - at < S_CHUNK ? (int)(frames - at) : S_CHUNK;
+        const float *in = 0;
+        if (s_mic == n) {
+          // What the microphone wrote, taken in order; silence while it is
+          // behind.
+          ULONG w = (ULONG)S_MIC.w, rd = (ULONG)S_MIC.r;
+          if (w - rd > S_RING) rd = w - S_RING;
+          for (int i = 0; i < k; i++) heard[i] = rd != w ? S_MIC.ring[rd++ % S_RING] : 0;
+          InterlockedExchange(&S_MIC.r, (LONG)rd);
+          in = heard;
+        }
+        ters_sound_play_stereo(n, in, 0, l, two ? r : 0, k);
+        for (int i = 0; i < k; i++) {
+          float *s = o + (size_t)(at + i) * f.nChannels;
+          s[0] += l[i];
+          if (f.nChannels > 1) s[1] += two ? r[i] : l[i];
+          for (int c = 2; c < f.nChannels; c++) s[c] += l[i];
+        }
+        at += k;
+      }
+    }
+    IAudioRenderClient_ReleaseBuffer(ren, frames, 0);
+    // Once a second, how loud each sound's input and output were.
+    if (GetTickCount64() >= second) {
+      second += 1000;
+      for (int k = 0; k < S_SOUNDS; k++) { double i, x, b; if (s_on[k] && ters_sound_heard(k, &i, &x, &b)) say("sound %d: in %.4f out %.4f changed %.4f\n", k, i, x, b); }
+    }
+  }
+  return 0;
+}
+// From the page, under its lock: sound n on or off, at the speaker's
+// rate (0 where it has none).
+static double u_sound(void *c, int n, int on, int mic, const char *a, size_t an) {
+  (void)c;
+  if (n < 0 || n >= S_SOUNDS) { ters_sound_say(n, "too many sounds on one page"); return 0; }
+  if (!on) {
+    if (s_on[n]) say("sound %d stopped\n", n);
+    s_on[n] = 0;
+    if (s_mic == n) { InterlockedExchange(&s_mic, -1); InterlockedIncrement(&s_mic_gen); }
+    return 0;
+  }
+  if (!S_READY) {
+    S_READY = CreateEventW(NULL, TRUE, FALSE, NULL);
+    HANDLE t = CreateThread(NULL, 0, s_play, NULL, 0, NULL);
+    if (t) CloseHandle(t); else snprintf(S_WHY, sizeof S_WHY, "the speaker couldn't start: no thread for it");
+    if (!t || WaitForSingleObject(S_READY, 5000) != WAIT_OBJECT_0) { if (!*S_WHY) snprintf(S_WHY, sizeof S_WHY, "the speaker didn't start in 5 seconds"); }
+  }
+  if (*S_WHY || S_RATE <= 0) { ters_sound_say(n, *S_WHY ? S_WHY : "the speaker couldn't start"); return 0; }
+  if (!mic && a) {
+    // A recording the page plays, from recordings\ beside the app.
+    WCHAR dir[MAX_PATH + 1];
+    DWORD k = GetModuleFileNameW(NULL, dir, MAX_PATH);
+    while (k > 0 && dir[k - 1] != L'\\' && dir[k - 1] != L'/') k--;
+    dir[k] = 0;
+    int wn;
+    WCHAR *name = wide(a, an, &wn);
+    size_t pn = k + 12 + wn + 1;
+    WCHAR *p = malloc(sizeof *p * pn);
+    _snwprintf(p, pn, L"%lsrecordings\\%ls", dir, name);
+    free(name);
+    FILE *fh = _wfopen(p, L"rb");
+    free(p);
+    if (!fh) { char why[300]; snprintf(why, sizeof why, "%.*s: no such recording beside the app", (int)an, a); ters_sound_say(n, why); return 0; }
+    fseek(fh, 0, SEEK_END);
+    long len = ftell(fh);
+    fseek(fh, 0, SEEK_SET);
+    unsigned char *b = malloc(len > 0 ? len : 1);
+    size_t got = len > 0 ? fread(b, 1, len, fh) : 0;
+    fclose(fh);
+    int ok = ters_sound_recording(n, b, got, S_RATE);
+    free(b);
+    if (!ok) return 0;
+  }
+  s_stereo[n] = !!ters_sound_stereo(n) && S_CHANNELS > 1;
+  if (mic) {
+    if (s_mic >= 0 && s_mic != n) { ters_sound_say(n, "another sound has the microphone"); return S_RATE; }
+    if (s_mic < 0) {
+      InterlockedExchange(&S_MIC.r, S_MIC.w);
+      InterlockedExchange(&s_mic, n);
+      HANDLE t = CreateThread(NULL, 0, s_listen, (void *)((intptr_t)InterlockedIncrement(&s_mic_gen) * S_SOUNDS + n), 0, NULL);
+      if (t) CloseHandle(t);
+    }
+  }
+  if (!s_on[n]) say("sound %d playing at %.0f a second\n", n, S_RATE);
+  s_on[n] = 1;
+  s_latency();
+  return S_RATE;
 }
 `;

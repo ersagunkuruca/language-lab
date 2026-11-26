@@ -18,9 +18,10 @@ for (const example of ["dice", "folders"]) {
     const out = spawnSync(process.execPath, [ters, "build-native-app", join(import.meta.dirname, "../examples", example), "--windows", "-o", app], { encoding: "utf8" });
     assert.equal(out.status, 0, out.stderr);
     const screen = readFileSync(join(app, "screen.c"), "utf8"), build = readFileSync(join(app, "build.sh"), "utf8");
-    // ters_ui as the page's C declares it, every call answered but sound.
+    // ters_ui as the page's C declares it, every call answered (sound
+    // where the page's C can play one: below).
     assert.match(screen, /typedef struct ters_ui \{/);
-    assert.match(screen, /static ters_ui U = \{ 0, u_box, u_text, .* u_outline, u_ask, 0, u_focus, u_reveal, u_hint \};/);
+    assert.match(screen, /static ters_ui U = \{ 0, u_box, u_text, .* u_outline, u_ask, (0|u_sound), u_focus, u_reveal, u_hint \};/);
     assert.match(screen, /ID2D1Factory_CreateHwndRenderTarget/);
     assert.match(screen, /IDWriteFactory_CreateTextLayout/);
     assert.match(screen, /L"EDIT"/);
@@ -37,3 +38,26 @@ for (const example of ["dice", "folders"]) {
     assert.ok(existsSync(join(app, `${example}.exe`)));
   });
 }
+
+// A page's sound (C297b) through WASAPI: the speaker's stream filled on a
+// thread of its own, the microphone's where the page names one (tuner),
+// and the recordings it plays (pedal's strum) in recordings\ beside the
+// .exe.
+for (const [example, recording] of [["tuner", ""], ["pedal", "strum.wav"]] as const) {
+  test(`a Windows app of ${example} plays its sound through WASAPI (C297b)`, () => {
+    const dir = mkdtempSync(join(tmpdir(), "windows-app-")), app = join(dir, "app");
+    const out = spawnSync(process.execPath, [ters, "build-native-app", join(import.meta.dirname, "../examples", example), "--windows", "-o", app], { encoding: "utf8" });
+    assert.equal(out.status, 0, out.stderr);
+    const screen = readFileSync(join(app, "screen.c"), "utf8");
+    assert.match(screen, /static ters_ui U = \{ 0, u_box, .* u_ask, u_sound, u_focus, u_reveal, u_hint \};/);
+    assert.match(screen, /IAudioClient_Initialize\(a, AUDCLNT_SHAREMODE_SHARED/);
+    assert.match(screen, /ters_sound_play_stereo\(n, in, 0, l, two \? r : 0, k\)/);
+    // The microphone's stream is there either way; the page asks for it.
+    assert.match(screen, /s_client\(eCapture/);
+    if (recording) assert.ok(existsSync(join(app, "recordings", recording)), "the recording beside the app");
+    if (!mingw) return;
+    execFileSync("sh", [join(app, "build.sh")], { stdio: "pipe" });
+    assert.ok(existsSync(join(app, `${example}.exe`)));
+  });
+}
+
