@@ -161,6 +161,10 @@ export class OverMap<K, V> extends Map<K, V> {
   override has(k: K) { return super.has(k) || (!this.gone?.has(k) && this.under.has(k)); }
   override delete(k: K) { const had = this.has(k); super.delete(k); if (this.under.has(k)) (this.gone ??= new Set()).add(k); return had; }
   override get size() { let n = this.under.size; for (const k of super.keys()) if (!this.under.has(k)) n++; if (this.gone) for (const k of this.gone) if (!super.has(k)) n--; return n; }
+  // A count that grows with each key set, here or in what it reads
+  // through to, and never shrinks while nothing is deleted: a cheap
+  // "anything bound since?" for a substitution (size walks its own keys).
+  get grown(): number { const u = this.under; return super.size + (u instanceof OverMap ? u.grown : u.size); }
   override *entries(): MapIterator<[K, V]> { yield* super.entries(); for (const e of this.under) if (!super.has(e[0]) && !this.gone?.has(e[0])) yield e; }
   override *keys(): MapIterator<K> { for (const [k] of this.entries()) yield k; }
   override *values(): MapIterator<V> { for (const [, v] of this.entries()) yield v; }
@@ -190,6 +194,9 @@ export class OverSet<K> extends Set<K> {
 export class Subst {
   types = new Map<number, Type>();
   rows = new Map<number, Row>();
+  // Grows with each variable bound (OverMap grown): whether anything was
+  // bound since, cheaply.
+  bound(): number { const g = (m: Map<number, unknown>) => (m instanceof OverMap ? m.grown : m.size); return g(this.types) + g(this.rows); }
   next = 0;
   // Type variables that may only stand for plain data.
   plain = new Set<number>();
