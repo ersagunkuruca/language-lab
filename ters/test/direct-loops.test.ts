@@ -59,3 +59,28 @@ test("a function calling itself last, or last inside a constructor, runs as a lo
     assert.ok(s && s.size <= 2, `${k.names[d]} ran at ${s?.size} depths`);
   }
 });
+
+// A direct run that stops after calls made last (the JavaScript stack
+// running out in a deep call, here) goes on from the call made last, on
+// the machine: the calls before it gave nothing anyone can see. Starting
+// again from the first, agent's search ran its first 3,000 steps again
+// on each stop (29,000 steps became over 86,000, I368).
+test("a direct run that stops after calls made last goes on from the last one", () => {
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, body: (self: Id) => Id) => { const d = k.def(name); k.define(d, body(d)); return d; };
+  const less = (a: Id, b: Id) => k.call(INT_OPS.less, a, b), sub1 = (a: Id) => k.call(INT_OPS.sub, a, k.int(1));
+  // deep(d): d calls, none of them last, so a direct run runs out of stack.
+  const deep = def("deep", (self) => k.fn(["d"], (d) => k.if(less(k.int(0), d), k.call(INT_OPS.add, k.int(1), k.call(self, sub1(d))), k.int(0))));
+  // walk(n): counts n down, calling itself last; at 500 it gives deep(D).
+  const D = 1_000_000;
+  const walk = def("walk", (self) => k.fn(["n"], (n) => k.if(less(k.int(500), n), k.call(self, sub1(n)), k.call(deep, k.int(D)))));
+  const walked = def("walked", () => k.call(walk, k.int(5000)));
+  const code = base(k.code), info = infer(code, baseNames(k.names), undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const lambda = (code.nodes[walk] as { body: Id }).body;
+  let calls = 0;
+  const r = makeRunner(code, info, { print: () => {}, names: baseNames(k.names), entered: (l) => { if (l === lambda) calls++; } });
+  assert.equal(Number(r.value(walked)), D);
+  // 5000 down to 500, each once, and 500's again on the machine.
+  assert.ok(calls <= 4502, `walk was entered ${calls} times`);
+});
