@@ -226,8 +226,9 @@ export function withFiles(store: Store, program: string, files: Record<string, s
 // or to bytes as the store keeps them.
 export const CARRIED_ID = "ters-files";
 export function carriedFiles(): Record<string, string> {
-  const el = (globalThis as { document?: { getElementById(id: string): { textContent: string | null } | null } }).document?.getElementById(CARRIED_ID);
-  try { return el?.textContent ? JSON.parse(el.textContent) as Record<string, string> : {}; } catch { return {}; }
+  // (A document stand-in may have no getElementById: then nothing is carried.)
+  const doc = (globalThis as { document?: { getElementById?(id: string): { textContent: string | null } | null } }).document;
+  try { const el = doc?.getElementById?.(CARRIED_ID); return el?.textContent ? JSON.parse(el.textContent) as Record<string, string> : {}; } catch { return {}; }
 }
 // Bytes as the store keeps them: a mark and their base64.
 export const keptBytes = (bytes: Uint8Array): string => "\u0000" + base64Of(bytes);
