@@ -1438,19 +1438,27 @@ export const TARGET = typedef("std.target", "Target", [], [
   ["screen", []],
   ["texture", [["name", () => ftref("texture.name", STRING)], ["width", () => ftref("texture.width", INT)], ["height", () => ftref("texture.height", INT)]]],
 ]);
-export const DRAW = typedef("std.draw", "Draw", [], []);
-export const PASS = typedef("std.pass", "Pass", [], [
-  ["pass", [["into", () => ftref("pass.into", TARGET)], ["clear", () => ftref("pass.clear", STRING)], ["depth", () => ftref("pass.depth", BOOL)], ["draws", () => ftref("pass.draws", LIST, ftref("pass.draws.item", DRAW))]]],
-]);
-export const FRAME = typedef("std.frame", "Frame", [], [
-  ["frame", [["passes", () => ftref("frame.passes", LIST, ftref("frame.passes.item", PASS))]]],
-]);
 // What a fragment reads from a texture an earlier pass drew (G10): red,
 // green, blue and alpha, each from 0 to 1.
 export const TEXEL = typedef("std.texel", "Texel", [], [
   ["texel", [["red", () => ftref("texel.red", NUMBER)], ["green", () => ftref("texel.green", NUMBER)], ["blue", () => ftref("texel.blue", NUMBER)], ["alpha", () => ftref("texel.alpha", NUMBER)]]],
 ]);
-export const FRAME_V = { mesh: "std.mesh.mesh", placed: "std.placed.placed", screen: "std.target.screen", texture: "std.target.texture", pass: "std.pass.pass", frame: "std.frame.frame", draw: "builtin.frame.draw", texel: "std.texel.texel", sampled: "builtin.frame.sampled" } as const;
+// A picture (G11): its width and height in texels and its texels, row
+// by row from the top left, as a program reads them from a file. A frame's
+// `copy` pass puts it into a texture, which fragments sample as they
+// sample any pass's target.
+export const IMAGE = typedef("std.image", "Image", [], [
+  ["image", [["width", () => ftref("image.width", INT)], ["height", () => ftref("image.height", INT)], ["texels", () => ftref("image.texels", LIST, ftref("image.texels.item", TEXEL))]]],
+]);
+export const DRAW = typedef("std.draw", "Draw", [], []);
+export const PASS = typedef("std.pass", "Pass", [], [
+  ["pass", [["into", () => ftref("pass.into", TARGET)], ["clear", () => ftref("pass.clear", STRING)], ["depth", () => ftref("pass.depth", BOOL)], ["draws", () => ftref("pass.draws", LIST, ftref("pass.draws.item", DRAW))]]],
+  ["copy", [["image", () => ftref("copy.image", IMAGE)], ["into", () => ftref("copy.into", TARGET)]]],
+]);
+export const FRAME = typedef("std.frame", "Frame", [], [
+  ["frame", [["passes", () => ftref("frame.passes", LIST, ftref("frame.passes.item", PASS))]]],
+]);
+export const FRAME_V = { mesh: "std.mesh.mesh", placed: "std.placed.placed", screen: "std.target.screen", texture: "std.target.texture", pass: "std.pass.pass", frame: "std.frame.frame", draw: "builtin.frame.draw", texel: "std.texel.texel", image: "std.image.image", copy: "std.pass.copy", sampled: "builtin.frame.sampled" } as const;
 // draw(mesh, instances, vertex, fragment): the vertex function places
 // each corner of the mesh for each instance and gives what the fragment
 // is given between corners; the fragment gives the colour. Both pure, as
@@ -1479,7 +1487,7 @@ export const FILE_INFO = typedef("std.file info", "File info", [], [
   ["file facts", [["kind", () => fiTref("kind", FILE_KIND)], ["size", () => fiTref("size", INT)], ["modified", () => fiTref("modified", INSTANT)]]],
 ]);
 export const FILE_INFO_V = "std.file info.file facts";
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY, MARK, MESH, PLACED, TARGET, DRAW, PASS, FRAME, TEXEL, FILE_KIND, FILE_INFO] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY, MARK, MESH, PLACED, TARGET, DRAW, PASS, FRAME, TEXEL, FILE_KIND, FILE_INFO, IMAGE] };
 // What the signatures say that a run needs, as data (C251), so the
 // evaluator and a page don't carry the signatures: each builtin's number
 // of inputs, and the builtins that only compute (their row has at most

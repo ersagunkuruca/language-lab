@@ -13,6 +13,7 @@
 // Prior art: constant folding of affine maps (LLVM's and MLIR's affine
 // analysis); the product rule is the textbook matrix of a composition.
 
+import { readAll } from "./ir-again.ts";
 import type { Id, NodeOf } from "../../ters/src/model.ts";
 import { fieldWayOf } from "../../ters/src/model.ts";
 import { composeLinear, linearMap, type LinearMap } from "../../ters/src/lang/linear.ts";
@@ -90,5 +91,7 @@ export function linearCalls(ir: CoreIR): number {
     };
     f.body = go(f.body);
   }
+  // Its matrices are the definitions' numbers worked out.
+  if (n) readAll();
   return n;
 }

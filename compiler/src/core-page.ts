@@ -5,7 +5,7 @@
 
 import { equal, type Value } from "../../ters/src/lang/run-values.ts";
 import { Cells, handOver, nodeOf } from "../../ters/src/lang/cells.ts";
-import { browserWorld, pageStorage, type PickedFolder, type Store } from "../../ters/src/lang/browser.ts";
+import { browserWorld, carriedFiles, pageStorage, withFiles, type PickedFolder, type Store } from "../../ters/src/lang/browser.ts";
 import { mountHtml, type Doc, type Node_ } from "../../ters/src/lang/html.ts";
 import type { recordingWorld, soundPlayer } from "../../ters/src/lang/audio-page.ts";
 import { branchWorkerOfPage, coreCall, coreRuntime, type HostOps, type TableSpec } from "./core-rt.ts";
@@ -46,7 +46,8 @@ export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   const log = typeof location !== "undefined" && /[?&]ters-log(?:[=&]|$)/.test(location.search) ? ((globalThis as { tersLog?: LogEntry[] }).tersLog = []) : undefined;
   if (log) console.info("ters: this run's log is in tersLog; copy(JSON.stringify(tersLog)) copies it");
   const latency = cells.own(0, "sound latency");
-  const browser = browserWorld(pageStorage(), program, console, { cells, frame: (f) => requestAnimationFrame(f), latency });
+  // The files the page carries (G11a), under what it writes.
+  const browser = browserWorld(withFiles(pageStorage(), program, carriedFiles()), program, console, { cells, frame: (f) => requestAnimationFrame(f), latency });
   // Its events and answers up to MAIN_LOG_CAP, then the log says it
   // stopped (I239d): a compiled page's log is for the evaluator to replay
   // from the start, so it is capped rather than kept as a window.

@@ -207,6 +207,32 @@ export const pageStorage = (): Store => {
   return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, String(v)), removeItem: (k) => void m.delete(k), get length() { return m.size; }, key: (i) => [...m.keys()][i] ?? null };
 };
 
+// The store with files a page carries (G11a) or Run gives (E321) under
+// the program's prefix, where the store has none of that name: what a run
+// writes, or you change, is kept in the store over them.
+export function withFiles(store: Store, program: string, files: Record<string, string>): Store {
+  const prefix = `lab:${program}:`;
+  if (!Object.keys(files).length) return store;
+  const extra = () => Object.keys(files).map((n) => prefix + n).filter((k) => store.getItem(k) === null);
+  return {
+    getItem: (k) => store.getItem(k) ?? (k.startsWith(prefix) && Object.hasOwn(files, k.slice(prefix.length)) ? files[k.slice(prefix.length)] : null),
+    setItem: (k, v) => store.setItem(k, v),
+    removeItem: (k) => store.removeItem?.(k),
+    get length() { return store.length + extra().length; },
+    key: (i) => (i < store.length ? store.key(i) : extra()[i - store.length] ?? null),
+  };
+}
+// The files a saved page carries (G11a, page.ts carrying): name to text,
+// or to bytes as the store keeps them.
+export const CARRIED_ID = "ters-files";
+export function carriedFiles(): Record<string, string> {
+  // (A document stand-in may have no getElementById: then nothing is carried.)
+  const doc = (globalThis as { document?: { getElementById?(id: string): { textContent: string | null } | null } }).document;
+  try { const el = doc?.getElementById?.(CARRIED_ID); return el?.textContent ? JSON.parse(el.textContent) as Record<string, string> : {}; } catch { return {}; }
+}
+// Bytes as the store keeps them: a mark and their base64.
+export const keptBytes = (bytes: Uint8Array): string => "\u0000" + base64Of(bytes);
+
 export function browserWorld(store: Store, program: string, console_ = console, clock?: Clock): World {
   const prefix = `lab:${program}:`;
   let tick: Value | null = null;

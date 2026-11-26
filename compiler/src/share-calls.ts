@@ -21,6 +21,7 @@
 // array, which owned-arrays.ts may then write in place (G3f: `zeros`
 // named twice, each replaced, would be one array changed twice).
 
+import { readValue, tracking } from "./ir-again.ts";
 import { isArray, OPS, type CoreIR, type Op, type SExpr } from "./scalar.ts";
 
 const ONE = ["cond", "then", "else", "value", "body", "rec", "fn", "scrut", "otherwise", "ok", "reason", "arm", "release", "list", "dflt"] as const;
@@ -123,24 +124,26 @@ function readsOf(e: SExpr, out: Set<number> = new Set()): Set<number> {
   for (const [, k] of kids(e)) readsOf(k, out);
   return out;
 }
+const numbersIn = (e: SExpr, out: SExpr[] = []): SExpr[] => { if (e.k === "num" || e.k === "int") out.push(e); for (const [, k] of kids(e)) numbersIn(k, out); return out; };
 // A type as a number, for keys: types are compared by identity.
 const typeIds = new WeakMap<object, number>();
 let typeCount = 0;
 const typeId = (t: object) => { if (!typeIds.has(t)) typeIds.set(t, ++typeCount); return typeIds.get(t)!; };
 // A pure value as text: equal text, the same value.
-function said(e: SExpr): string {
+function said(e: SExpr, numbers = false): string {
+  const said_ = (x: SExpr) => said(x, numbers);
   switch (e.k) {
-    case "num": return `n${e.v}`;
-    case "int": return `i${e.v}`;
+    case "num": return numbers ? "n" : `n${e.v}`;
+    case "int": return numbers ? "i" : `i${e.v}`;
     case "bool": return `b${e.v}`;
     case "text": return `t${JSON.stringify(e.v)}`;
     case "local": return `l${e.i}`;
-    case "get": return `g${e.i}(${said(e.rec)})`;
-    case "field": return `f${e.c}.${e.i}(${said(e.rec)})`;
-    case "op": return `${e.op}(${e.args.map(said).join(",")})`;
-    case "make": return `m${typeId(e.t)}(${e.args.map(said).join(",")})`;
-    case "new": return `c${typeId(e.t)}.${e.c}(${e.args.map(said).join(",")})`;
-    case "call": return `${e.fn}(${e.args.map(said).join(",")})`;
+    case "get": return `g${e.i}(${said_(e.rec)})`;
+    case "field": return `f${e.c}.${e.i}(${said_(e.rec)})`;
+    case "op": return `${e.op}(${e.args.map(said_).join(",")})`;
+    case "make": return `m${typeId(e.t)}(${e.args.map(said_).join(",")})`;
+    case "new": return `c${typeId(e.t)}.${e.c}(${e.args.map(said_).join(",")})`;
+    case "call": return `${e.fn}(${e.args.map(said_).join(",")})`;
     default: return "?";
   }
 }
@@ -151,6 +154,9 @@ const COSTLY = new Set<Op>(["sin", "cos", "tan", "exp", "log", "pow", "atan2", "
 const works = (e: SExpr): boolean => (e.k === "op" && COSTLY.has(e.op)) || e.k === "call" || kids(e).some(([, k]) => works(k));
 // A node and the nodes in it copied; the types they carry kept as they are.
 function copy(e: SExpr): SExpr {
+  // (A number, a local and the like as it is: nothing is set in one, and
+  // a number kept as the same object is found again by ir-again.ts.)
+  if (!kids(e).length) return e;
   const out = { ...e } as unknown as Record<string, unknown>;
   for (const k of ONE) { const x = out[k]; if (x && typeof x === "object" && "k" in x) out[k] = copy(x as SExpr); }
   for (const k of MANY) { const xs = out[k]; if (Array.isArray(xs)) out[k] = xs.map((x) => (x && typeof x === "object" && "k" in x ? copy(x as SExpr) : x)); }
@@ -175,10 +181,15 @@ export function shareCalls(ir: CoreIR, opts: { ops?: boolean; calls?: boolean } 
           const s = seen.get(k) ?? { node: e, paths: [] };
           s.paths.push(path);
           seen.set(k, s);
+          if (watched) (watched.get(said(e, true)) ?? watched.set(said(e, true), []).get(said(e, true))!).push(e);
         }
         for (const [slot, k] of kids(e)) walk(k, [...path, [e, slot]]);
       };
+      // Calls alike but for their numbers: which are shared reads those
+      // numbers' values (ir-again.ts).
+      const watched = tracking() ? new Map<string, SExpr[]>() : null;
       walk(f.body, []);
+      for (const es of watched?.values() ?? []) if (es.length > 1) for (const e of es) numbersIn(e).forEach(readValue);
       let done = false;
       for (const { node, paths } of seen.values()) {
         if (paths.length < 2) continue;

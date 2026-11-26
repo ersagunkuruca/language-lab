@@ -1,0 +1,7 @@
+# A bird, in metres: a chevron pointing along x, its wings along y (OBJ: v is a corner, f a face by its corners, from 1).
+v 0 0 0
+v -4 0.9 0
+v -3 0 0
+v -4 -0.9 0
+f 1 2 3
+f 1 3 4

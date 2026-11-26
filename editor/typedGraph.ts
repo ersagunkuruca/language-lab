@@ -389,8 +389,7 @@ interface Item {
   label?: Box;          // words drawn outside it (a dot's name), relative to it
   name?: string;        // what it is called, for a folded box that holds it
   note?: string;       // its own comment (E291), said by a folded box that holds it
-  top?: number;         // its comment's line above its body (E316): pos is the line's top, ends and body start below it
-  lineW?: number;       // that line's width, past a narrow body's
+  top?: number;         // its comment's row, the top of its box (E316): pos is the box's top, its body starts below the row
   ran?: number;         // its place in the order effects run (E265), shown
   own?: { w: number; h: number }; // its own size, when it can be resized
 }
@@ -546,11 +545,11 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); noteMark(g, key, w); };
     const own = natural.get(key);
     const c = key !== defId ? pres.comments[key] : undefined;
-    // A comment is a line above the body, as wide as the node, that the
-    // layout and Tidy count like the rest of it (E316).
+    // A comment is the node's top row, inside its box, which the layout
+    // and Tidy count like the rest of it (E316).
     const top = c ? NOTEH : 0;
-    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...(own && hooks.resized ? { own } : {}), ...(c ? { note: resolveRefs(c, (r) => pres.names[r] ?? r), top, lineW: noteWidth(w, resolveRefs(c, (r) => pres.names[r] ?? r)) } : {}), ...extra });
-    return { w: c ? noteWidth(w, resolveRefs(c, (r) => pres.names[r] ?? r)) : w, h: h + top, outX: w, outY: top + h / 2, out: { item: key, dx: w, dy: h / 2 }, at: new Map([[key, { x: 0, y: 0 }]]) };
+    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...(own && hooks.resized ? { own } : {}), ...(c ? { note: resolveRefs(c, (r) => pres.names[r] ?? r), top } : {}), ...extra });
+    return { w, h: h + top, outX: w, outY: top + h / 2, out: { item: key, dx: w, dy: h / 2 }, at: new Map([[key, { x: 0, y: 0 }]]) };
   };
   // A use of a binding wired into (item, dx, dy): a wire from its source,
   // or nothing here when the use is drawn as a get node.
@@ -1415,17 +1414,28 @@ function group(scene: Scene, g: Id, members: Id[]) {
 // with an ellipsis, the whole comment on hover.
 const NOTEH = 16;
 const tall = (it: { h: number; top?: number }) => it.h + (it.top ?? 0);
-const wide = (it: { w: number; lineW?: number }) => Math.max(it.w, it.lineW ?? 0);
-// A short comment shown whole over a narrow node, a long one up to 180.
+const wide = (it: { w: number }) => it.w;
+// The comment as the node's own top row (E316, Ersagun 2026-11-26: part
+// of the node, never a line floating above it): the node's box grown
+// upward by the row, in its frame and background, so it moves and selects
+// with the node; the first line cut to the box's width, the whole on hover.
 const NOTEPX = 6.2;
-const noteWidth = (w: number, text: string) => Math.max(w, Math.min(180, Math.ceil(tw(text.split("\n")[0], NOTEPX) + 6)));
-function noteLine(p: Pos, w: number, text: string, faded?: boolean): SVGElement {
+function noteRow(g: SVGGElement, w: number, top: number, text: string): void {
+  const box = [...g.children].find((c) => c.tagName === "rect" && Number(c.getAttribute("width")) === w) as SVGElement | undefined;
+  if (box) {
+    box.setAttribute("y", String(Number(box.getAttribute("y") ?? 0) - top));
+    box.setAttribute("height", String(Number(box.getAttribute("height") ?? 0) + top));
+  }
   const first = text.split("\n")[0];
-  const fits = Math.max(1, Math.floor((w - 4) / NOTEPX));
+  const fits = Math.max(1, Math.floor((w - 14) / NOTEPX));
   const shown = first.length > fits || first !== text ? `${first.slice(0, Math.max(1, fits - 1)).trimEnd()}…` : first;
-  const o = s("g", { class: `cmt-line${faded ? " faded" : ""}`, transform: `translate(${p.x},${p.y})` });
-  o.append(s("rect", { x: 0, y: 0, width: w, height: NOTEH - 2, class: "cmt-hit" }), s("text", { x: 2, y: NOTEH - 5 }, shown), s("title", {}, text));
-  return o;
+  const row = s("g", { class: "cmt-row" });
+  row.append(s("text", { x: 7, y: -top + 12 }, shown), s("line", { x1: 6, x2: w - 6, y1: -1.5, y2: -1.5 }));
+  // The whole comment on hover, before what the box says of itself.
+  const said = box ? [...box.children].find((c) => c.tagName === "title") : undefined;
+  if (said) said.textContent = `${text}\n\n${said.textContent}`; else (box ?? row).append(s("title", {}, text));
+  // In the row the box grew by, where none of the node's words or ports are.
+  g.append(row);
 }
 // A speech mark on a folded box's top right corner, saying it hides nodes with comments (how
 // many, past one); the comment on hover.
@@ -1717,8 +1727,8 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     const p = pos.get(it.key)!;
     const g = s("g", { transform: `translate(${p.x},${p.y + (it.top ?? 0)})` }) as SVGGElement;
     if (scene.faded?.has(it.key)) g.classList.add("faded");
-    if (it.top && it.note) itemG.append(noteLine(p, wide(it), it.note, scene.faded?.has(it.key)));
     it.draw(g);
+    if (it.top && it.note) noteRow(g, it.w, it.top, it.note);
     // A folded frame is drawn as an item: selected, it's outlined like one.
     if (hooks.selected === it.key) g.querySelector("rect.folded")?.classList.add("sel");
     if (picked.has(it.key)) g.prepend(s("rect", { x: -4, y: -4 - (it.top ?? 0), width: wide(it) + 8, height: tall(it) + 8, rx: 9, class: "picked" }));

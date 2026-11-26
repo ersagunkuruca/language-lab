@@ -225,12 +225,18 @@ A post effect is a pass drawing one full-screen quad. Bloom is a pass into
 
 ## Textures and meshes as data (G11)
 
-A texture from a file is an `Image` (width, height, Float32 pixels)
-loaded with the binary files that already exist (bytes-files.test). A
-fragment samples it as it samples a pass's target. Meshes from files are a
-small text format parsed by a library function written in Ters (an OBJ
-subset: positions, normals, triangles), so loading a mesh is ordinary
-code, and baking one (stage 4) is that code run at build time.
+A texture from a file is an `Image`: its width, its height and its
+`Texel`s, row by row from the top left. A frame's `copy(image, into)` pass
+puts it into the texture `into` names, at the image's own size, and a
+later pass's fragment samples that texture as it samples any pass's
+target. So the compiler sees nothing new: a draw captures the target, as
+it does for a pass's. The runtime writes the image to the GPU only when it
+isn't the image that texture last held. Images and meshes from files are
+read by library functions written in Ters, from text formats: a PPM image
+(P3) and an OBJ subset (positions and faces, fanned into triangles). So
+loading one is ordinary code, and baking one (stage 4) is that code run at
+build time. A page carries the files its program reads by a name written
+in it (G11a).
 
 ## What stays out
 
@@ -258,7 +264,7 @@ uploaded, draw calls.
   depth and with what the vertex carried put between the corners in
   perspective. frames.test checks small frames pixel by pixel against
   answers worked out by hand.
-- **G9c**: the vertex and fragment stages printed to WGSL from a draw's
+- **G9c** (done): the vertex and fragment stages printed to WGSL from a draw's
   functions (wgsl.ts, beside today's fragment-only picture), with captures
   as a uniform and instances as storage buffers of whole records (one
   record a slot, no columns yet). The runtime keeps a pipeline per draw.
@@ -268,14 +274,17 @@ uploaded, draw calls.
   bytes sent per frame. Done as G8a (only the leaves read) and G8b (a
   packing loop printed per site); columns closed, measured: the drawing
   was under 1% of the flock page's main thread.
-- **G9d**: the flock page drawn with `render`, 2,000 birds and then
+- **G9d** (done): the flock page drawn with `render`, 2,000 birds and then
   20,000, and its CPU time a frame against today's `paint`.
 - **G10** (done): depth (already in G9b's rasterizer, in WebGPU here),
   texture targets, `sampled`, pass order, and the flock with a fog pass
   (flock-frame-page: the scene and its distance into two textures, then a
   full-screen pass reading both).
-- **G11**: `Image` from a file, sampled; the OBJ-subset mesh reader in
-  Ters; a mesh drawn from a file.
+- **G11** (done): `Image` from a file, sampled; the OBJ-subset mesh reader in
+  Ters; a mesh drawn from a file. Done as G11a (a page carries the files
+  its program reads by a name written in it) and G11b (`obj mesh`, and the
+  flock's bird read from bird.obj), G11c (`Image` and the copy pass) and
+  G11d (the flock's floor from floor.ppm).
 - **Round**: the stage's bigger-program round on the flock drawn with data,
   measured against flock.ideal-gpu.js, with the gaps going into GAPS.md.
 

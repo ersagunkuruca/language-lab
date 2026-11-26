@@ -88,18 +88,18 @@ test("a node's comment is its top line, and a folded frame's mark says the comme
   } as never).root as unknown as El;
   const notes = (e: El) => e.all().filter((x) => /\bcmt-mark\b/.test(x.getAttribute("class") ?? "")).map((x) => x.children.find((c) => c.tagName === "title")!.textContent);
   const open = svg(new Set());
-  // The line above the node, its text shown, the whole on hover, and the
-  // node's body drawn below it.
-  const lines = open.all().filter((x) => /\bcmt-line\b/.test(x.getAttribute("class") ?? ""));
-  assert.equal(lines.length, 1);
-  assert.equal(lines[0].children.find((c) => c.tagName === "title")!.textContent, "how far apart");
-  assert.equal(lines[0].children.find((c) => c.tagName === "text")!.textContent, "how far apart");
-  const at = (e: El) => /translate\(([-\d.]+),([-\d.]+)\)/.exec(e.getAttribute("transform") ?? "")!.slice(1).map(Number);
-  const body = open.all().find((x) => x.tagName === "g" && x.children.some((c) => c.getAttribute("data-id") === abs || c.getAttribute("data-slot") === abs));
-  assert.ok(body, "abs's node");
-  const [lx, ly] = at(lines[0]), [bx, by] = at(body!);
-  assert.equal(bx, lx);
-  assert.equal(by, ly + 16);
+  // The comment is the node's top row: inside the node's own group and
+  // box, the box grown upward by the row, the whole comment on hover.
+  const rows = open.all().filter((x) => /\bcmt-row\b/.test(x.getAttribute("class") ?? ""));
+  assert.equal(rows.length, 1);
+  // Cut to the box's width (abs is narrow), the whole on hover.
+  assert.match(rows[0].children.find((c) => c.tagName === "text")!.textContent, /^how.*…$/);
+  const node = open.all().find((x) => x.tagName === "g" && x.children.includes(rows[0]))!;
+  assert.ok(node.children.some((c) => c.getAttribute("data-id") === abs || c.getAttribute("data-slot") === abs), "in abs's own node");
+  const box = node.children.find((c) => c.tagName === "rect")!;
+  assert.equal(Number(box.getAttribute("y")), -16);
+  assert.match(box.children.find((c) => c.tagName === "title")?.textContent ?? "", /^how far apart/);
+  assert.equal(open.all().filter((x) => /\bcmt-line\b/.test(x.getAttribute("class") ?? "")).length, 0, "no line floating above a node");
   assert.deepEqual(notes(open), []);
   // Every frame folded: the box that holds abs says its comment.
   const frames = new Set(open.all().map((x) => x.getAttribute("data-frame")).filter((x): x is string => !!x && x !== safe));

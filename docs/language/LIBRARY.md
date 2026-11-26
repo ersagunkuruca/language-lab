@@ -820,9 +820,10 @@ What a canvas renders (FRAMES.md): a Frame is passes, each drawing into the scre
 - **Placed** (type). A corner as a vertex function places it: its position on the screen, and what it carries to the fragment function between corners.
 - **Target** (type). Where a pass draws: the screen, or a texture of a name, width and height that a later pass reads.
 - **Draw** (type). One draw of a frame, made by draw: a mesh, its instances and two functions. Its type hides the instances' type, so a pass lists draws of different things.
-- **Pass** (type). A pass of a frame: where it draws, the CSS colour it clears to, whether it keeps a depth buffer, and its draws.
+- **Pass** (type). A pass of a frame: where it draws, the CSS colour it clears to, whether it keeps a depth buffer, and its draws; or copy(image, into), which puts an image into a texture, at the image's own size, for a later pass to sample.
 - **Frame** (type). What a canvas renders, as its render attribute: passes, drawn in order.
 - **Texel** (type). A colour sampled from a texture: red, green, blue and alpha, each from 0 to 1.
+- **Image** (type). A picture: its width and height and its texels, row by row from the top left, as a program reads it from a file. A copy pass puts it into a texture.
 - **draw** : `(Mesh a, List b, (b, a) -> Placed c d, (d) -> e) -> Draw`. draw(mesh, instances, vertex, fragment): the mesh drawn once for each instance. vertex places each corner for an instance; fragment gives the colour from what vertex carried. Both are pure, as a shader is.
 - **sampled** : `(Target, a) -> Texel`. sampled(target, across): the colour at across (two numbers from 0 to 1, from the top left) of a texture an earlier pass of the frame drew.
 

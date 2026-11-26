@@ -97,6 +97,9 @@ function madeAgain(was: Kept, q: Stage): Stage | null {
     if (readP(id)) return null;
     const a = p.code.nodes[id] as Node & { kind: "lit" }, b = q.code.nodes[id] as Node & { kind: "lit" };
     if (made.unknown.has(litText(a.value)) || was.reads?.has(id)) return null;
+    // One in a definition the step left out (one the roots don't reach)
+    // is in nothing it made.
+    if (out.code.nodes[id] === undefined && !made.copies.get(id)?.length && leftOut(q.code, out.code, id)) continue;
     for (const at of [id, ...(made.copies.get(id) ?? [])]) {
       // One the step took out may have been worked into something else.
       const n = out.code.nodes[at];
@@ -108,11 +111,24 @@ function madeAgain(was: Kept, q: Stage): Stage | null {
       into[at] = { ...n, value: v } as Node;
     }
   }
-  if (!Object.keys(into).length) return null;
+  // (Every one left out: the step's answer as it was.)
+  if (!Object.keys(into).length) return { ...out, info: { ...out.info } };
   const code: Code = { ...out.code, nodes: withNodes(out.code.nodes, into) };
   const layer = layerOf(out.code);
   if (layer) onLayer(code, layer);
   return { ...out, code, info: { ...out.info } };
+}
+
+// Whether id's definition is one `out` left out, or there is none.
+// (Each node's definition found once for a list of definitions, which
+// an edit of a number keeps.)
+const defsOf = new WeakMap<Id[], Map<Id, Id>>();
+function leftOut(code: Code, out: Code, id: Id): boolean {
+  let of = defsOf.get(code.defs);
+  if (!of) { of = new Map(); for (const d of code.defs) for (const x of subtreeKept(code, d)) of.set(x, d); defsOf.set(code.defs, of); }
+  // (One in no definition is in none the program runs.)
+  const d = of.get(id);
+  return d === undefined || out.nodes[d] === undefined;
 }
 
 // The ids whose node differs, in no set order: read from the nodes each

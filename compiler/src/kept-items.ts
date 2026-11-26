@@ -21,6 +21,7 @@
 //                     L(a, i + 1, attempt V ok push(out, V) else out, …) else out
 // V reads only x and the inputs after the box.
 
+import { readValue } from "./ir-again.ts";
 import { kids, mapKids, type CoreIR, type DType, type LType, type SExpr, type SFunc } from "./scalar.ts";
 
 const OF = /^array\.of\.a(\d+)$/, ITEMS = /^array\.items\.a(\d+)$/;
@@ -207,7 +208,7 @@ export function pushedInOrder(ir: CoreIR): number {
       if (e.k === "call" && e.fn === fi && !e.cps) {
         if (!e.tail) { ok = false; return; }
         e.args.forEach((x, k) => {
-          if (k === i) { if (!(x.k === "op" && x.op === "add" && isLocal(x.args[0], i) && x.args[1].k === "num" && x.args[1].v === 1)) ok = false; return; }
+          if (k === i) { if (!(x.k === "op" && x.op === "add" && isLocal(x.args[0], i) && x.args[1].k === "num" && (readValue(x.args[1]), x.args[1].v === 1))) ok = false; return; }
           if (k === out) {
             if (isLocal(x, out)) return;
             if (x.k === "rt" && PUT.test(x.fn) && isLocal(x.args[0], out) && !reads(x.args[1], out)) { fronts++; look(x.args[1]); return; }

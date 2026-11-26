@@ -10,6 +10,7 @@
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { merge } from "../src/model.ts";
 import { prelude } from "../src/prelude.ts";
 import { std } from "../src/lang/std.ts";
@@ -91,4 +92,12 @@ for (const [dir, d] of programs) {
   save(join(d, "names.default.json"), r.names);
   if (existsSync(join(d, "comments.json"))) save(join(d, "comments.json"), r.comments);
   console.log(`${dir}: now uses the prelude's ${r.adopted.length} definitions instead of its own copies`);
+}
+// The editor's saved files the tests open (test/corpus, gzipped) are saved
+// programs too, moved onto the new ids the same way.
+const corpus = join(here, "../test/corpus");
+for (const f of existsSync(corpus) ? readdirSync(corpus).filter((f) => f.endsWith(".json.gz")) : []) {
+  const text = gunzipSync(readFileSync(join(corpus, f))).toString("utf8");
+  const out = moved.reduce((t, [a, b]) => t.split(`"${a}"`).join(`"${b}"`), text);
+  if (out !== text) { writeFileSync(join(corpus, f), gzipSync(out)); console.log(`test/corpus/${f} now refers to the changed library definitions`); }
 }
