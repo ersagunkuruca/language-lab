@@ -122,6 +122,8 @@ export const STUCK = "didn't finish";
 // How many times the time a first draw that ran past it gets when it runs
 // again (I371).
 const AGAIN_TIMES = 4;
+// A frame's work past which the preview waits as long again (everyFrame).
+const HALVED_FROM_MS = 8;
 
 // A view with no answer (its Choice gave none: x / 0, say) shows nothing
 // there, as Ersagun decided for L125b: a view only reads, so nothing is
@@ -417,7 +419,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           // animation to listen to (I80). Elsewhere it never comes. It
           // says how many seconds passed since the frame before, so a
           // simulation can keep to real time whatever the frame rate.
-          if (name === "frame") everyFrame(e, (seconds) => handle({ seconds }));
+          if (name === "frame") everyFrame(e, (seconds) => handle({ seconds }), !!m.within);
           else if (PLATFORM_EVENTS.has(name)) platformEvent(e, name, () => handle({}));
           else e.addEventListener(name, handle);
         } else if (a.tag === HTML_V.paint) {
@@ -549,7 +551,13 @@ function platformEvent(e: El, name: string, fire: () => void, w: Win = globalThi
   d.addEventListener("visibilitychange", f);
 }
 
-function everyFrame(e: El, tick: (seconds: number) => void) {
+// `halved`: on the editor's thread (the preview, whose updates have a time,
+// `within`), a frame's work takes at most half of it: one that took d ms
+// waits d ms more before asking for the next, so a simulation slower than
+// the screen steps less often and the editor still answers (I367: moths'
+// 3000 at a third of the speed held the editor's clicks past their time).
+// Its seconds are the time that passed, so it keeps to real time.
+function everyFrame(e: El, tick: (seconds: number) => void, halved = false) {
   const raf = (globalThis as { requestAnimationFrame?: (f: (ms?: number) => void) => number }).requestAnimationFrame;
   if (!raf) return;
   let seen = false;
@@ -566,7 +574,10 @@ function everyFrame(e: El, tick: (seconds: number) => void) {
       seen = true;
       const seconds = last === null || now === null ? 0 : Math.max(0, (now - last) / 1000);
       last = now;
+      const began = performance.now();
       tick(seconds);
+      const took = performance.now() - began;
+      if (halved && took > HALVED_FROM_MS) { setTimeout(() => raf(step), took); return; }
     } else if (seen) return;
     raf(step);
   };
