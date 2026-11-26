@@ -5624,6 +5624,8 @@ module, and somewhere across that boundary it isn't read or given back as
 one. Not looked into further. Fix: convert Rationals both ways where the
 module and the relational interpreter meet, as Float64s and data already
 are, with the two-line program above as the test.
+Fixed 11-26: no conversion was missing; the module didn't hold `negate
+fraction`, where relate.ts read Rational's case from (DONE I373).
 
 **L2. `inverse` runs the relational interpreter, shipped in the module, and
 no other target has it (I374).** Both kinds of `inverse` here, a printer

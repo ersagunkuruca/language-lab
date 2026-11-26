@@ -11,16 +11,10 @@ import { join } from "node:path";
 import { folder, book, ways } from "../gaps/larder.ts";
 
 const w = await ways();
-// The core IR's module answers `inverse` with a Rational answer with
-// nothing (GAPS.md round 25's L1, BACKLOG I373), so its count of portions
-// the larder makes is 0: that one line is left out of its comparison until
-// I373 is fixed, when `apart` goes.
-const LARDER = "the larder alone makes: ";
-const apart = (r: { out: string[] }) => ({ ...r, out: r.out.filter((l) => !l.startsWith(LARDER)) });
 const all = (args: string[], files: Record<string, string>, slow = false) => {
   const want = w.ideal(args, files);
   if (!slow) assert.deepEqual(w.evaluator(args, files), want, "evaluator");
-  assert.deepEqual(apart(w.core(args, files)), apart(want), "core");
+  assert.deepEqual(w.core(args, files), want, "core");
   return want;
 };
 const sample = readFileSync(join(folder, "book.txt"), "utf8");
