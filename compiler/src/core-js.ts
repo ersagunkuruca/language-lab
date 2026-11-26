@@ -23,6 +23,7 @@ import { keepingWhole } from "../../ters/src/lang/check-cache.ts";
 import { keysOver } from "../../ters/src/lang/def-keys.ts";
 import { overLiterals } from "../../ters/src/lang/literals-again.ts";
 import { shareCalls } from "./share-calls.ts";
+import { memoFuncs } from "./memo-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
 import { knownClosures } from "./known-closures.ts";
 import { itemPaths } from "./item-paths.ts";
@@ -261,6 +262,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
   const keptOf = keptArraysOf(ir);
   const selfLoops = (e: SExpr, i: number): boolean => (e.k === "call" && e.fn === i && e.tail) || kidsOf(e).some((k) => selfLoops(k, i));
   const heapCodes = [...deep.keys()].filter((i) => [...coded.values()].some((s) => s.has(i)));
+  const memo = envSet("NO_MEMO") ? new Set<number>() : memoFuncs(ir, new Set(deep.keys()));
   const parts = ir.funcs.map((f, i) => {
     if (only && !only.has(i)) return [];
     // A loop keeping two arrays or more, or counting in numbers, printed a
@@ -277,6 +279,15 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
         ...(counted && kept.size && boundedReads(ir, i, kept, counted) ? [func(f, i, null, "checked").replace(`function ${names[i]}(`, `function ${names[i]}$c(`)] : []),
       ];
     };
+    // Its last inputs and answer kept, given again for the same inputs
+    // (memo-calls.ts, C352).
+    if (memo.has(i)) {
+      const ps = f.params.map((_, j) => `l${j}`), m = `${names[i]}$k`;
+      const same = ps.map((p, j) => `Object.is(${m}${j}, ${p})`).join(" && ");
+      return [`let ${m} = false, ${[...ps.map((_, j) => `${m}${j}`), `${m}r`].join(", ")};`,
+        `function ${names[i]}(${ps.join(", ")}) {\n  if (${m} && ${same}) return ${m}r;\n  const r = ${names[i]}$m(${ps.join(", ")});\n  ${ps.map((p, j) => `${m}${j} = ${p};`).join(" ")} ${m}r = r; ${m} = true;\n  return r;\n}`,
+        func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$m(`), ...plainCopy()];
+    }
     if (!deep.has(i)) return [func(f, i, null), ...plainCopy()];
     const ps = f.params.map((_, j) => `l${j}`).join(", ");
     const plain = func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$b(`);
