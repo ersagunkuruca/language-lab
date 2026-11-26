@@ -13,7 +13,9 @@
 //   back the one it was given; a record made here holds what it was made
 //   of, field by field; a call gives what its function gives back on every
 //   path; a parameter has what every call of its function gives it, when
-//   its only callers are direct calls in the program. Anything else
+//   its only callers are direct calls in the program. An array has its
+//   items' holders too, as a list does: an item read from a slot that is
+//   then replaced (a map in place) has what the array gave it. Anything else
 //   (read out of data, captured, from the runtime or the world) may have
 //   more than one.
 // - **Whether the local holding it is used once** (linear, with borrows):
@@ -36,6 +38,7 @@ import { isArray, isTable, isData, isFn, isRecord, kids, type CoreIR, type LType
 // a value of a data type (a list) with one holder, `it` what is in it
 // (each item, and whatever its cases hold but more of the type).
 type AV = "T" | "U" | "S" | { f: AV[] } | { it: AV };
+// (An array with one holder is { it }, what its items have.)
 
 const meet = (a: AV, b: AV): AV => {
   if (a === "T") return b;
@@ -60,6 +63,19 @@ const capped = (v: AV, n = 6): AV => (typeof v !== "object" ? v : n === 0 ? "S" 
 // local, or a local's field.
 const lendable = (a: SExpr) => a.k === "local" || ((a.k === "get" || a.k === "field") && a.rec.k === "local");
 const fieldsOf = (r: AV): AV[] | null => (typeof r === "object" && "f" in r ? r.f : null);
+// One holder: a table's, or an array's (with what its items have).
+const one = (v: AV | undefined) => v === "U" || (typeof v === "object" && "it" in v);
+const uses = (e: SExpr, a: number): boolean => (e.k === "local" && e.i === a) || kids(e).some((k) => uses(k, a));
+// Whether e replaces the item at local j of local a before anything else
+// happens to a, on every path: through lets, and a call's inputs, the
+// replace one of them and a in no other.
+const replacedAt = (e: SExpr, a: number, j: number): boolean => {
+  const at = (x: SExpr) => x.k === "rt" && (op(x) === "replaceAt" || op(x) === "replaceOwned") && x.args[0]?.k === "local" && x.args[0].i === a && x.args[1]?.k === "local" && x.args[1].i === j && !x.args.slice(1).some((y) => uses(y, a));
+  if (at(e)) return true;
+  if (e.k === "let") return !uses(e.value, a) && replacedAt(e.body, a, j);
+  if (e.k === "call") { const ks = e.args.filter((x) => uses(x, a)); return ks.length === 1 && replacedAt(ks[0], a, j); }
+  return false;
+};
 
 // Holding nothing written in place (no array, table or record, in it or
 // in what it holds): it may be held anywhere (a number, a text, a list of
@@ -179,11 +195,13 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   // a change reaches.
   const callers = funcs.map(() => new Set<number>());
   const applies = funcs.map(() => new Set<string>());
+  const edges = funcs.map((): number[] => []);
+  const codesOf = (k: string) => [...codeOf].flatMap(([c, t]) => (t === k ? [c] : []));
   const scan = (g: SFunc, e: SExpr, self = funcs.indexOf(g)) => {
     if (e.k === "rt" && e.fn === "both.pure") { const c = e.args[0]; (bothOf.get(self) ?? bothOf.set(self, []).get(self)!).push(c?.k === "closure" ? c.fn : -1); if (c?.k === "closure") callers[c.fn]?.add(self); }
-    if (e.k === "call") { called.add(e.fn); callers[e.fn]?.add(self); }
+    if (e.k === "call") { called.add(e.fn); callers[e.fn]?.add(self); edges[self]?.push(e.fn); }
     if (e.k === "apply") applies[self].add(e.t.key);
-    if (e.k === "closure") { codeOf.set(e.fn, e.t.key); callers[e.fn]?.add(self); if (e.d !== undefined) outside.add(e.d); }
+    if (e.k === "closure") { codeOf.set(e.fn, e.t.key); callers[e.fn]?.add(self); edges[self]?.push(e.fn); if (e.d !== undefined) outside.add(e.d); }
     // A function the runtime is handed by its number (a whole part of the
     // name: not the digits an id starts with, as `handleK:8li2…`).
     if (e.k === "rt") for (const m of e.fn.matchAll(/:(\d+)(?=:|$)/g)) outside.add(Number(m[1]));
@@ -199,11 +217,26 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   // A closure's code is called only by the program's applies when its type
   // is never handed out: its inputs are what those give.
   const inner = (k: string) => !loose.has("*") && !loose.has(k);
+  // Reached from the roots (and what the runtime, the threads and the
+  // printers run) by calls, closures made and `both`s: a function only
+  // its own copies call (a map's fold left unused by its specialised copy)
+  // gives nothing to a closure's code.
+  const reach = new Set<number>();
+  if (roots.length) {
+    const todo = funcs.flatMap((g, i) => (outside.has(i) || away.has(g.def) || sited.has(g.def) ? [i] : []));
+    for (const r of todo) reach.add(r);
+    while (todo.length) {
+      const i = todo.pop()!;
+      for (const c of edges[i] ?? []) if (!reach.has(c)) { reach.add(c); todo.push(c); }
+      // A closure's code is run by the applies of its type.
+      for (const k of applies[i]) for (const c of codesOf(k)) if (!reach.has(c)) { reach.add(c); todo.push(c); }
+    }
+  }
   funcs.forEach((g, i) => {
     const code = codeOf.get(i);
     // Nothing calls it: not looked at (what it would give a closure's
     // code isn't given).
-    if (code === undefined && !called.has(i) && !outside.has(i) && !away.has(g.def) && !sited.has(g.def)) unreached.add(i);
+    if (roots.length ? !reach.has(i) : code === undefined && !called.has(i) && !outside.has(i) && !away.has(g.def) && !sited.has(g.def)) unreached.add(i);
     if (code !== undefined ? !inner(code) : !called.has(i)) outside.add(i);
     if (away.has(g.def)) outside.add(i);
   });
@@ -367,13 +400,53 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
     });
   };
 
+  // How many times local a is used on the way through f that uses it most
+  // (one arm of an if or a case): whole, with its fields (j null), or
+  // only whole (fieldsToo false); or field j of it. Its case being read
+  // isn't a use: it holds nothing.
+  const usesKept = new Map<string, number>();
+  const usesIn = (f: number, a: number, j: number | null, fieldsToo = true): number => {
+    const key = `${f}:${a}:${j}:${fieldsToo}`;
+    const known = usesKept.get(key);
+    if (known !== undefined) return known;
+    const n = (e: SExpr): number => {
+      if (e.k === "local") return e.i === a && j === null ? 1 : 0;
+      if ((e.k === "get" || e.k === "field") && e.rec.k === "local" && e.rec.i === a) return j === null ? (fieldsToo ? 1 : 0) : e.i === j ? 1 : 0;
+      if (e.k === "if") return n(e.cond) + Math.max(n(e.then), n(e.else));
+      if (e.k === "tag" && e.rec.k === "local") return 0;
+      if (e.k === "case") return (e.scrut.k === "local" ? 0 : n(e.scrut)) + e.arms.reduce((m, x) => Math.max(m, x ? n(x) : 0), 0);
+      return kids(e).reduce((m, k) => m + n(k), 0);
+    };
+    const v = n(funcs[f].body);
+    usesKept.set(key, v);
+    return v;
+  };
   // The holders of e's value, with env the locals'.
   const av = (self: number, e: SExpr, env: AV[], at: (e: SExpr, v: AV, env: AV[]) => void): AV => {
     const whole = once[self], fields = fieldOnce[self];
+    // A local used only here (or a field of one, read only here), handed
+    // to a function that only reads it or lends it to its answer: no one
+    // holds it after, so what the function takes out of it keeps its
+    // holders (List.turned of the list a map built, its items then moved).
+    const dies = (a: SExpr): boolean =>
+      (a.k === "local" && !plain(funcs[self].locals[a.i]) && usesIn(self, a.i, null) === 1) ||
+      ((a.k === "get" || a.k === "field") && a.rec.k === "local" && usesIn(self, a.rec.i, null, false) === 0 && usesIn(self, a.rec.i, a.i) === 1);
     const v = ((): AV => {
       switch (e.k) {
         case "local": return whole[e.i] ? env[e.i] ?? "S" : "S";
-        case "let": env[e.i] = av(self, e.value, env, at); return av(self, e.body, env, at);
+        case "let": {
+          env[e.i] = av(self, e.value, env, at);
+          // An item read of an array with one holder whose slot is then
+          // replaced, as a map in place does: the item's holders are the
+          // ones the array gave it, the array no longer holding it.
+          const v = e.value;
+          if (v.k === "rt" && op(v) === "get" && v.args[0]?.k === "local" && v.args[1]?.k === "local" && whole[v.args[0].i]) {
+            // (Not known yet while the array isn't.)
+            const a = env[v.args[0].i];
+            if ((a === "T" || (typeof a === "object" && "it" in a)) && replacedAt(e.body, v.args[0].i, v.args[1].i)) env[e.i] = a === "T" ? "T" : a.it;
+          }
+          return av(self, e.body, env, at);
+        }
         case "if": av(self, e.cond, env, at); return meet(av(self, e.then, env, at), av(self, e.else, env, at));
         case "case": {
           env[e.s] = av(self, e.scrut, env, at);
@@ -413,11 +486,11 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
         case "fail": case "abort": kids(e).forEach((k) => av(self, k, env, at)); return "T";
         case "call": {
           const xs = e.args.map((a) => av(self, a, env, at));
-          xs.forEach((x, j) => { const p = params[e.fn]; if (p && !outside.has(e.fn)) { const m = meet(p[j], reads[e.fn][j] || (lends[e.fn][j] && lendable(e.args[j])) ? "S" : x); if (!same(m, p[j])) { p[j] = m; wake(e.fn); } } });
+          xs.forEach((x, j) => { const p = params[e.fn]; if (p && !outside.has(e.fn)) { const m = meet(p[j], !dies(e.args[j]) && (reads[e.fn][j] || (lends[e.fn][j] && lendable(e.args[j]))) ? "S" : x); if (!same(m, p[j])) { p[j] = m; wake(e.fn); } } });
           // What it lent its answer is shared with the answer from here on:
           // a local, or a local's field.
           e.args.forEach((a, j) => {
-            if (reads[e.fn]?.[j] || !lends[e.fn]?.[j]) return;
+            if (reads[e.fn]?.[j] || !lends[e.fn]?.[j] || dies(a)) return;
             if (a.k === "local") env[a.i] = "S";
             else if (a.k === "get" && a.rec.k === "local") { const r = env[a.rec.i], fs = fieldsOf(r); if (fs) env[a.rec.i] = { f: fs.map((y, i) => (i === a.i ? "S" : y)) }; }
             else if (a.k === "field" && a.rec.k === "local") env[a.rec.i] = "S";
@@ -441,6 +514,15 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
           // `both` runs its function twice, on the threads or here: each
           // answer is what the function gives (a copy, from a worker).
           if (e.fn === "both.pure" || e.fn === "both.second") { const cs = bothOf.get(self) ?? [-1]; return cs.reduce<AV>((m, c) => meet(m, results[c] ?? "S"), "T"); }
+          // An array: one holder, and what its items have (C327f part 4d).
+          if (e.fn.startsWith("array.")) {
+            if (o === "empty") return { it: "T" };
+            if (o === "of") return { it: typeof xs[0] === "object" && "it" in xs[0] ? xs[0].it : xs[0] === "T" ? "T" : "S" };
+            if (o === "ofItems") return { it: xs.reduce<AV>((m, x) => meet(m, x), "T") };
+            if (o !== null && MAKES.has(o)) return { it: "S" };
+            if (o !== null && PASSES.has(o)) return typeof xs[0] === "object" && "it" in xs[0] ? { it: capped(meet(xs[0].it, xs[xs.length - 1] ?? "S")) } : xs[0];
+            return "S";
+          }
           return o !== null && MAKES.has(o) ? "U" : o !== null && PASSES.has(o) ? xs[0] : "S";
         }
         default: kids(e).forEach((k) => av(self, k, env, at)); return "S";
@@ -491,12 +573,12 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   }));
   funcs.forEach((g) => {
     const look = (e: SExpr) => {
-      if ((op(e) === "replaceAt" || op(e) === "push" || op(e) === "t:put" || op(e) === "t:remove") && e.k === "rt" && vals.get(e.args[0]) === "U") owned.add(e);
+      if ((op(e) === "replaceAt" || op(e) === "push" || op(e) === "t:put" || op(e) === "t:remove") && e.k === "rt" && one(vals.get(e.args[0]))) owned.add(e);
       kids(e).forEach(look);
     };
     look(g.body);
   });
-  return { owned, one: (i, j) => params[i]?.[j] === "U", into };
+  return { owned, one: (i, j) => one(params[i]?.[j]), into };
 }
 
 // The replaces holders() finds, made `replaceOwned`, and the pushes it

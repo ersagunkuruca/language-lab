@@ -20,7 +20,7 @@
 import type { Id } from "../../ters/src/model.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
 import { holders, type SharedHolders } from "./holders.ts";
-import { isArray, kids, type CoreIR, type SExpr } from "./scalar.ts";
+import { isArray, isRecord, kids, type CoreIR, type SExpr } from "./scalar.ts";
 
 // The program's functions called from outside: main's own.
 const rootsOf = (ir: CoreIR, main: Id) => ir.funcs.flatMap((g, i) => (g.def === main && !g.inner ? [i] : []));
@@ -43,20 +43,30 @@ const REPLACE = /^array\.replaceAt\.a(\d+)$/;
 // are of one type, and the array given has one holder and the map is the
 // last to use it (holders.ts, the map counted as giving it away), the
 // map gives the fold its own array to make, and each push front becomes
-// the replace of slot j: the fold reads slot j before it writes it.
+// the replace of slot j: the fold reads slot j before it writes it, from
+// the array it writes (given an empty one where it read before, as where
+// arrays are counted), so holders.ts sees the item read leave the array
+// (C327f part 4d: the item given to the map's function has the holders
+// the array gave it).
 function mapsInPlace(ir: CoreIR, roots: number[], shared?: SharedHolders): number {
   const found = mapFolds(ir);
   if (!found.length) return 0;
   const maps = new Set(found.map((m) => m.map));
   const h = holders(ir, roots, maps);
-  let n = 0;
+  let n = 0, records = false;
   for (const m of found) {
     if (!h.one(m.map, 0)) continue;
-    m.entry.args[2] = { k: "local", i: 0 };
+    const empty = m.entry.args[2];
+    m.entry.args[2] = m.entry.args[0];
+    m.entry.args[0] = empty;
+    m.get.args[0] = { k: "local", i: 2 };
     Object.assign(m.push, { fn: `array.replaceOwned.a${m.a}`, args: [m.push.args[0], { k: "local", i: m.j }, m.push.args[1]] });
+    if (isRecord(ir.arrays[m.a]?.item)) records = true;
     n++;
   }
-  if (n === found.length) shared?.keep(h);
+  // Kept for the passes after, but where a map of records was written in
+  // place: holders() asked again sees its items leave the array.
+  if (n === found.length && !records) shared?.keep(h);
   return n;
 }
 
