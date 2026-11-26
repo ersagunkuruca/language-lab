@@ -66,3 +66,14 @@ test("solve with a port the function hasn't names its ports", () => {
   const hole = /□#([a-z0-9]+)/.exec(s.view("wrong"))![1];
   assert.throws(() => s.replace(hole, "solve square(z = y) for x → x"), /square has no port z: its ports are x, result/);
 });
+
+// An edit says which other definitions' types it changed: a caller that
+// now carries a Choice is said where the edit is, not 30 definitions on.
+test("replace says which other definitions' types it changed", () => {
+  const s = session("relations");
+  s.define("half", "function", ["y"]);
+  s.define("twice half", "function", ["y"]);
+  s.replace(/□#([a-z0-9]+)/.exec(s.view("twice half"))![1], "half(y) + half(y)");
+  const said = s.replace(/□#([a-z0-9]+)/.exec(s.view("half"))![1], "solve square(result = y) for x → x");
+  assert.match(said, /^also ‹?twice half›? : \(Float64\) -\[Choice\]-> Float64 \(was .+\)$/m, said);
+});
