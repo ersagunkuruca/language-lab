@@ -1645,7 +1645,13 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
     lab_cell *at = lab__chosen("offer file:", alone);
     if (!at) { lab__chosen_none("no place was chosen to keep ", alone); lab_drop(b.f0); lab_drop(name); return; }
     lab_drop(alone);
-    alone = at;
+    // Once written, the screen is told where (a phone hands it on from
+    // there, as its share sheet or a document made for it).
+    lab_dup(at);
+    lab__put_bytes("offerFile", name, at, b);
+    if (!lab_st) { lab_cell *k = lab__chosen("offered:", at); if (k) lab_drop(k); }
+    lab_drop(at);
+    return;
   }
   lab__put_bytes("offerFile", name, alone, b);
 }`,

@@ -116,6 +116,7 @@ test("in a native app's page, offer file keeps the file where the person chose a
   assert.equal(r.status, 0, r.stderr.toString());
   const shown = r.stdout.toString().split("\x1e\n"), said = (x: string) => /"(idle|kept|no [^"]*|bytes[^"]*)"/.exec(x)?.[1];
   assert.match(shown[1], /^ask offer file:take\.bin\n/);
+  assert.match(shown[2], /^ask offered:.*kept\.bin\n/);
   assert.equal(said(shown[2]), "kept");
   assert.deepEqual([...readFileSync(kept)], [1, 2, 255]);
   assert.match(shown[3], /^ask offer file:take\.bin\n/);

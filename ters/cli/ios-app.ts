@@ -595,8 +595,49 @@ static NSURL *picked;
 }
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)c { answered(@"files", NO); F = nil; }
 @end
+// A file the page offers or asks for (L271c): one offered is written in
+// the app's temporary folder, then handed to iOS's share sheet (Save to
+// Files among its choices); one asked for is chosen in the document
+// picker and read from the copy it makes.
+void ters_page_chosen(const char *path);
+@interface TChosen : NSObject <UIDocumentPickerDelegate>
+@end
+static TChosen *C;
+@implementation TChosen
+- (void)documentPicker:(UIDocumentPickerViewController *)c didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+  NSURL *u = urls.firstObject;
+  if (u) ters_page_chosen(u.fileSystemRepresentation);
+  answered(@"ask for file", u != nil);
+  C = nil;
+}
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)c { answered(@"ask for file", NO); C = nil; }
+@end
 static int u_ask(void *c, const char *s, size_t n) {
   NSString *what = str(s, n);
+  if ([what hasPrefix:@"offer file:"]) {
+    NSString *at = [NSTemporaryDirectory() stringByAppendingPathComponent:[what substringFromIndex:11]];
+    ters_page_chosen(at.fileSystemRepresentation);
+    return 1;
+  }
+  if ([what hasPrefix:@"offered:"]) {
+    NSURL *u = [NSURL fileURLWithPath:[what substringFromIndex:8]];
+    printf("offered %s\n", u.lastPathComponent.UTF8String);
+    dispatch_async(dispatch_get_main_queue(), ^{
+      UIActivityViewController *a = [[UIActivityViewController alloc] initWithActivityItems:@[u] applicationActivities:nil];
+      a.popoverPresentationController.sourceView = P.view;
+      [P presentViewController:a animated:YES completion:nil];
+    });
+    return 1;
+  }
+  if ([what hasPrefix:@"ask for file:"]) {
+    if (C) return 0;
+    printf("ask %s\n", what.UTF8String);
+    C = [TChosen new];
+    UIDocumentPickerViewController *d = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeItem] asCopy:YES];
+    d.delegate = C;
+    [P presentViewController:d animated:YES completion:nil];
+    return -1;
+  }
   if ([what isEqualToString:@"files"]) {
     if (F) return 0;
     printf("ask %s\n", what.UTF8String);
