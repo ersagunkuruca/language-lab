@@ -389,3 +389,16 @@ test("the frame drawn on WebGPU is raster.ts's, within Float32's rounding: a ram
   } finally { await browser.close(); }
 });
 
+
+// The flock with its fog pass (G10): every draw of its three passes has a
+// site, the fog's fragment sampling two captured targets, so the page draws
+// on WebGPU rather than falling back to raster.ts.
+test("every draw of flock-frame-page's frame, its fog pass too, has a site", async () => {
+  const { loadProgram } = await import("../../ters/src/lang/load.ts");
+  const p = loadProgram(join(import.meta.dirname, "../../ters/examples/flock-frame-page"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const d = gpuDraws(lowerCore(p.code, info, p.pres.names, [p.named("main")]));
+  assert.deepEqual([...d.refused.values()], []);
+  assert.equal(Object.keys(d.sites).length, 7);
+  assert.ok(Object.values(d.sites).some((s) => (s.textures ?? []).length === 2), "the fog's fragment reads two textures");
+});
