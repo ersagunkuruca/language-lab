@@ -119,6 +119,9 @@ export function replayEvent(root: Node_, name: string, path: number[], at: Given
 // What a part of the page shows when its update ran out of steps: a
 // formula that never ends is typed Diverge, and this is the page handling it.
 export const STUCK = "didn't finish";
+// How many times the time a first draw that ran past it gets when it runs
+// again (I371).
+const AGAIN_TIMES = 4;
 
 // A view with no answer (its Choice gave none: x / 0, say) shows nothing
 // there, as Ersagun decided for L125b: a view only reads, so nothing is
@@ -239,21 +242,37 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
   // handler that stops reads it against its count before, since an update
   // run after it stopped (its cells' flush) can start a budget of its own.
   let timedOut = 0;
-  const budget = <T>(f: () => T): T => {
+  const budget = <T>(f: () => T, times = 1): T => {
     if (!m.within) return withSteps(steps, f);
-    const end = performance.now() + m.within;
+    const end = performance.now() + m.within * times;
     return withSteps(steps, f, () => performance.now() > end && ++timedOut > 0);
   };
   cells.around = (update) => budget(update);
   const watch = (e: Node_, label: string, run: () => void, stuck: () => void = () => {}, made: () => Node_[] = () => [e]) => {
-    let first = true;
+    let first = true, again: Value | undefined, tries = 0;
     const node: CellNode = cells.watch(() => {
+      if (again) cells.read(again);
+      const timed = timedOut;
       // Something it asked for isn't here yet: it keeps what it shows, and
       // runs again when that lands (it read the cell that says so). One
       // that ran out of steps says so; it runs again when a cell it read
       // before stopping changes.
-      try { budget(run); } catch (e) {
-        if (e instanceof OutOfSteps) { stuck(); return; }
+      try { budget(run, AGAIN_TIMES ** tries); } catch (e) {
+        if (e instanceof OutOfSteps) {
+          stuck();
+          // A first draw past its time, not its steps, runs again once the
+          // page has drawn, with more time, once (I371): a slow machine,
+          // or the work a page does once when it starts (its constants,
+          // made the first time a view reads them), passed the time on
+          // the editor's thread, and nothing it read was going to change.
+          if (first && timedOut !== timed && tries < 1) {
+            tries++;
+            const cell = (again ??= cells.cell(0, "again"));
+            cells.read(cell);
+            setTimeout(() => { if (!node.disposed) cells.write(cell, tries); }, 0);
+          }
+          return;
+        }
         if (!(e instanceof Pending)) throw e;
         return;
       }
