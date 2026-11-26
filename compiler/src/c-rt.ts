@@ -25,7 +25,7 @@
 // One with no answer (Choice) sets lab_st to 1 and gives a stand-in.
 
 import { nfcC } from "./c-nfc.ts";
-export interface ListNames { cons: string; nil: string; type: number; tag: number; head: number; record?: string; info?: InfoNames }
+export interface ListNames { cons: string; nil: string; type: number; tag: number; head: number; record?: string; info?: InfoNames; raw?: boolean }
 // File info's C names (C310): its struct, its Instant's, File kind's four
 // cases' cells (plain file, folder, link, special), and its size's type.
 export interface InfoNames { record: string; instant: string; kinds: string[]; size: "int" | "i64" }
@@ -1229,6 +1229,33 @@ static void lab__kept_more(lab_kept_file *k) {
   lab_drop(t);
   return ok;
 }` },
+  // A file's bytes as they are (C350, as C321 in JavaScript and C345 on
+  // WASI), with o.raw: a Bytes's list is then a cell of the bytes
+  // (lab_bytes, c.ts), and the list is made from them the first time
+  // something reads it (lab__bytes_list, once; a list is itself). A file's
+  // 47 MB were 47 million list cells.
+  "world.rawBytes": {
+    uses: [],
+    c: (o) => !o.raw ? "" : `static lab_cell *lab__bytes_raw(const uint8_t *s, size_t n) {
+  if (n > UINT32_MAX) lab_oom();
+  lab_bytes *y = lab_new(sizeof(lab_bytes) + (n ? n : 1), LAB_BYTES_T, 0);
+  y->list = 0; y->n = (uint32_t)n;
+  if (n) memcpy(y->b, s, n);
+  return (lab_cell *)y;
+}
+static lab_cell *lab__bytes_list(lab_cell *c) {
+  if (c->type != LAB_BYTES_T) return c;
+  lab_bytes *y = (lab_bytes *)c;
+  lab_cell *l = __atomic_load_n(&y->list, __ATOMIC_ACQUIRE);
+  if (l) return l;
+  lab_cell *acc = &${o.nil};
+  for (size_t i = y->n; i-- > 0;) { ${o.cons} *k = lab_new(sizeof(${o.cons}), ${o.type}, ${o.tag}); k->f${o.head} = LAB_SMALL(y->b[i]); k->f${1 - o.head} = acc; acc = (lab_cell *)k; }
+  lab_cell *none = 0;
+  if (__atomic_compare_exchange_n(&y->list, &none, acc, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return acc;
+  lab_drop(acc);
+  return none;
+}`,
+  },
   // Bytes from where the reading is, and bytes added at the end (L213c7):
   // Bytes is a record of a list of Ints, its C struct o.record.
   "world.keptBytes": {
@@ -1248,15 +1275,16 @@ static void lab__kept_more(lab_kept_file *k) {
 }`,
   },
   "world.keptAddBytes": {
-    uses: ["world.kept"],
+    uses: ["world.kept", "world.rawBytes"],
     c: (o) => `static int32_t lab_world_keptAddBytes(lab_int f, ${o.record} b) {
   lab_kept_file *k = lab__kept(f);
   size_t n = 0;
-  for (lab_cell *c = b.f0; c->tag == ${o.tag}; c = ((${o.cons} *)c)->f${1 - o.head}) n++;
+  lab_cell *items = ${o.raw ? "lab__bytes_list(b.f0)" : "b.f0"};
+  for (lab_cell *c = items; c->tag == ${o.tag}; c = ((${o.cons} *)c)->f${1 - o.head}) n++;
   uint8_t *buf = malloc(n ? n : 1);
   if (!buf) lab_oom();
   n = 0;
-  for (lab_cell *c = b.f0; c->tag == ${o.tag}; c = ((${o.cons} *)c)->f${1 - o.head}) buf[n++] = (uint8_t)LAB_VAL(((${o.cons} *)c)->f${o.head});
+  for (lab_cell *c = items; c->tag == ${o.tag}; c = ((${o.cons} *)c)->f${1 - o.head}) buf[n++] = (uint8_t)LAB_VAL(((${o.cons} *)c)->f${o.head});
   int ok = k && write(k->fd, buf, n) == (ssize_t)n;
   free(buf);
   lab_drop(b.f0);
@@ -1619,7 +1647,7 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
   // world.ts answers read bytes and write bytes): Bytes is a record of a
   // list of Ints, its C struct o.record, as the kept files' (L213c7).
   "world.readBytes": {
-    uses: ["world.fail", "world.logBytes"],
+    uses: ["world.fail", "world.logBytes", "world.rawBytes"],
     c: (o) => `static ${o.record} lab_world_readBytes(lab_cell *path) {
   if (lab__log_begin("readBytes")) lab__log_text(path);
   char *p = lab__path(path);
@@ -1632,8 +1660,8 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
   for (size_t got; (got = fread(s + n, 1, cap - n, f)) > 0;) { n += got; if (n == cap) { s = realloc(s, cap *= 2); if (!s) lab_oom(); } }
   fclose(f);
   if (lab_log_open) { lab__log_answer(); lab__log_bytes(s, n); lab__log_close(); }
-  lab_cell *acc = &${o.nil};
-  for (size_t i = n; i-- > 0;) { ${o.cons} *c = lab_new(sizeof(${o.cons}), ${o.type}, ${o.tag}); c->f${o.head} = LAB_SMALL(s[i]); c->f${1 - o.head} = acc; acc = (lab_cell *)c; }
+  ${o.raw ? "lab_cell *acc = lab__bytes_raw(s, n);" : `lab_cell *acc = &${o.nil};
+  for (size_t i = n; i-- > 0;) { ${o.cons} *c = lab_new(sizeof(${o.cons}), ${o.type}, ${o.tag}); c->f${o.head} = LAB_SMALL(s[i]); c->f${1 - o.head} = acc; acc = (lab_cell *)c; }`}
   free(s);
   lab_drop(path);
   return (${o.record}){ acc };
@@ -1642,14 +1670,22 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
   // Bytes written as a file, logged as op with the path given: write
   // bytes's, and offer file's under the name alone (L271c).
   "world.putBytes": {
-    uses: ["world.fail", "world.logBytes"],
+    uses: ["world.fail", "world.logBytes", "world.rawBytes"],
     c: (o) => `static void lab__put_bytes(const char *op, lab_cell *given, lab_cell *path, ${o.record} b) {
   size_t n = 0;
+  uint8_t *buf;${o.raw ? `
+  if (b.f0->type == LAB_BYTES_T) {
+    n = ((lab_bytes *)b.f0)->n;
+    buf = malloc(n ? n : 1);
+    if (!buf) lab_oom();
+    memcpy(buf, ((lab_bytes *)b.f0)->b, n);
+  } else {` : " {"}
   for (lab_cell *c = b.f0; c->tag == ${o.tag}; c = ((${o.cons} *)c)->f${1 - o.head}) n++;
-  uint8_t *buf = malloc(n ? n : 1);
+  buf = malloc(n ? n : 1);
   if (!buf) lab_oom();
   n = 0;
   for (lab_cell *c = b.f0; c->tag == ${o.tag}; c = ((${o.cons} *)c)->f${1 - o.head}) buf[n++] = (uint8_t)LAB_VAL(((${o.cons} *)c)->f${o.head});
+  }
   lab_drop(b.f0);
   if (lab__log_begin(op)) { lab__log_text(given); lab__log_raw(","); lab__log_bytes(buf, n); lab__log_write(); }
   if (given != path) lab_drop(given);
