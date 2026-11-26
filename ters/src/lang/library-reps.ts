@@ -15,7 +15,7 @@
 
 import { COPIED_FROM, NODE_COPIED_FROM, originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM } from "./prelude-ids.ts";
 import { stableIds } from "../stable-ids.ts";
-import { bindsOf, children, ownerOfTypeParts, dependencies, dependenciesOfAll, layerOf, onLayer, freshId, idsMadeBy, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call, copyNodes, nodeEntries, withNodes } from "../model.ts";
+import { bindsOf, children, ownerOfTypeParts, dependencies, dependenciesOfAll, layerOf, onLayer, freshId, idsMadeBy, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call, copyNodes, nodeEntries, withNodes, ownNodeIds, sameValue, litOrigin } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { checksKept, infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
@@ -117,6 +117,27 @@ function unpinnedOf(pins: Pins | undefined, types: Set<Id>, takes: (d: Id) => bo
   return dropped ? out : null;
 }
 
+// The choice's program with each node it holds itself that is the same
+// as the last choice's of these definitions the last one's object (its
+// ids are named by what they hold, stably): what is kept by node objects
+// (the check's texts of definitions, check-cache.ts defText; the passes
+// after) finds them, where the rewrite made every node it holds anew.
+const lastChosen = keptMap<string, Code>();
+function sameNodesAsBefore(code: Code): void {
+  const key = code.defs.join(" ");
+  const was = lastChosen.get(key);
+  if (lastChosen.size >= 8 && !was) lastChosen.clear();
+  lastChosen.set(key, code);
+  if (!was || was === code) return;
+  const own = ownNodeIds(code.nodes), theirs = new Set(ownNodeIds(was.nodes));
+  for (const id of own) {
+    if (!theirs.has(id)) continue;
+    const a = code.nodes[id], b = was.nodes[id];
+    // (A literal copied from the same one: model.ts litOrigin.)
+    if (a !== b && a !== undefined && b !== undefined && sameValue(a, b) && litOrigin(a) === litOrigin(b)) code.nodes[id] = b;
+  }
+}
+
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
   // A match on an Int's cases is written out on Int before Nat is stored
   // (int-cases.ts, L249b).
@@ -126,6 +147,7 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     const choose = () => choiceOf(code, info, names, main, defs, asked, skip, options);
     const r = checksKept(info.options) ? stably(idsMadeBy(choose), code, defs) : choose();
     if (!r.reps.length) return { code, names, chosen: [], insiders: [] };
+    if (checksKept(info.options)) sameNodesAsBefore(r.code);
     // The program's own options where nothing is added, so the check reads
     // through to the library's, kept for those options (infer.ts `under`):
     // checked anew, the library is most of a second (C196's splits).
