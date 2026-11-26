@@ -40,7 +40,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| I383 | Comment statuses say "Comment saved." and, on Undo, "the comments changed back" (were "… on the node itself, not on a line." and "the notes") (QA-2026-11-26b L2) | #PR |
+| I383 | Comment statuses say "Comment saved." and, on Undo, "the comments changed back" (were "… on the node itself, not on a line." and "the notes") (QA-2026-11-26b L2) | #3428 |
 | I382 | A node widens for its comment's first line, up to 180 px, past which the row is cut (a value's 30 px said "n…"); values, gets, calls, cases and matches. graph-steps.test (QA-2026-11-26b L1) | #3427 |
 | I381 | A frame's own comment (a function, a case arm) is its top row, inside its box, above its title, open or folded, as a node's is (E316); a folded frame around it counts it in its speech mark. Before, only the inspector and Blocks showed it. graph-steps.test (QA-2026-11-26b M1) | #3424 |
 | I380 | The drawing reads a draw's instances once, a list over an array as that array, and a list sent by an earlier draw of the frame whose site reads the same leaves isn't sent again; a list is compared by its items, since compiled code hands each draw a list of its own over the array it keeps. flock-frame-page at 20,000 birds: 1.44 MB a frame to 480 KB (as by hand), drawing 11.9 to 4.6 ms; at 2,000, 1.32 to 0.6 ms. gpu-frame-sends.test counts on a stand-in device (GAPS game round 4 FR3, FR4) | #3421 |
