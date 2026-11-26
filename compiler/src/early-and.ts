@@ -15,6 +15,7 @@
 // conditional `and`, 1960), here found in a fold the program writes with
 // the strict `and`.
 
+import { readValue } from "./ir-again.ts";
 import { kids, type CoreIR, type SExpr, type SFunc } from "./scalar.ts";
 
 // What a round may do and still be left out.
@@ -69,7 +70,7 @@ function counted(f: SFunc, fi: number, calls: (SExpr & { k: "call" })[], bound: 
   const scan = (e: SExpr) => { if (e.k === "let") lets.set(e.i, e.value); kids(e).forEach(scan); };
   scan(f.body);
   const val = (e: SExpr): SExpr => (e.k === "local" && lets.has(e.i) ? val(lets.get(e.i)!) : e);
-  const one = (e: SExpr): boolean => (e.k === "int" && e.v === 1n) || (e.k === "rt" && e.fn === "i64.lit" && one(e.args[0]));
+  const one = (e: SExpr): boolean => (e.k === "int" && (readValue(e), e.v === 1n)) || (e.k === "rt" && e.fn === "i64.lit" && one(e.args[0]));
   const step = (e: SExpr, i: number) => { const v = val(e); return v.k === "rt" && /^(int|i64)\.add$/.test(v.fn) && v.args[0].k === "local" && v.args[0].i === i && one(v.args[1]); };
   // The loop's first test: i = n, its answer on one side and the rounds on the other.
   const top = ((e: SExpr): SExpr => (e.k === "let" ? (e.body.k === "if" ? e.body : e) : e))(f.body);

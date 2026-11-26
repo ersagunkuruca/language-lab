@@ -861,6 +861,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
 // handle (handlers.ts, C64b), so a program's own effect answered in place
 // (effects' Ask) needs no handler at run time (C137c17).
 import { reachedImplementing } from "../../ters/src/lang/reached.ts";
+import { passesAgain } from "./ir-again.ts";
 export { reachedImplementing };
 
 export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): CoreIR {
@@ -891,73 +892,79 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   ({ code, info, names } = overLiterals(`lowering's front ${roots.join(" ")}`, { code, info, names }, () => front(code, info, names, roots)));
   const f = overLiterals(`handlers put in ${roots.join(" ")}`, { code, info, names }, () => fusedProgram(code, info, names));
   let ir = lowerScalar(f.code, endsAsBefore(given, f.info), f.names, roots, { data: true, host: true, printed: (c, id) => planOf(c, `solve:${id}`) !== null });
-  // A linear function of a linear function, one matrix (linear-calls.ts, L44).
-  if (!envSet("NO_LINEAR")) linearCalls(ir);
-  // Parts always 0 (a vector's bivector parts) dropped, with a copy of a
-  // function for each set of parts its callers give (zero-parts.ts, L43).
-  if (!envSet("NO_ZP")) ir = zeroParts(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))).ir;
-  // A read or write at an item path, given the path's parts (C273).
-  if (!envSet("NO_ITEM_PATHS")) itemPaths(ir);
-  // A closure made only to be applied at once, a call of its code (C288).
-  if (!envSet("NO_KNOWN_CLOSURES")) knownClosures(ir);
-  // Small pure functions put in place, so that sharing reaches across
-  // them (C194); then a pure call made twice with the same inputs, made
-  // once (C189).
-  if (!envSet("NO_INLINE")) inlineSmall(ir);
-  // A choice over a range's items as one Float64, no list (C207s).
-  if (!envSet("NO_RANGE_CHOICES")) rangeChoices(ir, true);
-  // `keep` over an array's items a loop pushing the kept ones (G1b1).
-  if (!envSet("NO_KEPT_ITEMS")) keptItems(ir);
-  // And a loop folding a Bool with `and` stopping once it's false (C207m).
-  if (!envSet("NO_EARLY_AND")) earlyAnd(ir);
-  // And `array of range x` of Ints filled with no list (C228, as C207v
-  // on WebAssembly): depot's `indices`, made for each search.
-  if (!envSet("NO_RANGE_ARRAYS")) rangeArrays(ir);
-  // An array a function walks by its rests, read by position (C196).
-  if (!envSet("NO_OFFSETS")) arrayOffsets(ir);
-  if (!envSet("NO_SHARE")) shareCalls(ir);
-  // An array of a written list made from its items, with no list between
-  // (C196: agent's triangle corners, three points an array each call).
-  writtenArrays(ir);
-  // A replace in an array of a type whose every value has one holder,
-  // written in place (owned-arrays.ts, C93 s4).
-  // The passes after it read one holders() (sharedHolders).
-  const shared = sharedHolders(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
-  if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, roots[0], true, shared);
-  // And each other replace whose array has one holder, decided per value
-  // (holders.ts, C327f).
-  if (!envSet("NO_OWN") && !envSet("NO_HOLDERS")) ownedPerValue(ir, [], shared);
-  // And puts and removes on tables nobody else holds (owned-tables.ts).
-  if (!envSet("NO_OWN") && !envSet("NO_OWN_TABLES") && roots.length === 1) ownedTables(ir, roots[0], shared);
-  // A push onto an array a call just made, on its view (C196).
-  if (!envSet("NO_PUSHES")) ownedPushes(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
-  // And records rebuilt from their own fields (owned-records.ts, C93 s5).
-  if (!envSet("NO_OWN") && !envSet("NO_OWN_RECORDS") && roots.length === 1) ownedRecords(ir, code, info, names, roots[0]);
-  // A loop putting what it keeps in front, pushing at the end going
-  // down instead (G1b2), so columns can grow it.
-  if (!envSet("NO_GROW_COLUMNS")) pushedInOrder(ir);
-  // Arrays of records whose loops read and write them field by field, as
-  // an array per field (columns.ts, C60).
-  if (!envSet("NO_COLUMNS")) columns(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])), { whole: !envSet("NO_WHOLE_COLUMNS"), grow: !envSet("NO_GROW_COLUMNS") });
-  // The pushes holders.ts found onto arrays nobody else holds, as columns
-  // left them.
-  ownPushes(ir);
-  // Then calls put in place for the printed code: a function called from
-  // one place, or a small one, whatever it does (inline-small.ts).
-  if (!envSet("NO_INLINE_CALLS")) inlineCalls(ir, (i) => ir.info.divergent.has(ir.funcs[i].def));
-  // A record chosen between and read only by its parts, as its parts
-  // (chosen-parts.ts, G3d): the flock's neighbour, no bird made for it.
-  if (!envSet("NO_CHOSEN_PARTS")) chosenParts(ir);
-  // Small functions using the runtime's reads put in place in loops, so
-  // a loop reads the arrays it keeps from their buffers and counts in
-  // numbers (inline-small.ts, kept-arrays.ts, C303b).
-  if (!envSet("NO_INLINE")) inlineSmall(ir, true);
-  // And a record such a loop carries round, as its fields, where its
-  // fields are read only in what was put in place (loop-records.ts, C304a).
-  if (!envSet("NO_LOOP_RECORDS")) loopRecords(ir);
-  // And a record chosen between there read by its parts (C304c: a column
-  // array's `item at` or else a constant Dual, put in place in mnist's dot).
-  if (!envSet("NO_CHOSEN_PARTS")) chosenParts(ir);
+  // The passes up to the Ints' ranges read numbers' values only where
+  // they say so (ir-again.ts readValue): an edit of a number takes their
+  // last answer with the new values put in (machine's 250 ms a number edit).
+  ir = passesAgain(`lowered ${roots.join(" ")}`, ir, (ir) => {
+    // A linear function of a linear function, one matrix (linear-calls.ts, L44).
+    if (!envSet("NO_LINEAR")) linearCalls(ir);
+    // Parts always 0 (a vector's bivector parts) dropped, with a copy of a
+    // function for each set of parts its callers give (zero-parts.ts, L43).
+    if (!envSet("NO_ZP")) ir = zeroParts(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))).ir;
+    // A read or write at an item path, given the path's parts (C273).
+    if (!envSet("NO_ITEM_PATHS")) itemPaths(ir);
+    // A closure made only to be applied at once, a call of its code (C288).
+    if (!envSet("NO_KNOWN_CLOSURES")) knownClosures(ir);
+    // Small pure functions put in place, so that sharing reaches across
+    // them (C194); then a pure call made twice with the same inputs, made
+    // once (C189).
+    if (!envSet("NO_INLINE")) inlineSmall(ir);
+    // A choice over a range's items as one Float64, no list (C207s).
+    if (!envSet("NO_RANGE_CHOICES")) rangeChoices(ir, true);
+    // `keep` over an array's items a loop pushing the kept ones (G1b1).
+    if (!envSet("NO_KEPT_ITEMS")) keptItems(ir);
+    // And a loop folding a Bool with `and` stopping once it's false (C207m).
+    if (!envSet("NO_EARLY_AND")) earlyAnd(ir);
+    // And `array of range x` of Ints filled with no list (C228, as C207v
+    // on WebAssembly): depot's `indices`, made for each search.
+    if (!envSet("NO_RANGE_ARRAYS")) rangeArrays(ir);
+    // An array a function walks by its rests, read by position (C196).
+    if (!envSet("NO_OFFSETS")) arrayOffsets(ir);
+    if (!envSet("NO_SHARE")) shareCalls(ir);
+    // An array of a written list made from its items, with no list between
+    // (C196: agent's triangle corners, three points an array each call).
+    writtenArrays(ir);
+    // A replace in an array of a type whose every value has one holder,
+    // written in place (owned-arrays.ts, C93 s4).
+    // The passes after it read one holders() (sharedHolders).
+    const shared = sharedHolders(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
+    if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, roots[0], true, shared);
+    // And each other replace whose array has one holder, decided per value
+    // (holders.ts, C327f).
+    if (!envSet("NO_OWN") && !envSet("NO_HOLDERS")) ownedPerValue(ir, [], shared);
+    // And puts and removes on tables nobody else holds (owned-tables.ts).
+    if (!envSet("NO_OWN") && !envSet("NO_OWN_TABLES") && roots.length === 1) ownedTables(ir, roots[0], shared);
+    // A push onto an array a call just made, on its view (C196).
+    if (!envSet("NO_PUSHES")) ownedPushes(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
+    // And records rebuilt from their own fields (owned-records.ts, C93 s5).
+    if (!envSet("NO_OWN") && !envSet("NO_OWN_RECORDS") && roots.length === 1) ownedRecords(ir, code, info, names, roots[0]);
+    // A loop putting what it keeps in front, pushing at the end going
+    // down instead (G1b2), so columns can grow it.
+    if (!envSet("NO_GROW_COLUMNS")) pushedInOrder(ir);
+    // Arrays of records whose loops read and write them field by field, as
+    // an array per field (columns.ts, C60).
+    if (!envSet("NO_COLUMNS")) columns(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])), { whole: !envSet("NO_WHOLE_COLUMNS"), grow: !envSet("NO_GROW_COLUMNS") });
+    // The pushes holders.ts found onto arrays nobody else holds, as columns
+    // left them.
+    ownPushes(ir);
+    // Then calls put in place for the printed code: a function called from
+    // one place, or a small one, whatever it does (inline-small.ts).
+    if (!envSet("NO_INLINE_CALLS")) inlineCalls(ir, (i) => ir.info.divergent.has(ir.funcs[i].def));
+    // A record chosen between and read only by its parts, as its parts
+    // (chosen-parts.ts, G3d): the flock's neighbour, no bird made for it.
+    if (!envSet("NO_CHOSEN_PARTS")) chosenParts(ir);
+    // Small functions using the runtime's reads put in place in loops, so
+    // a loop reads the arrays it keeps from their buffers and counts in
+    // numbers (inline-small.ts, kept-arrays.ts, C303b).
+    if (!envSet("NO_INLINE")) inlineSmall(ir, true);
+    // And a record such a loop carries round, as its fields, where its
+    // fields are read only in what was put in place (loop-records.ts, C304a).
+    if (!envSet("NO_LOOP_RECORDS")) loopRecords(ir);
+    // And a record chosen between there read by its parts (C304c: a column
+    // array's `item at` or else a constant Dual, put in place in mnist's dot).
+    if (!envSet("NO_CHOSEN_PARTS")) chosenParts(ir);
+    return ir;
+  });
   // Ints known small worked out as numbers (int-ranges.ts, C267).
   if (!envSet("NO_INT_RANGES")) intRanges(ir, new Set(ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))));
   // Reads that wait on the places their values are used at (C162).

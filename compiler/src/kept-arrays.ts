@@ -20,6 +20,7 @@
 // mnist's Newton dot over Duals): its length and columns worked out once,
 // each read an index into a column. Columns have no versions.
 
+import { readValue } from "./ir-again.ts";
 import { kids, type CoreIR, type SExpr } from "./scalar.ts";
 
 export const ARRAY_READ = /^array\.(at|get|length|cin|cget\d+|clength)\.a\d+$/;
@@ -173,7 +174,7 @@ export function countedInts(ir: CoreIR, fi: number): Counted | null {
   // A constant, an input, or the length of an input array: its key, and
   // the Int input it reads.
   const steady = (e: SExpr): [string, number | undefined] | null => {
-    const v = e.k === "int" ? e.v : e.k === "local" ? lits.get(e.i) : undefined;
+    const v = e.k === "int" ? (readValue(e), e.v) : e.k === "local" ? lits.get(e.i) : undefined;
     if (v !== undefined) return v < SMALL && v > -SMALL ? [`${v}`, undefined] : null;
     if (e.k === "rt" && LENGTH.test(e.fn) && e.args.length === 1) {
       const a = alias(e.args[0]);
@@ -191,7 +192,7 @@ export function countedInts(ir: CoreIR, fi: number): Counted | null {
       case "let":
         if (binds.get(e.i) === 1 && !e.check && !e.seeded) {
           if (e.value.k === "local" && e.value.i < n) { of.set(e.i, e.value.i); walk(e.body); return; }
-          if (e.value.k === "int") { lits.set(e.i, e.value.v); walk(e.body); return; }
+          if (e.value.k === "int") { readValue(e.value); lits.set(e.i, e.value.v); walk(e.body); return; }
         }
         break;
       case "rt":
@@ -216,7 +217,7 @@ export function countedInts(ir: CoreIR, fi: number): Counted | null {
                 needs(j, st[1]);
                 stepNodes.push([a, j]);
                 stepped.set(j, (stepped.get(j) ?? 0) + 1);
-                const by = alias(x) === j ? y : x, lit = by.k === "int" ? by.v : by.k === "local" ? lits.get(by.i) : undefined;
+                const by = alias(x) === j ? y : x, lit = by.k === "int" ? (readValue(by), by.v) : by.k === "local" ? lits.get(by.i) : undefined;
                 stepOf.set(j, { down: a.fn === "int.sub", by: lit ?? st[1]!, input: lit === undefined });
                 return;
               }
@@ -263,17 +264,17 @@ export function boundedReads(ir: CoreIR, fi: number, kept: Map<number, number>, 
   let e = f.body;
   while (e.k === "let") {
     if (e.value.k === "local" && e.value.i < n) of.set(e.i, e.value.i);
-    else if (e.value.k === "int") lits.set(e.i, e.value.v);
+    else if (e.value.k === "int") { readValue(e.value); lits.set(e.i, e.value.v); }
     e = e.body;
   }
   if (e.k !== "if") return null;
-  const lit = (x: SExpr) => (x.k === "int" ? x.v : x.k === "local" ? lits.get(x.i) : undefined);
+  const lit = (x: SExpr) => (x.k === "int" ? (readValue(x), x.v) : x.k === "local" ? lits.get(x.i) : undefined);
   const alias = (x: SExpr) => (x.k === "local" ? of.get(x.i) : undefined);
   // The test as "c ≥ 1", and which way goes on (its own lets first).
   let cond = e.cond, flip = false;
   while (cond.k === "let") {
     if (cond.value.k === "local" && cond.value.i < n) of.set(cond.i, cond.value.i);
-    else if (cond.value.k === "int") lits.set(cond.i, cond.value.v);
+    else if (cond.value.k === "int") { readValue(cond.value); lits.set(cond.i, cond.value.v); }
     cond = cond.body;
   }
   if (cond.k === "op" && cond.op === "not" && cond.args.length === 1) { cond = cond.args[0]; flip = true; }
