@@ -5210,6 +5210,35 @@ the rest the FFT's lists.
 Nothing reaches 10%. What is left is the FFT as the library writes it
 (C278: arrays slower; round 20: fused maps slower). Closed as measured.
 
+### strings, the library FFT on arrays (L292, 11-26, Language lane)
+
+The signals module's `fft` takes its list into one array and recurses
+over it by start and step (`fft of array`), each transform filled where
+it is made (fill-arrays.ts), never copied out into lists of evens and
+odds or zipped. The roots of unity are worked out once for the whole
+length: root k of a part `step` apart is the whole's root k·step, the
+same bits, since 2π·(k·step)/(n·step) rounds as 2π·k/n does when step is
+a power of two. So n/2 calls of `from polar` instead of n/2 at every
+level; a pair of items at the bottom is put together at once (no arrays
+of one item); each product a + b·root and a − b·root worked out where it
+is used. The same sums of the same products in the same order, so every
+target prints what it did (strings.test.ts, examples-agree on tuner,
+strum-tuner, frets, looper). An array made in a loop given its length as
+room first was tried by hand on the printed module: no change, not built.
+
+| strings, 8 blocks | before | after |
+|---|---|---|
+| the FFT, one thread (profile) | 787 ms | 493 ms |
+| core IR (bench, median of 3) | 2426 ms, 24.6x | 2014 ms, 19.2x |
+| core IR, 32 blocks | 10455 ms, 26.7x | 9544 ms, 23.8x |
+| native (a process) | 714 ms | 311 ms |
+| wasi (a process) | 1011 ms | 873 ms |
+
+What is left of the FFT in core IR is the fill's loop: a call per item
+that makes a Complex for the push to take apart again, and the collector
+behind it; YIN's `difference` loop is the next largest (its bounds check
+per item, Compiler lane).
+
 ## Round 22: mnist, a network learning digits, raced against Python (2026-11-23)
 
 Ersagun asked (2026-11-23): "Can we do ML, on the GPU? We have matrices

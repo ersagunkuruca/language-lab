@@ -18,7 +18,7 @@ import { merge, type Id, nodeIds } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import { ARITH, CONS, INT_OPS, NIL, PAIR_V, S, std } from "./std.ts";
+import { ARITH, ARRAY_OPS, CONS, INT_OPS, NIL, PAIR_V, S, std } from "./std.ts";
 
 export function buildSignals(pre: Module, nums: Module): Module {
   const k = new Lang(merge(prelude, std, pre.code, nums.code));
@@ -41,15 +41,6 @@ export function buildSignals(pre: Module, nums: Module): Module {
   const re = (z: Id, body: (re: Id, im: Id) => Id) => k.match(z, [{ variant: complexV, names: ["re", "im"], body: ([a, b]) => body(a, b) }]);
   const pairOf = (p: Id, names: [string, string], body: (a: Id, b: Id) => Id) => k.match(p, [{ variant: PAIR_V, names, body: ([a, b]) => body(a, b) }]);
 
-  // The items at even places and at odd places, in order: each item goes
-  // to the front of the rest's odd ones, which are then its even ones.
-  const alternate = k.def("evens and odds");
-  k.define(alternate, k.fn(["items"], (xs) => k.fold(xs, [
-    { variant: NIL, names: [], body: () => k.call(PAIR_V, NIL, NIL) },
-    { variant: CONS, names: ["item", "rest"], results: [null, "the rest's evens and odds"], body: ([x], [, r]) =>
-      pairOf(r!, ["evens", "odds"], (e, o) => k.call(PAIR_V, k.call(CONS, x, o), e)) },
-  ])));
-
   // e^(sign·2πi·k/n), the root of unity a transform turns by.
   const turn = (sign: number, kk: Id, n: Id) => k.call(polar, k.lit(1), f.mul(k.lit(sign), over(f.mul(tau(), i.float(kk)), i.float(n), "length")));
 
@@ -61,17 +52,42 @@ export function buildSignals(pre: Module, nums: Module): Module {
       k.call(sum, k.call(map, k.call(numbered, xs), k.fn(["numbered item"], (p) =>
         pairOf(p, ["j", "x"], (j, x) => k.call(ARITH.mul, x, turn(-1, i.mul(j, kk), n)))))))))));
 
+  // The fft of the n items of an array from `start`, `step` apart, as an
+  // array: its even items' and odd items' transforms are the ones `step`
+  // twice as far apart, so the items are never copied out into lists,
+  // and each half is filled where it is made (fill-arrays.ts). An item is
+  // there by the parameters, so `item at` never fails: the 0 is never
+  // read. The roots of unity are worked out once, for the whole length:
+  // e^(−2πi·k/n) is the whole's root k·step, the same bits, since
+  // 2π·(k·step)/(n·step) rounds as 2π·k/n does for a power of two step.
+  // So the same sums of the same products in the same order as on a
+  // list, n/2 roots made instead of n/2 at every level. A pair is put
+  // together at once, and each product worked out where it is added and
+  // where it is taken away, as the list's turned odd item was used twice.
+  const itemOf = (xs: Id, j: Id) => k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.at, xs, j)), k.thunk(() => k.call(complexV, k.lit(0), k.lit(0))));
+  const filled = (n: Id, name: string, f: (j: Id) => Id) => k.call(ARRAY_OPS.of, k.call(map, k.call(INT_OPS.range, n), k.fn([name], f)));
+  const fftAt = k.def("fft of array");
+  // Item j of a half's pair put together: a + b·root or a − b·root.
+  const both = (j: Id, h: () => Id, a: (kk: Id) => Id, b: (kk: Id) => Id, root: (kk: Id) => Id) => k.if(i.less(j, h()),
+    k.call(ARITH.add, a(j), k.call(ARITH.mul, b(j), root(j))),
+    k.let("k", i.sub(j, h()), (kk) => k.call(ARITH.sub, a(kk), k.call(ARITH.mul, b(kk), root(kk)))));
+  k.define(fftAt, k.fn(["items", "roots", "start", "step", "n"], (xs, roots, start, step, n) =>
+    k.if(i.less(n, k.int(2)), filled(n, "j", () => itemOf(xs, start)),
+      k.if(k.call(S.equal, n, k.int(2)),
+        k.let("first", itemOf(xs, start), (x0) => k.let("second", itemOf(xs, i.add(start, step)), (x1) => k.let("root", itemOf(roots, k.int(0)), (r) =>
+          filled(n, "j", (j) => both(j, () => k.int(1), () => x0, () => x1, () => r))))),
+        k.if(k.call(S.equal, k.call(INT_OPS.bitAnd, n, k.int(1)), k.int(1)),
+          k.call(ARRAY_OPS.of, k.call(dft, k.call(map, k.call(INT_OPS.range, n), k.fn(["j"], (j) => itemOf(xs, i.add(start, i.mul(j, step))))))),
+          k.let("half", k.call(INT_OPS.shiftDown, n, k.int(1)), (h) =>
+            k.let("evens' transform", k.call(fftAt, xs, roots, start, i.mul(step, k.int(2)), h), (fe) =>
+              k.let("odds' transform", k.call(fftAt, xs, roots, i.add(start, step), i.mul(step, k.int(2)), h), (fo) =>
+                filled(n, "j", (j) => both(j, () => h, (kk) => itemOf(fe, kk), (kk) => itemOf(fo, kk), (kk) => itemOf(roots, i.mul(kk, step))))))))))));
+
   const fft = k.def("fft");
   k.define(fft, k.fn(["items"], (xs) => k.let("n", k.call(length, xs), (n) =>
     k.if(i.less(n, k.int(2)), xs,
       k.if(k.call(S.equal, k.call(INT_OPS.bitAnd, n, k.int(1)), k.int(1)), k.call(dft, xs),
-        pairOf(k.call(alternate, xs), ["evens", "odds"], (e, o) =>
-          k.let("evens' transform", k.call(fft, e), (fe) =>
-            k.let("odds' transform turned", k.call(map, k.call(numbered, k.call(fft, o)), k.fn(["numbered item"], (p) =>
-              pairOf(p, ["k", "x"], (kk, x) => k.call(ARITH.mul, x, turn(-1, kk, n))))), (to) =>
-              k.call(append,
-                k.call(map, k.call(zipped, fe, to), k.fn(["both"], (b) => pairOf(b, ["a", "b"], (a, bb) => k.call(ARITH.add, a, bb)))),
-                k.call(map, k.call(zipped, fe, to), k.fn(["both"], (b) => pairOf(b, ["a", "b"], (a, bb) => k.call(ARITH.sub, a, bb)))))))))))));
+        k.call(ARRAY_OPS.items, k.call(fftAt, k.call(ARRAY_OPS.of, xs), filled(k.call(INT_OPS.shiftDown, n, k.int(1)), "k", (kk) => turn(-1, kk, n)), k.int(0), k.int(1), n)))))));
 
   // The inverse by the forward one: conj(fft(conj(X))) / n.
   const ifft = k.def("inverse fft");
@@ -143,7 +159,7 @@ export function buildSignals(pre: Module, nums: Module): Module {
   ])));
 
   const offered = [fft, ifft, spectrum, hann, windowed, xcorr, acorr, peaks, vertex, pow2, padded];
-  const helpers = [alternate, dft, doubling, peaksFrom];
+  const helpers = [fftAt, dft, doubling, peaksFrom];
   const comments: Record<Id, string> = {
     [fft]: "The discrete Fourier transform of a list of complex numbers: item k is Σ x_j·e^(−2πi·jk/n). Any length; a power of two takes n log n steps. Cooley and Tukey's radix-2 split (1965).",
     [ifft]: "The inverse of fft: inverse fft(fft(xs)) is xs again.",
@@ -156,7 +172,7 @@ export function buildSignals(pre: Module, nums: Module): Module {
     [vertex]: "Where the top of the parabola through three evenly spaced values is, from the middle one: 0 when the middle is the top, between −½ and ½ when it is the highest of the three.",
     [pow2]: "The smallest power of two that is at least n: the length an FFT is quickest at.",
     [padded]: "The samples with zeros after them, to size items in all.",
-    [alternate]: "The items at even places and at odd places, in order. A helper of fft. Not offered.",
+    [fftAt]: "The fft of n items of an array, from start, step apart, as an array, by the whole length's roots of unity. A helper of fft. Not offered.",
     [dft]: "The transform as written, n² steps. A helper of fft for lengths with no 2 in them. Not offered.",
     [doubling]: "A helper of power of two at least. Not offered.",
     [peaksFrom]: "A helper of peaks. Not offered.",
