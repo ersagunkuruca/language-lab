@@ -26,6 +26,13 @@ import { toFile } from "../ters/src/files.ts";
 const page = process.argv[2] ?? new URL("../index.html", import.meta.url).href;
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : { channel: "chrome" });
 const errors: string[] = [];
+// No step waits forever (I367): Playwright's own wait has no end, so one
+// whose element never came (a graph not drawn) held the nightly's browser
+// job until its limit with nothing said; past this it throws, and the
+// smoke says where.
+const STEP_MS = 30_000;
+async function contextOf(o?: Parameters<typeof browser.newContext>[0]) { const c = await browser.newContext(o); c.setDefaultTimeout(STEP_MS); return c; }
+async function pageOf(o?: Parameters<typeof browser.newPage>[0]) { const c = await contextOf(o), p = await c.newPage(); p.on("close", () => void c.close()); return p; }
 let where = "loading";
 // Where it is, each minute, and a stop that says where (I367: on a runner
 // it once used the browser job's whole 45 minutes and printed nothing, the
@@ -33,6 +40,10 @@ let where = "loading";
 const began = Date.now(), SMOKE_LIMIT = Number(process.env.SMOKE_LIMIT ?? 32 * 60);
 const elapsed = () => Math.round((Date.now() - began) / 1000);
 setInterval(() => console.log(`${elapsed()} s: ${where}`), 60_000).unref();
+for (const e of ["uncaughtException", "unhandledRejection"] as const) process.on(e, (err) => {
+  console.error([`stopped at ${where} after ${elapsed()} s: ${err instanceof Error ? err.message : String(err)}`, ...errors].join("\n\n"));
+  process.exit(1);
+});
 setTimeout(() => {
   console.error([`stopped at ${where} after ${elapsed()} s`, ...errors].join("\n\n"));
   process.exit(1);
@@ -48,7 +59,7 @@ async function soon(holds: () => Promise<boolean>, ms = 5000): Promise<boolean> 
 let defs = 0;
 
 async function visit(saved: string | null, only?: string) {
-  const context = await browser.newContext({ viewport: { width: 1400, height: 1000 } });
+  const context = await contextOf({ viewport: { width: 1400, height: 1000 } });
   if (saved) await context.addInitScript((s) => localStorage.setItem("projectional-editor-v5", s), saved);
   const p = await context.newPage();
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
@@ -66,6 +77,9 @@ async function visit(saved: string | null, only?: string) {
     if (only && program !== only) continue;
     where = `${saved ? "saved by an older editor: " : ""}${program}`;
     await click('[data-set="program"]', i);
+    // Its definitions once it's open: read at once, on a slow runner they
+    // were the last program's, and each step after went to that one.
+    if (!(await soon(async () => (await p.locator('[data-set="program"]').nth(i).getAttribute("aria-expanded")) === "true", STEP_MS))) errors.push(`${where}: clicked in the picker, it didn't open`);
     const names = await p.locator("[data-def]").allInnerTexts();
     for (const [j, def] of names.entries()) {
       // Every definition is drawn in Node (test/draws.test.ts); here only
@@ -195,7 +209,7 @@ async function stopped(p: Page) {
 // was, and only what's new is placed (Ersagun 2026-10-27, BACKLOG E144).
 async function editKeepsPlaces() {
   where = "an edit keeps the graph's places";
-  const p = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  const p = await pageOf({ viewport: { width: 1400, height: 900 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator(".nav-row", { hasText: "+ New program" }).click();
@@ -237,7 +251,7 @@ async function editKeepsPlaces() {
 // (BACKLOG E105): two dice's main, scrolled to its end.
 async function textKeepsPlace() {
   where = "the text's scroll on a new selection";
-  const p = await browser.newPage({ viewport: { width: 1280, height: 700 } });
+  const p = await pageOf({ viewport: { width: 1280, height: 700 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
@@ -269,7 +283,7 @@ async function textKeepsPlace() {
 // main, the words output onto another input that takes it.
 async function swapDrop() {
   where = "an output dropped on a filled input";
-  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  const p = await pageOf({ viewport: { width: 1600, height: 1000 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
@@ -302,7 +316,7 @@ async function swapDrop() {
 // wired in (NODE-EDITOR.md "Loose parts", rules 7 and 9; BACKLOG E118).
 async function looseValue() {
   where = "a value added on the canvas";
-  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const p = await pageOf({ viewport: { width: 1280, height: 900 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator("[data-def]", { hasText: /^fall$/ }).click();
@@ -345,7 +359,7 @@ async function looseValue() {
 // 2026-10-26: "are they run in sequence, how are they edited?").
 async function stepOrder() {
   where = "the order of steps";
-  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  const p = await pageOf({ viewport: { width: 1600, height: 1000 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator('[data-set="program"]', { hasText: /physics/ }).first().click();
@@ -434,7 +448,7 @@ async function stepOrder() {
 // matches it is stored as and back (PATTERNS.md, BACKLOG E61 step 3).
 async function patternRows() {
   where = "pattern rows in the graph";
-  const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  const p = await pageOf({ viewport: { width: 1400, height: 1000 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator('[data-set="program"]', { hasText: /countdown/i }).first().click();
@@ -480,7 +494,7 @@ async function patternRows() {
 // first visit opens on fall, E235, so the test opens main.)
 async function firstSteps() {
   where = "a main opens on its steps";
-  const p = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const p = await pageOf({ viewport: { width: 1280, height: 720 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
@@ -503,7 +517,7 @@ async function firstSteps() {
 // takes the frame away. The code is untouched throughout.
 async function groupPicked() {
   where = "group the picked";
-  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const p = await pageOf({ viewport: { width: 1280, height: 900 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator("[data-def]", { hasText: /^fall$/ }).click();
@@ -560,7 +574,7 @@ async function searchGoesOn() {
   k.define(signed, k.fn(["a", "b", "k"], (a, b, i) => k.if(k.equal(i, k.lit(0)), a, k.call(signed, b, k.call(B.sub, a, b), k.call(B.sub, i, k.lit(1))))));
   k.define(fast, k.fn(["n"], (n) => k.call(signed, k.lit(1), k.lit(1), n)));
   const file = toFile({ title: "Fibonacci", typed: true, code: base(k.code), names: baseNames(k.names), descriptive: {}, comments: {}, layout: { known: { [fast]: ["out"] } }, examples: { [fast]: ["", "13"] }, signatures: {} }, base(new Lang().code));
-  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const p = await pageOf({ viewport: { width: 1280, height: 900 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator('[data-panel="program"]').click();
@@ -584,7 +598,7 @@ async function searchGoesOn() {
 // (BACKLOG E109), though the dot's let changes how main would be laid out.
 async function dotOnWire() {
   where = "a dot put on a wire";
-  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  const p = await pageOf({ viewport: { width: 1600, height: 1000 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
@@ -615,7 +629,7 @@ async function dotOnWire() {
 // words selects it, outlined, and drags it. Two dice's main, its first lambda.
 async function foldedFrame() {
   where = "a folded frame";
-  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  const p = await pageOf({ viewport: { width: 1600, height: 1000 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
@@ -647,7 +661,7 @@ async function foldedFrame() {
 // E108): in two dice's main, the words saying "Two dice" onto h1's list.
 async function plusDrop() {
   where = "an output dropped on a list's +";
-  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  const p = await pageOf({ viewport: { width: 1600, height: 1000 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
@@ -671,7 +685,7 @@ async function plusDrop() {
 // below the fold (BACKLOG E75): the guitar pedal's main at 1280 by 800.
 async function navScroll() {
   where = "the navigator on opening a program";
-  const p = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const p = await pageOf({ viewport: { width: 1280, height: 800 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator('[data-set="program"]', { hasText: "Page: guitar pedal" }).click();
@@ -696,7 +710,7 @@ async function navScroll() {
 // tap away from the bar at the bottom.
 async function phone() {
   where = "phone width";
-  const p = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const p = await pageOf({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   p.on("console", (m) => { if (m.type() === "error") errors.push(`${where}: ${m.text()}`); });
   await p.goto(page);
@@ -805,7 +819,7 @@ async function phone() {
 // and a slider change what they should.
 async function cellsPage() {
   where = "reactive.html";
-  const p = await browser.newPage();
+  const p = await pageOf();
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   p.on("console", (m) => { if (m.type() === "error") errors.push(`${where}: ${m.text()}`); });
   await p.goto(new URL("reactive.html", page).href);
@@ -826,7 +840,7 @@ async function cellsPage() {
 // it survives the editor redrawing, and Save page gives a file that runs.
 async function pagePreview() {
   where = "page preview";
-  const ctx = await browser.newContext({ acceptDownloads: true });
+  const ctx = await contextOf({ acceptDownloads: true });
   const p = await ctx.newPage();
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   p.on("console", (m) => { if (m.type() === "error") errors.push(`${where}: ${m.text()}`); });
@@ -916,7 +930,7 @@ async function pagePreview() {
 // thread (4 s an edit, flock at 0.5 frames a second). The looper isn't
 // here: from a file its sound doesn't load (cells.test.ts has its stack).
 async function pageEditCompiles() {
-  const ctx = await browser.newContext({ viewport: { width: 1400, height: 1000 } });
+  const ctx = await contextOf({ viewport: { width: 1400, height: 1000 } });
   const p = await ctx.newPage();
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
