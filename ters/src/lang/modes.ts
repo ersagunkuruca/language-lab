@@ -984,6 +984,8 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
         ], { posts: true });
       }
       case S.show: return sided(text, sides, call, [forward, { needs: [1], gives: [0], answers: CHECK }], { posts: true });
+      // An Int's show read back: only show's own spelling (relate.ts).
+      case INT_OPS.show: return sided(text, sides, call, [forward, { needs: [1], gives: [0], answers: CHECK }], { posts: true });
       case S.less: return sided(text, sides, call, [forward]);
       case S.equal: return sided(text, sides, call, [forward, { needs: [0, 2], gives: [1], answers: CHECK }, { needs: [1, 2], gives: [0], answers: CHECK }]);
       case S.and: case S.hence: case S.or: case S.not: return sided(text, sides, call, [forward, { needs: [o], gives: ins, answers: MANY }]);

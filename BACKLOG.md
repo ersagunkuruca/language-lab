@@ -39,7 +39,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I374 | `inverse` compiles to the relational interpreter shipped in the module (larder: 9.2 MB, 0.71 s for a one-line book) and `ters wasi`/`ters native` refuse it. Give a fraction product with one side unknown (a division) and a printer of `++` and `show` read backwards (a parser: cuts of a known text, `read whole number`) plans fixed before they run, so they compile on every target | GAPS round 25 L2 | 2026-11-26 |
+| I374 | `inverse` of a printer still runs the relational interpreter on WebAssembly and C's way (larder's `ters wasi`: "fitting definition, which solves spelled definition of its fields … a woken constraint with several answers; not in this profile yet"). Its plan is now fixed before it runs (I374b); what's left is scalar.ts's stream lowering: a goal with several answers (a cut of a known text) inside a constraint that was waiting (`settled` writes the woken goal as a plan of its own, so branchAt refuses it). Compiler lane. The JS module still ships the interpreter for the same solve (core-solve.ts planWritten) | GAPS round 25 L2 | 2026-11-26 |
 | L266 | A faster checker: machine's 8,000 reached nodes took 1.5 s, about 190 µs a node; aim for 10x. L266a: 0.2 s warm. Next: compiling machine still checks it six times (firstArms three, bake, stage, fused folds: about 0.2 s each), L266b keeps the higher-order call analysis's answers between checks. L266c resolves arithmetic over what is reached, L266d reaches once. Left, in `ters compile machine` (8.8 s): the first check 1.1 s (warm it is 0.15 s; L266e found the once-per-process part, 0.45 s, not worth a snapshot); choosing representations 4.8 s, of it two whole checks of the program over the library (represented.ts and library-reps.ts, 0.7 and 0.8 s) and the choice's walks (choiceOf 2.4 s: splitByGroups, represent.ts uses and looped walking each definition's subtree again per type); lowering 3.5 s, of it first-arms' checks 0.6 s. With I316, machine's compile under half a second. C256 found the checks inside lowering are the checker's cost too: rechecking only what a pass changed (infer.ts inferRewritten) saved 0.2 s of machine's 3.1 but kept effects the passes had made more exact (drift, depot, sheet got Diverge back), so a faster whole check is the fix; and a layered check joined a first's thunk's row to the row around it (agent's first-arms took 5 of 7) Measured again 11-24 (Language lane): `ters compile machine` 4.1 s warm, 5.9 s with nothing kept, spread over about twenty passes, none above a second: the lowering 1.5 s (scalar 0.85, zero parts 0.2, owned arrays 0.1), choosing representations 1.0 s (splitting lists 0.25, the chooser's replay 0.13, the check of what it made 0.13 and carried 0.13), arithmetic's resolving 0.33 (spread tuples typing the reached library bodies, which lowering needs anyway), the check 0.9 (half of it library bodies typed when first asked). No one cut is worth more than 10%: the 10x is the redesign's per-definition lowering (COMPILER REDESIGN, stage 4) | Ersagun 2026-11-17 ("Having to spend more than a second compiling them is kinda weird") | 2026-11-17 |
 
 ## E: Editor
@@ -58,7 +58,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E316 | A node's comment in the graph readable at a glance, without overlapping anything (Ersagun 2026-11-22 on E306's speech mark: "Not ideal but an improvement. We can go back to this later"). The other two ways he was offered: the comment as the node's top line, which layout and Tidy count, cut with the rest on hover; or a note beside the node, joined by a line, with room Tidy keeps. His pick when it's taken up | Ersagun 11-22 | P3 | M | |
 
 ### Trying a program where it runs ([RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md))
 
@@ -197,7 +196,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L291 | `bytes of base64` rebuilds its 64-character alphabet for every character it reads: b64Value is `position of(characters("ABC…+/"), c)`, a fresh list each time, so digits' 99 KB of data costs about 130K × 64 cells, over half of the page's first draw (240 of 440 ms at 1x in the editor). Work the value out of `character code` with arithmetic (A–Z c−65, a–z c−71, 0–9 c+4, + 62, / 63, else the abort); `bytes of hex` (hexValue) the same. | I371 | high | S | |
 
 ### Ersagun's current asks
 
@@ -284,7 +282,6 @@ Ersagun 2026-11-17: a medium-sized original game to test Ters against current en
 | id | item | lane | source | pri | size | status |
 |---|---|---|---|---|---|---|
 | G1b | Columns with presence: an `Optional` field of a record kept as columns stored as a bit per slot and a column of values, read in place by a match on it (columns.ts, C and JS first) | C | [ENTITIES](docs/design/data/ENTITIES.md) | P2 | L | |
-| G1b1 | `keep` over a List kept as an array lowers as every `all` of a `choose`: the array's items as a list taken apart, answers consed in a box, reversed, an array made of them. The greenhouse's three keeps a tick (moths, plants, lamps) are the first thing keeping its Things as rows in JS (columns.ts: `array.of`). A loop over the positions pushing each kept item (kept-items.ts), on JS, C and WebAssembly. Done | C | G1b, 2026-11-20 | P2 | S | |
 | G4 | The archetype representation from G1, built: a Pool whose records leave components out stored as tables per set of components | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G5 | Systems with disjoint effect rows run on the thread pool and page workers at once (G1's scheduling) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G9 | Vertex functions and instanced draws (G9c, G9d): a Ters function of (instance, vertex) to a position and its varyings, printed as a WGSL vertex stage beside today's fragment | C | [FRAMES](docs/design/targets/FRAMES.md) | P2 | L | |

@@ -2741,7 +2741,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const lt = stype({ t: "con", id: LIST, args: [zonk(outNode)] });
     if (!lt || !isData(lt)) throw new ModeUnsupported("an unfold's answers as a list");
     const g: SFunc = { def: "", name: `${nm(e.fold)} one level down, every answer`, params: [inT, ...outsideT], result: lt, locals: [inT, ...outsideT], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
-    const at = funcs.push(g) - 1;
+    const shaped = shapes.length, at = funcs.push(g) - 1;
     index.set(key, at);
     if (fixed) fixedOf.set(g, fixed);
     try {
@@ -2755,7 +2755,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       const none = g.locals.push(lt) - 1, r = g.locals.push(lt) - 1;
       collecting.set(g, none);
       g.body = { k: "let", i: none, value: { k: "new", t: lt, c: lt.cases.findIndex((x) => x.variant === NIL), args: [] }, body: { k: "attempt", body: modePlan(an, e.plan(), env0, done, g), res: r, ok: { k: "local", i: r }, otherwise: { k: "local", i: none }, t: lt } };
-    } catch (x) { funcs.pop(); index.delete(key); throw x; }
+    } catch (x) { undoFrom(at, shaped); throw x; }
     return at;
   }
   // The mode function for def with these ports known: its index, and the
@@ -2797,7 +2797,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (all && (!listed || !isData(listed))) throw new ModeUnsupported("its answers as a list");
     const result: LType = all ? listed! : one;
     const g: SFunc = { def: "", name: `${nm(def)} backwards${all ? ", every answer" : ""}`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, partial: !all };
-    const at = funcs.push(g) - 1;
+    const shaped = shapes.length, at = funcs.push(g) - 1;
     index.set(key, at);
     try {
       const an = modeAn!;
@@ -2820,7 +2820,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         collecting.set(g, none);
         g.body = { k: "let", i: none, value: { k: "new", t: lt, c: lt.cases.findIndex((x) => x.variant === NIL), args: [] }, body: { k: "attempt", body: modePlan(an, plan, env0, done, g), res: r, ok: { k: "local", i: r }, otherwise: { k: "local", i: none }, t: lt } };
       }
-    } catch (e) { funcs.pop(); index.delete(key); throw e; }
+    } catch (e) { undoFrom(at, shaped); throw e; }
     return { fn: at, outs };
   }
   // ---------------------------------------------------------- answer streams
@@ -2886,6 +2886,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     stack.cases.push({ variant: "\u0000gstack.none", name: "none", fields: [] }, { variant: "\u0000gstack.more", name: "more", fields: [{ name: "goals", t: goals }, { name: "rest", t: stack }] });
     return (laterT = { any, frame, goals, susp, frames, stack, th });
   }
+  // A mode plan's function that couldn't be written undone, with every
+  // function made for it since (its binds, their closures' code, kits): a
+  // pop took only the last, so a bind's code kept a closure of a function
+  // gone, whose place the next one took (larder's make entry of, called
+  // as a bind's rest: I374).
+  const undoFrom = (i: number, shaped: number) => {
+    funcs.splice(i);
+    shapes.splice(shaped);
+    for (const [d2, j] of index) if (j >= i) index.delete(d2);
+    for (const j of closureCode) if (j >= i) closureCode.delete(j);
+    for (const j of passingCode) if (j >= i) passingCode.delete(j);
+  };
   // A function made here that may be undone with a refused definition:
   // live while it is still where it was put.
   const stillThere = (i: number, f: SFunc) => funcs[i] === f;
@@ -3121,7 +3133,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (index.has(key)) return { fn: index.get(key)!, outs, one };
     const params = ins.filter((p) => !(p in fixed)).map((p) => typeOf(portNode(p)));
     const g: SFunc = { def: "", name: `${nm(def)} backwards, its answers`, params, result: kit(one).st, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
-    const at = funcs.push(g) - 1;
+    const shaped = shapes.length, at = funcs.push(g) - 1;
     index.set(key, at);
     try {
       const an = modeAn!;
@@ -3140,7 +3152,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         return unitOf(one, outs.length === 1 ? ls[0] : { k: "make", t: one as RType, args: ls });
       };
       g.body = streamChain(an, plan, env0, done, g, one, fx);
-    } catch (e) { funcs.pop(); index.delete(key); throw e; }
+    } catch (e) { undoFrom(at, shaped); throw e; }
     return { fn: at, outs, one };
   }
   // A fold one level down run backwards, every answer, as a stream.
@@ -3151,7 +3163,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const key = `unfold stream ${e.fold} ${known} ${outside.join(",")} ${[...fixed ?? []].join(";")}@${atKey(atNow())}`;
     if (index.has(key)) return { fn: index.get(key)!, one };
     const g: SFunc = { def: "", name: `${nm(e.fold)} one level down, its answers`, params: [inT, ...outsideT], result: kit(one).st, locals: [inT, ...outsideT], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
-    const at = funcs.push(g) - 1;
+    const shaped = shapes.length, at = funcs.push(g) - 1;
     index.set(key, at);
     if (fixed) fixedOf.set(g, fixed);
     try {
@@ -3167,7 +3179,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         return unitOf(one, lc(v));
       };
       g.body = streamChain(an, e.plan(), env0, done, g, one, fixed);
-    } catch (x) { funcs.pop(); index.delete(key); throw x; }
+    } catch (x) { undoFrom(at, shaped); throw x; }
     return { fn: at, one };
   }
   // Where a segment ends: the goal with several answers at step `at`, the
@@ -4907,7 +4919,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       if (r) inner = new Map(inner).set(r, R);
       return lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), expr(a.body, inner, g, false));
     };
-    const at = funcs.push(g) - 1;
+    const shaped = shapes.length, at = funcs.push(g) - 1;
     const out: (SExpr | null)[] = [];
     for (const [ci] of st.cases.entries()) {
       const a = arms.find((y) => y.variant === st.cases[ci].variant);
