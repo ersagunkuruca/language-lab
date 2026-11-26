@@ -106,3 +106,50 @@ test("a node's comment is its top line, and a folded frame's mark says the comme
   assert.ok(frames.size > 0);
   assert.deepEqual(notes(svg(frames)), ["how far apart"]);
 });
+
+test("a frame's own comment is its top row too, open or folded, and a folded frame around it counts it (I381)", () => {
+  const hooks = (folded: Set<string>) => ({
+    selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {},
+    canShare: () => () => null, share() {}, at: {}, moved() {}, named: new Set(), folded, fold() {}, order: false,
+  }) as never;
+  // A definition with a frame inside another: their boxes one inside the other.
+  const box = (r: El) => ["x", "y", "width", "height"].map((k) => Number(r.getAttribute(k)));
+  const within = (a: El, b: El) => { const [ax, ay, aw, ah] = box(a), [bx, by, bw, bh] = box(b); return a !== b && ax >= bx && ay >= by && ax + aw <= bx + bw && ay + ah <= by + bh; };
+  const found = (() => {
+    for (const ex of ["queens", "countdown", "pond-page"]) {
+      const p = loadProgram(join(root, "examples", ex));
+      for (const def of p.own.defs) {
+        const e = typedGraph(p.code, p.pres, infer(p.code, p.pres.names), def, hooks(new Set())).root as unknown as El;
+        const rects = e.all().filter((x) => x.tagName === "rect" && x.getAttribute("data-frame") && x.getAttribute("data-frame") !== def);
+        const pair = rects.flatMap((a) => rects.filter((b) => within(a, b)).map((b) => [a, b]))[0];
+        if (pair) return { p, def, inner: pair[0].getAttribute("data-frame")!, outer: pair[1].getAttribute("data-frame")! };
+      }
+    }
+  })();
+  assert.ok(found, "a frame inside another");
+  const { p, def, inner, outer } = found;
+  const pres = { ...p.pres, comments: { ...p.pres.comments, [inner]: "one queen against the others" } };
+  const svg = (folded: Set<string>) => typedGraph(p.code, pres, infer(p.code, p.pres.names), def, hooks(folded)).root as unknown as El;
+  const rowsOf = (e: El) => e.all().filter((x) => /\bcmt-row\b/.test(x.getAttribute("class") ?? "") && /^one queen/.test(x.children.find((c) => c.tagName === "text")?.textContent ?? ""));
+  // Open: the row inside the frame's box, at its top, the title below it,
+  // the whole comment on hover.
+  const open = svg(new Set());
+  const rows = rowsOf(open);
+  assert.equal(rows.length, 1);
+  const rect = open.all().find((x) => x.tagName === "rect" && x.getAttribute("data-frame") === inner)!;
+  const [x, y] = box(rect);
+  const rowY = Number(rows[0].children.find((c) => c.tagName === "text")!.getAttribute("y"));
+  assert.ok(rowY > y && rowY < y + 16, "in the box's top row");
+  assert.match(rect.children.find((c) => c.tagName === "title")?.textContent ?? "", /one queen against the others/);
+  const title = open.all().find((c) => c.tagName === "text" && /\brt\b/.test(c.getAttribute("class") ?? "") && Number(c.getAttribute("x")) === x + 10 && Number(c.getAttribute("y")) > y && Number(c.getAttribute("y")) < y + 40)!;
+  assert.ok(Number(title.getAttribute("y")) > rowY, "the title under the comment");
+  // Folded: the folded box's own top row.
+  const folded = svg(new Set([inner]));
+  const fr = rowsOf(folded);
+  assert.equal(fr.length, 1);
+  const g = folded.all().find((x) => x.tagName === "g" && x.children.includes(fr[0]))!;
+  assert.ok(g.children.some((c) => c.getAttribute("data-frame") === inner), "in the folded box's own group");
+  // Folded inside a folded frame: that one's mark says it.
+  const marks = svg(new Set([outer])).all().filter((x) => /\bcmt-mark\b/.test(x.getAttribute("class") ?? "")).map((x) => x.children.find((c) => c.tagName === "title")!.textContent);
+  assert.ok(marks.some((m) => m.includes("one queen against the others")), marks.join(" | "));
+});

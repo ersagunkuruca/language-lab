@@ -393,7 +393,8 @@ interface Item {
   ran?: number;         // its place in the order effects run (E265), shown
   own?: { w: number; h: number }; // its own size, when it can be resized
 }
-interface Frame { id: Id; parent: Id | null; title: string; cls: string; wiresIn?: true; binders: Id[]; labels: string[]; results?: Id[]; resultLabels?: string[]; out: End | null; pad: [number, number, number, number]; minH: number; minW: number }
+// note and top: its own comment, the top row of its box (I381, as an item's).
+interface Frame { id: Id; parent: Id | null; title: string; cls: string; note?: string; top?: number; wiresIn?: true; binders: Id[]; labels: string[]; results?: Id[]; resultLabels?: string[]; out: End | null; pad: [number, number, number, number]; minH: number; minW: number }
 // parts: a wire carrying a tuple is drawn bundled, one thick wire with its
 // parts listed on it (E167b, PORTS-2026-11-01.md §5): their names when the
 // function that gave it named its results, else their types.
@@ -889,13 +890,16 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     results.forEach((b, i) => sources.set(b, { frame: id, port: i, right: true }));
     const b = parts ? column(parts, (p, i) => wires.push({ from: p.out, to: { frame: id, port: i, right: true }, cls: "", edge: parts[i], flow: true })) : lay(body);
     frame = outer;
+    // Its comment, the box's top row above its title (I381, E316).
+    const c = id !== defId ? pres.comments[id] : undefined;
+    const top = c ? NOTEH : 0, head = HEAD + top;
     const bx = Math.max(pw + 14, PAD), innerH = Math.max(ph + 8, b.h);
-    const by = HEAD + (innerH - b.h) / 2;
+    const by = head + (innerH - b.h) / 2;
     const at = new Map<Id, Pos>();
     shift(at, b, bx, by);
     const rw = results.length ? portsW(results) + 14 : 22;
-    const w = Math.max(bx + b.w + rw, tw(title, 6.6) + 20), h = HEAD + innerH + PAD;
-    frames.set(id, { id, parent: outer, title, cls, binders, labels: binders.map(name), ...(results.length ? { results, resultLabels: results.map(name) } : {}), out: parts ? null : b.out, pad: [bx, HEAD, rw, PAD], minH: HEAD + ph + 8 + PAD, minW: tw(title, 6.6) + 36 });
+    const w = Math.max(bx + b.w + rw, tw(title, 6.6) + 20), h = head + innerH + PAD;
+    frames.set(id, { id, parent: outer, title, cls, ...(c ? { note: resolveRefs(c, (r) => pres.names[r] ?? r), top } : {}), binders, labels: binders.map(name), ...(results.length ? { results, resultLabels: results.map(name) } : {}), out: parts ? null : b.out, pad: [bx, head, rw, PAD], minH: head + ph + 8 + PAD, minW: tw(title, 6.6) + 36 });
     return { w, h, outX: w, outY: by + b.outY, out: { frameOut: id }, at };
   };
 
@@ -1426,9 +1430,7 @@ function noteRow(g: SVGGElement, w: number, top: number, text: string): void {
     box.setAttribute("y", String(Number(box.getAttribute("y") ?? 0) - top));
     box.setAttribute("height", String(Number(box.getAttribute("height") ?? 0) + top));
   }
-  const first = text.split("\n")[0];
-  const fits = Math.max(1, Math.floor((w - 14) / NOTEPX));
-  const shown = first.length > fits || first !== text ? `${first.slice(0, Math.max(1, fits - 1)).trimEnd()}…` : first;
+  const shown = cut(text, w - 14);
   const row = s("g", { class: "cmt-row" });
   row.append(s("text", { x: 7, y: -top + 12 }, shown), s("line", { x1: 6, x2: w - 6, y1: -1.5, y2: -1.5 }));
   // The whole comment on hover, before what the box says of itself.
@@ -1437,10 +1439,23 @@ function noteRow(g: SVGGElement, w: number, top: number, text: string): void {
   // In the row the box grew by, where none of the node's words or ports are.
   g.append(row);
 }
+// A comment's first line cut to a width, … where it goes on.
+function cut(text: string, w: number): string {
+  const first = text.split("\n")[0];
+  const fits = Math.max(1, Math.floor(w / NOTEPX));
+  return first.length > fits || first !== text ? `${first.slice(0, Math.max(1, fits - 1)).trimEnd()}…` : first;
+}
+// An open frame's comment: its top row, above its title, cut short of
+// the fold toggle (I381); the whole comment on hover over the frame.
+function frameNote(x: number, y: number, w: number, top: number, text: string): SVGElement {
+  const row = s("g", { class: "cmt-row" });
+  row.append(s("text", { x: x + 10, y: y + 12 }, cut(text, w - 44)), s("line", { x1: x + 6, x2: x + w - 6, y1: y + top - 1.5, y2: y + top - 1.5 }));
+  return row;
+}
 // A speech mark on a folded box's top right corner, saying it hides nodes with comments (how
 // many, past one); the comment on hover.
-function commentMark(w: number, text: string, n = 1): SVGElement {
-  const o = s("g", { class: "cmt-mark", transform: `translate(${w - 9} -7)` });
+function commentMark(w: number, text: string, n = 1, top = 0): SVGElement {
+  const o = s("g", { class: "cmt-mark", transform: `translate(${w - 9} ${-7 - top})` });
   const bw = n > 1 ? 24 : 16;
   o.append(s("path", { d: `M2 0 H${bw - 2} Q${bw} 0 ${bw} 2 V9 Q${bw} 11 ${bw - 2} 11 H7 L3 15 L4 11 H2 Q0 11 0 9 V2 Q0 0 2 0 Z` }));
   if (n > 1) o.append(s("text", { x: bw / 2, y: 8.5, "text-anchor": "middle" }, String(n)));
@@ -1503,9 +1518,11 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
     return runs.join(", ");
   };
   // The comments of the nodes a folded frame hides: its mark, with how many.
-  const notes = (f: Id, w: number): SVGElement[] => {
-    const all = [...scene.items.values()].filter((it) => it.note && hider(it.frame) === f).map((it) => it.note!);
-    return all.length ? [commentMark(w, all.join("\n\n"), all.length)] : [];
+  // The frames it hides say theirs too (I381).
+  const notes = (f: Id, w: number, top: number): SVGElement[] => {
+    const all = [...[...scene.items.values()].filter((it) => it.note && hider(it.frame) === f).map((it) => it.note!),
+      ...[...scene.frames.values()].filter((g) => g.note && g.id !== f && g.parent && hider(g.parent) === f).map((g) => g.note!)];
+    return all.length ? [commentMark(w, all.join("\n\n"), all.length, top)] : [];
   };
   const size = (f: Frame) => ({ w: Math.max(tw(clip(f.title, FOLDT), 6.6) + 44, tw(holds(f.id), 6.4) + 20), h: FOLDH });
   const items = new Map<Id, Item>();
@@ -1518,6 +1535,8 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
     const b = boxes.get(f.id)!, { w, h } = size(f);
     items.set(f.id, {
       key: f.id, frame: f.parent, w, h, auto: { x: b.x, y: b.y }, solid: true,
+      // Its own comment, its top row as an item's (I381).
+      ...(f.note ? { note: f.note, top: f.top } : {}),
       draw: (g) => g.append(
         ((r) => (r.append(s("title", {}, `${f.title}\n${holds(f.id)}`)), r))(s("rect", { width: w, height: h, rx: 9, class: `rg ${f.cls} folded`, "data-id": f.id, "data-move": f.id, "data-frame": f.id })),
         s("text", { x: 10, y: 16, class: "rt" }, clip(f.title, FOLDT)),
@@ -1525,7 +1544,7 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
         foldToggle(w - 16, 16, f.id, "▸", "Unfold"),
         // The comments of the nodes it hides (QA 11-22b L3: folded,
         // they showed nowhere).
-        ...notes(f.id, w),
+        ...notes(f.id, w, f.top ?? 0),
         ...(ran(f.id) ? [effectBadge(ran(f.id), `The calls with effects inside run as number ${ran(f.id)} here: unfold it to see which`)] : []),
       ),
     });
@@ -1590,6 +1609,8 @@ function unfoldMoves(scene: Scene, at: Record<Id, Pos>, moved: Record<Id, Pos>, 
 // ---------------------------------------------------------------- drawing
 
 const HEADH = 20;
+// Where a frame's ports start: below its title, and its comment's row.
+const headOf = (f: { top?: number } | undefined) => HEADH + (f?.top ?? 0);
 interface Placed { pos: Map<Id, Pos>; boxes: Map<Id, Box>; point: (e: End) => Pos }
 function placeAll(scene: Scene, at: Record<Id, Pos>): Placed {
   const pos = new Map<Id, Pos>();
@@ -1601,11 +1622,11 @@ function placeAll(scene: Scene, at: Record<Id, Pos>): Placed {
   for (const [id, b] of fb) { const f = scene.frames.get(id)!; if (b.w < f.minW) b.w = f.minW; }
   const point = (e: End): Pos => {
     if ("item" in e) { const p = pos.get(e.item) ?? { x: 0, y: 0 }; return { x: p.x + e.dx, y: p.y + e.dy + (scene.items.get(e.item)?.top ?? 0) }; }
-    if ("frame" in e) { const b = fb.get(e.frame)!; return { x: b.x + (e.right ? b.w : 0), y: b.y + HEADH + 4 + e.port * 22 + 11 }; }
+    if ("frame" in e) { const b = fb.get(e.frame)!; return { x: b.x + (e.right ? b.w : 0), y: b.y + headOf(scene.frames.get(e.frame)) + 4 + e.port * 22 + 11 }; }
     const b = fb.get(e.frameOut)!, f = scene.frames.get(e.frameOut)!;
     // Below the result ports, when there are some, so the two don't meet.
     const y = f.out ? point(f.out).y : b.y + b.h / 2;
-    return { x: b.x + b.w, y: f.results?.length ? Math.max(y, b.y + HEADH + 4 + f.results.length * 22 + 11) : y };
+    return { x: b.x + b.w, y: f.results?.length ? Math.max(y, b.y + headOf(f) + 4 + f.results.length * 22 + 11) : y };
   };
   return { pos, boxes: fb, point };
 }
@@ -1636,11 +1657,16 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     const b = boxes.get(f.id)!;
     const r = s("rect", { x: b.x, y: b.y, width: b.w, height: b.h, rx: 9, class: `rg ${f.cls}${sel(f.id)}${picked.has(f.id) ? " picked" : ""}`, "data-id": f.id, "data-frame": f.id });
     if (f.id !== scene.defId) r.setAttribute("data-move", f.id);
-    frameG.append(r, s("text", { x: b.x + 10, y: b.y + 14, class: "rt" }, f.title));
-    if (f.id !== scene.defId && hooks.fold) frameG.append(foldToggle(b.x + b.w - 16, b.y + 14, f.id, "▾", "Fold into one box"));
+    const t = f.top ?? 0;
+    frameG.append(r, s("text", { x: b.x + 10, y: b.y + t + 14, class: "rt" }, f.title));
+    if (f.note) {
+      frameG.append(frameNote(b.x, b.y, b.w, t, f.note));
+      r.append(s("title", {}, f.note));
+    }
+    if (f.id !== scene.defId && hooks.fold) frameG.append(foldToggle(b.x + b.w - 16, b.y + t + 14, f.id, "▾", "Fold into one box"));
     // A function's frame is what a placement is about (E292).
     const ch = hooks.choices?.get(f.id);
-    if (ch) frameG.append(choiceMark(f.id, b.x + b.w - (f.id !== scene.defId && hooks.fold ? 46 : 24), b.y + 5, ch));
+    if (ch) frameG.append(choiceMark(f.id, b.x + b.w - (f.id !== scene.defId && hooks.fold ? 46 : 24), b.y + t + 5, ch));
     const port = (right: boolean) => (bd: Id, i: number) => {
       const p = point({ frame: f.id, port: i, right });
       portG.append(s("circle", { cx: p.x, cy: p.y, r: 6, class: `src${right ? " res" : ""}${sel(bd)}${scene.lit.has(bd) ? " lit" : ""}`, "data-src": bd, "data-id": bd }));
@@ -1663,7 +1689,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
   for (const it of scene.items.values()) if (it.solid) { const p = pos.get(it.key)!; solid.push({ key: it.key, box: { x: p.x, y: p.y, w: wide(it), h: tall(it) } }); }
   const endItem = (e: End) => ("item" in e ? e.item : null);
   const drawn: { pts: ReturnType<typeof curvePoints> }[] = [];
-  const titles: Box[] = [...scene.frames.values()].map((f) => { const b = boxes.get(f.id)!; return { x: b.x + 6, y: b.y + 2, w: tw(f.title, 6.6) + 8, h: 16 }; });
+  const titles: Box[] = [...scene.frames.values()].map((f) => { const b = boxes.get(f.id)!; return { x: b.x + 6, y: b.y + 2, w: Math.max(tw(f.title, 6.6), f.note ? b.w - 20 : 0) + 8, h: 16 + (f.top ?? 0) }; });
   const all = [...scene.wires];
   // A frame's own result wire: from what it holds to its right edge.
   for (const f of scene.frames.values()) if (f.out) all.push({ from: f.out, to: { frameOut: f.id }, cls: "", flow: false });
@@ -1891,7 +1917,7 @@ function asLayout(scene: Scene, at: Record<Id, Pos>) {
   for (const w of scene.wires) {
     const end = (e: End): [string, number, number] | null => {
       if ("item" in e) return [e.item, e.dx, e.dy + (scene.items.get(e.item)?.top ?? 0)];
-      if ("frame" in e) { const b = boxes.get(e.frame); return b ? [e.frame, e.right ? b.w : 0, HEADH + 4 + e.port * 22 + 11] : null; }
+      if ("frame" in e) { const b = boxes.get(e.frame); return b ? [e.frame, e.right ? b.w : 0, headOf(scene.frames.get(e.frame)) + 4 + e.port * 22 + 11] : null; }
       const b = boxes.get(e.frameOut);
       return b ? [e.frameOut, b.w, b.h / 2] : null;
     };
