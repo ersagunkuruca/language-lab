@@ -113,7 +113,11 @@ const READS = new Set(["length", "lengthb", "get", "getb", "at", "atb", "first",
 // c.ts's par:*) read the array they're given and make a new one.
 const READS_RT = /^(map\.(worth|pure)$|par:)/;
 // Making a new one.
+<<<<<<< HEAD
 const MAKES = new Set(["empty", "of", "ofItems", "from", "range", "rangeF", "concat", "stridedProducts", "stridedProductsDual", "t:empty"]);
+=======
+const MAKES = new Set(["empty", "of", "ofItems", "from", "range", "rangeF", "concat", "stridedProducts", "t:empty"]);
+>>>>>>> 5573bc27365828e137347a2a6e8d8b70b76d1540
 // Giving back the one given first, changed.
 const PASSES = new Set(["replaceAt", "replaceOwned", "push", "pushOwned", "pushFront", "pushFrontOwned", "t:put", "t:remove", "t:putOwned", "t:removeOwned"]);
 // A table's (a map's or a hash set's, C63h) runtime functions, as `t:…`:
