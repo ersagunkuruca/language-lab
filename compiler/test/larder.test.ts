@@ -6,9 +6,14 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { WASI } from "node:wasi";
 import { join } from "node:path";
 import { folder, book, ways } from "../gaps/larder.ts";
+import { skip } from "./c-harness.ts";
+import { wasiImports } from "../src/wasi-imports.ts";
 
 const w = await ways();
 const all = (args: string[], files: Record<string, string>, slow = false) => {
@@ -65,3 +70,27 @@ test("larder: a made-up book of 16 recipes, from the core IR", () => {
   assert.equal(r.out[0], "16 recipes, 6 units, 12 things in the larder, 72 packs for sale");
 });
 
+
+// ters native and ters wasi (I374): each line's printer run backwards is
+// written out, not left to the relational interpreter, and prints what the
+// ideal prints, on the sample book, a made-up one, and lines that fail.
+test("larder: native and WebAssembly print what the ideal prints", { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "larder-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts");
+  const run = (...args: string[]) => { const r = spawnSync(process.execPath, ["--no-warnings", ters, ...args], { encoding: "utf8" }); assert.equal(r.status, 0, r.stderr); };
+  run("native", folder, "-o", join(dir, "larder"));
+  run("wasi", folder, "-o", join(dir, "larder.wasm"));
+  const wasm = new WebAssembly.Module(readFileSync(join(dir, "larder.wasm")));
+  const bad = "unit tsp\nunit tbsp 3 tsp\nrecipe a 2\n1 tsp x\n1 3/2 tsp y\nmake a 1\n";
+  for (const [name, text] of [["sample", sample], ["made up", book(8, 3)], ["bad", bad]]) {
+    const f = join(dir, "b.txt");
+    writeFileSync(f, text);
+    const want = w.ideal(["b.txt"], { "b.txt": text }), lines = (s: string) => (s ? s.replace(/\n$/, "").split("\n") : []);
+    const c = spawnSync(join(dir, "larder"), ["b.txt"], { cwd: dir, encoding: "utf8" });
+    assert.deepEqual({ out: lines(c.stdout), err: lines(c.stderr), code: c.status }, want, `native, ${name}`);
+    const out = join(dir, "out.txt"), err = join(dir, "err.txt"), fo = openSync(out, "w"), fe = openSync(err, "w");
+    const wa = new WASI({ version: "preview1", args: ["larder", "b.txt"], preopens: { ".": dir }, stdout: fo, stderr: fe, returnOnExit: true });
+    const code = wa.start(new WebAssembly.Instance(wasm, wasiImports(wa)));
+    closeSync(fo); closeSync(fe);
+    assert.deepEqual({ out: lines(readFileSync(out, "utf8")), err: lines(readFileSync(err, "utf8")), code }, want, `wasi, ${name}`);
+  }
+});
