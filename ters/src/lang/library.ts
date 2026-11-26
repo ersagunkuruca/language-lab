@@ -43,7 +43,7 @@ export const NUMBERS = readSaved(numbers0) as unknown as Module;
 // The numbers module's types and their one case, by name (their ids are
 // their hashes).
 const numbersNode = (kind: string, name: string) => nodeIds(NUMBERS.code.nodes).find((d) => NUMBERS.code.nodes[d].kind === kind && NUMBERS.names[d] === name)!;
-export const DUAL_V = numbersNode("variant", "dual");
+export const DUAL_V = numbersNode("variant", "dual"), DUAL_TYPE = numbersNode("def", "Dual");
 export const COMPLEX_V = numbersNode("variant", "complex");
 export const COMPLEX_TYPE = numbersNode("def", "Complex");
 export const FIXED_V = numbersNode("variant", "fixed"), FIXED_TYPE = numbersNode("def", "Fixed");

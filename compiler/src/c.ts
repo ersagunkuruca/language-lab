@@ -73,7 +73,7 @@ import { hostCName as hostName, type Shape } from "../../ters/src/lang/hosts.ts"
 const UOPS: Partial<Record<Op, string>> = { uadd: "+", usub: "-", umul: "*", uand: "&", uor: "|", uxor: "^" };
 const U64OPS: Partial<Record<Op, string>> = { u64add: "+", u64sub: "-", u64mul: "*", u64and: "&", u64or: "|", u64xor: "^" };
 import { SITES, STOPS } from "./stops.ts";
-import { fails, isFloat32, keyList, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, poolHeld, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { fails, isDual, isFloat32, keyList, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, poolHeld, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 import { frames } from "./frames.ts";
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
@@ -140,6 +140,29 @@ static void lab_sp_eight(const double *x, int64_t a0, int64_t a1, int64_t sa, co
     double u = x[a0], v = x[a1], p = y[b0], q = y[b1], w = y[b2], z = y[b3];
     s00 = s00 + u * p; s01 = s01 + u * q; s02 = s02 + u * w; s03 = s03 + u * z;
     s10 = s10 + v * p; s11 = s11 + v * q; s12 = s12 + v * w; s13 = s13 + v * z;
+  }
+  o0[0] = s00; o0[1] = s01; o0[2] = s02; o0[3] = s03;
+  o1[0] = s10; o1[1] = s11; o1[2] = s12; o1[3] = s13;
+}
+#endif`;
+// The same at Dual (the numbers module's, C type T): a product's value
+// and slope by the product rule, the slope's two terms added first, as
+// its · does.
+const PRODUCTS_DUAL_C = (T: string) => `#ifndef LAB_PRODUCTS_DUAL_C
+#define LAB_PRODUCTS_DUAL_C
+#define LAB_SPD_ADD(acc, p, q) do { acc.f0 = acc.f0 + p.f0 * q.f0; acc.f1 = acc.f1 + (p.f0 * q.f1 + p.f1 * q.f0); } while (0)
+static ${T} lab_spd_one(const ${T} *x, int64_t a, int64_t sa, const ${T} *y, int64_t b, int64_t sb, int64_t count) {
+  ${T} s = { 0, 0 };
+  for (int64_t k = 0; k < count; k++, a += sa, b += sb) { ${T} p = x[a], q = y[b]; LAB_SPD_ADD(s, p, q); }
+  return s;
+}
+static void lab_spd_eight(const ${T} *x, int64_t a0, int64_t a1, int64_t sa, const ${T} *y, const int64_t *b, int64_t sb, int64_t count, ${T} *o0, ${T} *o1) {
+  ${T} s00 = { 0, 0 }, s01 = { 0, 0 }, s02 = { 0, 0 }, s03 = { 0, 0 }, s10 = { 0, 0 }, s11 = { 0, 0 }, s12 = { 0, 0 }, s13 = { 0, 0 };
+  int64_t b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3];
+  for (int64_t k = 0; k < count; k++, a0 += sa, a1 += sa, b0 += sb, b1 += sb, b2 += sb, b3 += sb) {
+    ${T} u = x[a0], v = x[a1], p = y[b0], q = y[b1], w = y[b2], z = y[b3];
+    LAB_SPD_ADD(s00, u, p); LAB_SPD_ADD(s01, u, q); LAB_SPD_ADD(s02, u, w); LAB_SPD_ADD(s03, u, z);
+    LAB_SPD_ADD(s10, v, p); LAB_SPD_ADD(s11, v, q); LAB_SPD_ADD(s12, v, w); LAB_SPD_ADD(s13, v, z);
   }
   o0[0] = s00; o0[1] = s01; o0[2] = s02; o0[3] = s03;
   o1[0] = s10; o1[1] = s11; o1[2] = s12; o1[3] = s13;
@@ -2535,27 +2558,32 @@ int main(int argc, char **argv) {
     };
   }
 
-  // contracted's one pair of axes at Float64 (`strided products`, C306):
+  // contracted's one pair of axes at Float64 or Dual (`strided products`, C306):
   // result item r is the sum over count of a's items from a starts[r ÷
   // b's count] and b's from b starts[r mod it], a stride apart, as the
   // definition adds them (PRODUCTS_C). Otherwise as compiled.
-  function stridedProductsC(f: SFunc): { body: string[]; out: number } | null {
+  function stridedProductsC(f: SFunc): { pre: string[]; body: string[]; out: number } | null {
     const [xa, xb, sa, sb] = f.params, r = f.result;
     if (f.params.length !== 7 || typedOriginalOf(f.def) !== STRIDED_PRODUCTS || f.params.slice(4).some((t) => t !== "int")) return null;
-    if (!isArray(xa) || xa.item !== "f64" || !isArray(xb) || xb.item !== "f64" || !isArray(sa) || sa.item !== "int" || !isArray(sb) || sb.item !== "int" || !isArray(r) || r.item !== "f64") return null;
+    if (!isArray(xa) || !isArray(xb) || !isArray(sa) || sa.item !== "int" || !isArray(sb) || sb.item !== "int" || !isArray(r)) return null;
+    // Float64 items, or the numbers module's Duals on all three.
+    const dual = isDual(xa.item);
+    if (dual ? !isDual(xb.item) || !isDual(r.item) : xa.item !== "f64" || xb.item !== "f64" || r.item !== "f64") return null;
+    const T = dual ? ty(xa.item) : "double", one = dual ? "lab_spd_one" : "lab_sp_one", eight = dual ? "lab_spd_eight" : "lab_sp_eight", none = dual ? `(${T}){ 0, 0 }` : "0";
     if (![xa, xb, sa, sb, r].every((t) => aname.has(t.key))) return null;
     arrayFns.add(`array.getb.a${sa.index}`).add(`array.getb.a${sb.index}`);
     const XB = aname.get(xa.key)!.buf, YB = aname.get(xb.key)!.buf, OB = aname.get(r.key)!.buf;
     return {
       out: r.index,
+      pre: dual ? [PRODUCTS_DUAL_C(T)] : [],
       body: [
         "  uint32_t na = p2.n, nb = p3.n;",
         "  if ((uint64_t)na * nb > UINT32_MAX) lab_oom();",
         "  uint32_t n = na * nb;",
-        `  const double *xs = ((${XB} *)p0.b)->it + p0.s, *ys = ((${YB} *)p1.b)->it + p1.s;`,
+        `  const ${T} *xs = (const ${T} *)(((${XB} *)p0.b)->it + p0.s), *ys = (const ${T} *)(((${YB} *)p1.b)->it + p1.s);`,
         "  int64_t xn = p0.n, yn = p1.n, sa = lab__clamp(p4), sb = lab__clamp(p5), count = lab__clamp(p6);",
         `  ${OB} *ob = lab__buf_a${r.index}(n, 0);`,
-        "  double *out = ob->it + ob->lo;",
+        `  ${T} *out = (${T} *)(ob->it + ob->lo);`,
         "  int64_t *bs = malloc(((size_t)nb + 1) * sizeof(int64_t));",
         "  char *bok = malloc((size_t)nb + 1);",
         "  if (!bs || !bok) lab_oom();",
@@ -2564,12 +2592,12 @@ int main(int argc, char **argv) {
         "    int two = i + 1 < na;",
         `    int64_t a0 = lab__clamp(lab_array_getb_a${sa.index}(p2, LAB_SMALL(i))), a1 = two ? lab__clamp(lab_array_getb_a${sa.index}(p2, LAB_SMALL(i + 1))) : 0;`,
         "    int ok0 = lab_sp_in(a0, sa, count, xn), ok1 = two && lab_sp_in(a1, sa, count, xn);",
-        "    double *o0 = out + (size_t)i * nb, *o1 = two ? o0 + nb : 0;",
+        `    ${T} *o0 = out + (size_t)i * nb, *o1 = two ? o0 + nb : 0;`,
         "    uint32_t j = 0;",
-        "    if (ok0 && ok1) for (; j + 4 <= nb; j += 4) if (bok[j] && bok[j + 1] && bok[j + 2] && bok[j + 3]) lab_sp_eight(xs, a0, a1, sa, ys, bs + j, sb, count, o0 + j, o1 + j); else break;",
+        `    if (ok0 && ok1) for (; j + 4 <= nb; j += 4) if (bok[j] && bok[j + 1] && bok[j + 2] && bok[j + 3]) ${eight}(xs, a0, a1, sa, ys, bs + j, sb, count, o0 + j, o1 + j); else break;`,
         "    for (; j < nb; j++) {",
-        "      o0[j] = ok0 && bok[j] ? lab_sp_one(xs, a0, sa, ys, bs[j], sb, count) : 0;",
-        "      if (two) o1[j] = ok1 && bok[j] ? lab_sp_one(xs, a1, sa, ys, bs[j], sb, count) : 0;",
+        `      o0[j] = ok0 && bok[j] ? ${one}(xs, a0, sa, ys, bs[j], sb, count) : ${none};`,
+        `      if (two) o1[j] = ok1 && bok[j] ? ${one}(xs, a1, sa, ys, bs[j], sb, count) : ${none};`,
         "    }",
         "  }",
         "  free(bs); free(bok);",
@@ -2593,7 +2621,7 @@ int main(int argc, char **argv) {
     const products = stridedProductsC(f);
     if (products) {
       const body = [...products.body, ...f.params.flatMap((t, j) => (counted(t) && !mine?.has(j) ? [`  ${drop(t, `p${j}`)}`] : [])), `  return lab__view_a${products.out}((lab_cell *)ob, ob->lo, n);`];
-      const text = [PRODUCTS_C, `// ${f.name.replace(/\n/g, " ")}, eight sums at once`, `${header(i, !!mine)} {`, ...body, "}"].join("\n");
+      const text = [PRODUCTS_C, ...products.pre, `// ${f.name.replace(/\n/g, " ")}, eight sums at once`, `${header(i, !!mine)} {`, ...body, "}"].join("\n");
       if (!mine) return text;
       const ps = f.params.map((_, j) => `p${j}`);
       return [text, `${header(i)} {`, `  ${ty(f.result)} r = ${bnames.get(i)}(${ps.join(", ")});`, ...[...mine].map((j) => `  ${drop(f.params[j], `p${j}`)}`), "  return r;", "}"].join("\n");
