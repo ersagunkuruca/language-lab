@@ -15,7 +15,7 @@
 
 import { COPIED_FROM, NODE_COPIED_FROM, originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM } from "./prelude-ids.ts";
 import { stableIds } from "../stable-ids.ts";
-import { bindsOf, children, ownerOfTypeParts, dependencies, dependenciesOfAll, layerOf, onLayer, freshId, idsMadeBy, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call, copyNodes, nodeEntries, withNodes, ownNodeIds, sameValue, litOrigin, idsPlace, moveIdsTo, nodesOver, changedOwn } from "../model.ts";
+import { bindsOf, children, ownerOfTypeParts, dependencies, dependenciesOfAll, layerOf, onLayer, freshId, idsMadeBy, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call, copyNodes, nodeEntries, withNodes, ownNodeIds, sameValue, litOrigin, idsPlace, moveIdsTo, nodesOver, changedOwn, derivedFrom } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { checksKept, infer, inferEdited, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
@@ -270,8 +270,13 @@ function replayed(key: string, code: Code, info: Info, defs: Id[], options: Libr
   choicesReplayed++;
   if (was.ids[1] !== null) moveIdsTo(was.ids[1]);
   const nodes = copyNodes(r.code.nodes);
-  for (const id in into) nodes[id] = into[id];
-  return { ...r, code: { nodes, defs: r.code.defs } };
+  const replaced: Id[] = [];
+  for (const id in into) if (into[id] !== r.code.nodes[id]) { nodes[id] = into[id]; replaced.push(id); }
+  // What the replay replaced, so the check after it need not look for it
+  // (inferEdited); no node is gone.
+  const out = { nodes, defs: r.code.defs };
+  derivedFrom(out, r.code, replaced, true);
+  return { ...r, code: out };
 }
 
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
