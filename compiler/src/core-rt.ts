@@ -64,6 +64,21 @@ const branched = (): Branches => { if (!BRANCHES) throw new Unsupported("running
 export const branchWorkerOfPage = () => BRANCHES?.pageWorker();
 
 const big = (x: I.Int) => BigInt(x);
+// An array held as columns (columns.ts) given whole to a host, as rows
+// (C348: the flock page's birds, drawn three times a frame): each item made
+// by `row`, and the same rows again while its columns hold what they held,
+// so the drawing sends a list it was given before only once.
+type Columns = { n: number } & Record<string, ArrayLike<unknown>>;
+const ROWS = new WeakMap<object, { n: number; cols: unknown[][]; v: unknown }>();
+const rowsOf = (c: Columns, m: number, row: (c: Columns, k: number) => unknown): unknown => {
+  const was = ROWS.get(c), n = c.n;
+  if (was && was.n === n && was.cols.every((b, i) => { const a = c[`c${i}`]; for (let k = 0; k < n; k++) if (!Object.is(a[k], b[k])) return false; return true; })) return was.v;
+  const items = new Array(n);
+  for (let k = 0; k < n; k++) items[k] = row(c, k);
+  const v = arrayOf(items);
+  ROWS.set(c, { n, cols: Array.from({ length: m }, (_, i) => Array.prototype.slice.call(c[`c${i}`], 0, n)), v });
+  return v;
+};
 // UTF-8 as a browser has it too (a page's script, C137c9).
 let utf8: TextEncoder | undefined;
 const UTF8 = { encode: (t: string) => (utf8 ??= new TextEncoder()).encode(t) };
@@ -575,7 +590,7 @@ export const moded = (make: (...a: unknown[]) => (...xs: unknown[]) => Iterable<
 export const RUNTIME = {
   FAIL, OUT, Aborted, Pending, Unsupported, planned, moded,
   // An array's item read in place (core-js.ts, G3d).
-  ArrayView, arrayView, emptyFor,
+  ArrayView, arrayView, emptyFor, rowsOf,
   // A list over one array (Bytes' items, a table's keys), read by position
   // in place (core-js.ts, C321), and a list made one: Bytes made in
   // compiled code hold their items so.
