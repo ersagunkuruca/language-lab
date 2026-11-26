@@ -2439,7 +2439,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       const site = drawSites.push({ site: drawSites.length, at: n.id, vertex: n.args[2], fragment: n.args[3], caps }) - 1;
       return { k: "rt", fn: `host:${target}`, args: [...n.args.map((a) => expr(a, env, f, false)), { k: "num", v: site }, ...caps.map((b): SExpr => ({ k: "local", i: env.get(b)! }))], host: { t, partial: false } };
     }
-    return { k: "rt", fn: `host:${target}${t === "i32" ? ":bool" : deep ? ":deep" : ""}`, args: n.args.map((a) => expr(a, env, f, false)), host: { t, partial: effs.includes(CHOICE) || !!STD_MANY[target] || target === CELL_OPS.read || target === CELL_OPS.readAt } };
+    return { k: "rt", fn: `host:${target}${t === "i32" ? ":bool" : deep ? `:deep:${boolShapes(ts as LType[])}` : ""}`, args: n.args.map((a) => expr(a, env, f, false)), host: { t, partial: effs.includes(CHOICE) || !!STD_MANY[target] || target === CELL_OPS.read || target === CELL_OPS.readAt } };
   }
   // A relation run some way with one answer, for JavaScript from the core
   // IR (C137c11): the evaluator's solve (run.ts solveAnswers) gives the
@@ -3954,6 +3954,29 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (isRecord(t)) return t.fields.some((x) => boolInside(x.t, seen));
     if (isData(t)) return t.cases.some((c) => c.fields.some((x) => boolInside(x.t, seen)));
     return false;
+  }
+
+  // Where Bools are inside values of these types, for the runtime to turn
+  // only those paths (core-rt.ts turnedBy, C347): nodes, each "b" (a Bool),
+  // { a: item } (an array) or { t: { variant: [field, …] } } (data or a
+  // record, its fields that hold one), refs their places in the list or
+  // -1 for none; then a root for each type. URI-encoded, so the rt name's
+  // parts stay split by ":".
+  function boolShapes(ts: LType[]): string {
+    const nodes: unknown[] = [], at = new Map<LType, number>();
+    const ref = (t: LType): number => {
+      if (t === "i32") return nodes.push("b") - 1;
+      if (typeof t !== "object") return -1;
+      if (at.has(t)) return at.get(t)!;
+      if (isArray(t)) { const item = ref(t.item); if (item < 0) return -1; const i = nodes.push({ a: item }) - 1; at.set(t, i); return i; }
+      if (!boolInside(t) || (!isRecord(t) && !isData(t))) return -1;
+      const node: { t: Record<Id, number[]> } = { t: {} }, i = nodes.push(node) - 1;
+      at.set(t, i);
+      for (const c of isRecord(t) ? [t] : t.cases) { const fs = c.fields.map((x) => ref(x.t)); if (fs.some((x) => x >= 0)) node.t[c.variant] = fs; }
+      return i;
+    };
+    const r = ts.map(ref);
+    return encodeURIComponent(JSON.stringify({ n: nodes, r }));
   }
 
   // A function with several answers, at t or inside it (C137c22).

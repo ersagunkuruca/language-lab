@@ -360,20 +360,77 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
 // the evaluator's own, by its id, a Bool given turned to the evaluator's
 // and one given back (`:bool`) turned back; no answer is FAIL.
 function hostFn(name: string, cells?: Record<Id, (...xs: Value[]) => Value | undefined>): (...xs: unknown[]) => unknown {
-  const [, id, how] = name.split(":");
-  const out = how === "bool" ? (v: unknown) => v === true || (v as { tag?: Id }).tag === TRUE : how === "deep" ? (v: unknown) => turned(v, toBoolean) : (v: unknown) => v;
-  const into = how === "deep" ? (x: unknown) => turned(x, inn) : inn;
+  const [, id, how, shapes] = name.split(":");
+  // Data holding a Bool turned only along the paths its type has one on
+  // (C347: flock-frame-page's sky, 2,000 birds and no Bool among them, was
+  // walked whole on every read and write of its cell, 5 of 15 ms a frame).
+  const sh = how === "deep" && shapes ? boolShapesOf(shapes) : undefined;
+  const out = how === "bool" ? (v: unknown) => v === true || (v as { tag?: Id }).tag === TRUE
+    : how === "deep" ? (sh ? (v: unknown) => turnedBy(v, toBoolean, sh[sh.length - 1]) : (v: unknown) => turned(v, toBoolean)) : (v: unknown) => v;
+  const into = how === "deep" ? (sh ? (x: unknown, i: number) => turnedBy(x, inn, sh[i] ?? null) : (x: unknown) => turned(x, inn)) : inn;
   // each and each of over data holding a Bool take their list as it is:
   // a view (each of a row's item's steps), whose identity each of finds
   // its list by, or compiled data, whose Bools the rows read as booleans.
   const rows = how === "deep" ? cells?.[`${id}:deep`] : undefined;
   if (rows) return (...xs) => { const v = rows(...(xs as Value[])); if (v === undefined) throw FAIL; return v; };
   const cell = cells?.[id];
-  if (cell) return (...xs) => { const v = cell(...(xs.map(into) as Value[])); if (v === undefined) throw FAIL; return out(v); };
+  if (cell) return (...xs) => { const v = cell(...(xs.map((x, i) => into(x, i)) as Value[])); if (v === undefined) throw FAIL; return out(v); };
   const one = BUILTINS.one[id], many = BUILTINS.many[id];
   if (one) return (...xs) => out(one(...xs.map(inn)));
   if (many) return (...xs) => { const r = many(...xs.map(inn)); if (!r.length) throw FAIL; return out(r[0]); };
   return () => { throw new Unsupported(name); };
+}
+// scalar.ts boolShapes read back: a shape for each input, then the answer.
+type BoolShape = null | "b" | { a: BoolShape } | { t: Record<Id, BoolShape[]> };
+export function boolShapesOf(text: string): BoolShape[] {
+  const { n, r } = JSON.parse(decodeURIComponent(text)) as { n: ("b" | { a: number } | { t: Record<Id, number[]> })[]; r: number[] };
+  const nodes: BoolShape[] = n.map((x) => (x === "b" ? "b" : "a" in x ? { a: null } : { t: {} }));
+  const at = (i: number) => (i < 0 ? null : nodes[i]);
+  n.forEach((x, i) => {
+    const y = nodes[i];
+    if (x === "b" || y === "b" || y === null) return;
+    if ("a" in x) (y as { a: BoolShape }).a = at(x.a);
+    else for (const [v, fs] of Object.entries(x.t)) (y as { t: Record<Id, BoolShape[]> }).t[v] = fs.map(at);
+  });
+  return r.map(at);
+}
+// turned, along a shape's paths only: what holds no Bool is given as it is.
+export function turnedBy(v: unknown, f: (x: unknown) => unknown, s: BoolShape): unknown {
+  if (s === null) return v;
+  if (s === "b") return f(v);
+  if ("a" in s) {
+    if (!(v instanceof ArrayView)) return v;
+    const items = v.buf.items, out: unknown[] = [];
+    let changed = false;
+    for (let i = 0; i < v.n; i++) { const x = items[v.start + i], y = turnedBy(x, f, s.a); out.push(y); changed ||= y !== x; }
+    return changed ? arrayOf(out) : v;
+  }
+  type D = { tag: Id; fields: unknown[] };
+  const data = (x: unknown): x is D => typeof x === "object" && x !== null && "tag" in x && Array.isArray((x as D).fields);
+  if (!data(v)) return v;
+  const one = (x: D): D | null => {
+    const fs = s.t[x.tag];
+    if (!fs) return null;
+    const was = x.fields, out = was.map((y, i) => (fs[i] ? turnedBy(y, f, fs[i]) : y));
+    return out.every((y, i) => y === was[i]) ? null : { tag: x.tag, fields: out };
+  };
+  // A list (its rest of the same shape) along its tail in a loop, as a
+  // list may be long; the cells before the last one changed are copied.
+  if (v.tag === CONS && v.fields.length === 2 && s.t[CONS]?.[1] === s) {
+    const cells: D[] = [];
+    let at: unknown = v;
+    while (data(at) && at.tag === CONS && at.fields.length === 2) { cells.push(at); at = at.fields[1]; }
+    const end = data(at) ? (one(at) ?? at) : at;
+    let rest: unknown = end, changed = end !== at;
+    for (let i = cells.length - 1; i >= 0; i--) {
+      const c = cells[i], item = s.t[CONS][0] ? turnedBy(c.fields[0], f, s.t[CONS][0]) : c.fields[0];
+      if (!changed && item === c.fields[0]) { rest = c; continue; }
+      changed = true;
+      rest = { tag: CONS, fields: [item, rest] };
+    }
+    return rest;
+  }
+  return one(v) ?? v;
 }
 // What core-solve.ts gives, once it is imported.
 export type Solver = {
