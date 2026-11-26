@@ -502,6 +502,7 @@ static int chooseFile(void) {
   return yes;
 }
 static int u_ask(void *c, const char *s, size_t n) {
+  if (n >= 8 && !memcmp(s, "offered:", 8)) return 1;
   int offer = n >= 11 && !memcmp(s, "offer file:", 11), open = n >= 13 && !memcmp(s, "ask for file:", 13);
   if (offer || open) {
     if (CHOOSE) { char *u = narrow(CHOOSE, (int)wcslen(CHOOSE)); ters_page_chosen(u); free(u); say("%s: %s\n", offer ? "offer file" : "ask for file", "--ters-choose"); return 1; }
