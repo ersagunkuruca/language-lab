@@ -320,6 +320,11 @@ export class Session {
     const before = def ? this.viewLines(def) : [];
     const was = { code: this.code, names: this.names, comments: this.comments };
     const errs = this.info.errors.length;
+    // Each other definition's type before, to say which the edit changed:
+    // an answer that types one more narrowly than its callers pass gives
+    // them a Choice, and the refusal came 30 definitions later (I377,
+    // GAPS round 25 L5).
+    const typed = new Map(this.own.filter((d) => d !== def).map((d) => [d, this.typeOf(d)]));
     const r = make();
     if (!r.ok) throw new Error(r.reason);
     // A body drawn once as the otherwise is a copy in each case it stands for.
@@ -342,8 +347,10 @@ export class Session {
     this.undos.push(was);
     this.save();
     const at = (after ? after(r.code) : def) ?? def;
-    if (!at || !this.code.nodes[at]) return "ok";
-    return diff(at === def ? before : [], this.viewLines(at)) || "ok (nothing shown changed)";
+    const moved = [...typed].filter(([d, t]) => this.code.nodes[d] && d !== at && this.typeOf(d) !== t).map(([d, t]) => `also ${this.name(d)} : ${this.typeOf(d)} (was ${t})`);
+    const also = moved.length > 8 ? [...moved.slice(0, 8), `… ${moved.length - 8} more`] : moved;
+    if (!at || !this.code.nodes[at]) return ["ok", ...also].join("\n");
+    return [diff(at === def ? before : [], this.viewLines(at)) || "ok (nothing shown changed)", ...also].join("\n");
   }
   private infoHad(was: { code: Code }, id: Id): boolean { return !!was.code.nodes[id]; }
   // A definition's lines, kept per program: an edit's are the next one's
