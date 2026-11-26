@@ -92,8 +92,8 @@ test("a node's comment is its top line, and a folded frame's mark says the comme
   // box, the box grown upward by the row, the whole comment on hover.
   const rows = open.all().filter((x) => /\bcmt-row\b/.test(x.getAttribute("class") ?? ""));
   assert.equal(rows.length, 1);
-  // Cut to the box's width (abs is narrow), the whole on hover.
-  assert.match(rows[0].children.find((c) => c.tagName === "text")!.textContent, /^how.*…$/);
+  // The box widened for it (I382: abs alone is narrow), the whole on hover too.
+  assert.equal(rows[0].children.find((c) => c.tagName === "text")!.textContent, "how far apart");
   const node = open.all().find((x) => x.tagName === "g" && x.children.includes(rows[0]))!;
   assert.ok(node.children.some((c) => c.getAttribute("data-id") === abs || c.getAttribute("data-slot") === abs), "in abs's own node");
   const box = node.children.find((c) => c.tagName === "rect")!;
@@ -105,6 +105,25 @@ test("a node's comment is its top line, and a folded frame's mark says the comme
   const frames = new Set(open.all().map((x) => x.getAttribute("data-frame")).filter((x): x is string => !!x && x !== safe));
   assert.ok(frames.size > 0);
   assert.deepEqual(notes(svg(frames)), ["how far apart"]);
+});
+
+test("a narrow node widens for its comment's first line, up to a cap past which it's cut (I382)", () => {
+  const p = loadProgram(join(root, "examples", "queens"));
+  const safe = p.named("safe");
+  const hooks = { selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {}, canShare: () => () => null, share() {}, at: {}, moved() {}, named: new Set(), folded: new Set(), fold() {}, order: false } as never;
+  const draw = (comments: Record<string, string>) => typedGraph(p.code, { ...p.pres, comments: { ...p.pres.comments, ...comments } }, infer(p.code, p.pres.names), safe, hooks).root as unknown as El;
+  const plain = draw({});
+  // A value: the narrowest kind of node.
+  const lit = plain.all().find((x) => x.tagName === "rect" && /\bpill lit\b/.test(x.getAttribute("class") ?? ""))!;
+  const id = lit.getAttribute("data-id")!, w0 = Number(lit.getAttribute("width"));
+  const widthOf = (e: El) => Number(e.all().find((x) => x.tagName === "rect" && x.getAttribute("data-id") === id)!.getAttribute("width"));
+  const rowOf = (e: El) => e.all().find((x) => /\bcmt-row\b/.test(x.getAttribute("class") ?? ""))!.children.find((c) => c.tagName === "text")!.textContent;
+  const short = draw({ [id]: "the start" });
+  assert.ok(widthOf(short) > w0, `${widthOf(short)} > ${w0}`);
+  assert.equal(rowOf(short), "the start");
+  const long = draw({ [id]: "a distance of one row, which every earlier queen is checked against" });
+  assert.ok(widthOf(long) <= 180);
+  assert.match(rowOf(long), /^a distance.*…$/);
 });
 
 test("a frame's own comment is its top row too, open or folded, and a folded frame around it counts it (I381)", () => {

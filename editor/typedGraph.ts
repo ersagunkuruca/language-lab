@@ -542,6 +542,12 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const ch = hooks.choices?.get(key);
     if (ch) g.append(choiceMark(key, w - 9, -7, ch));
   };
+  // How wide a node is for its comment's row to say its first line, up
+  // to a cap past which it's cut (I382: a value's or a get's 30 px said "n…").
+  const noteW = (key: Id): number => {
+    const c = key !== defId ? pres.comments[key] : undefined;
+    return c ? Math.min(NOTEMAX, tw(resolveRefs(c, (r) => pres.names[r] ?? r).split("\n")[0], NOTEPX) + 16) : 0;
+  };
   const item = (key: Id, w: number, h: number, draw: (g: SVGGElement) => void, extra: Partial<Item> = {}): Sub => {
     const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); noteMark(g, key, w); };
     const own = natural.get(key);
@@ -645,7 +651,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   };
 
   const pill = (id: Id, text: string, cls: string, src?: Id, more?: string): Sub => {
-    const w = Math.max(28, tw(text) + 18), h = 24;
+    const w = Math.max(28, tw(text) + 18, noteW(id)), h = 24;
     return item(id, w, h, (g) => {
       const r = titled(s("rect", { width: w, height: h, rx: 12, class: `pill ${cls}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id }), [typeOf(id), more].filter(Boolean).join("\n\n"));
       g.append(r, s("text", { x: w / 2, y: 16, class: "pl", "text-anchor": "middle" }, text));
@@ -839,7 +845,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // A list, or a chain of one operation, takes one more input at its +.
     const grows = !!hooks.addItem && (!!list || (f.kind === "ref" && ASSOCIATIVE.has(f.target) && n.args.length === 2));
     const plus = grows ? 16 : 0;
-    const [bw, bh] = sized(id, Math.max(44, tw(label, 8.2) + 24, badge ? tw(badge, 6.4) + 16 : 0, portNames ? Math.max(...portNames.map((l) => tw(l, 6.6))) + 30 : 0),
+    const [bw, bh] = sized(id, Math.max(44, noteW(id), tw(label, 8.2) + 24, badge ? tw(badge, 6.4) + 16 : 0, portNames ? Math.max(...portNames.map((l) => tw(l, 6.6))) + 30 : 0),
       (portNames ? 30 + rows.length * 20 : Math.max(30, rows.length * 18 + 12)) + (badge ? 14 : 0) + plus);
     const top = badge ? 14 : 0;
     const portY = (i: number) => (portNames ? top + 30 + i * 20 : top + ((bh - top - plus) / (rows.length + 1)) * (i + 1));
@@ -969,7 +975,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const outLabel = (k: string) => { const b = bound[k]; return name(b) === label(k) ? label(k) : `${label(k)} → ${name(b)}`; };
     const outText = (k: string) => (k === "(all)" ? "all" : label(k));
     const lw = (i: number) => (givenKeys[i] ? tw(label(givenKeys[i]), 6.6) : 0), rw = (i: number) => (boundKeys[i] ? tw(outLabel(boundKeys[i]), 6.6) : outKeys[i] ? tw(outText(outKeys[i]), 6.6) : 0);
-    const bw = Math.max(70, tw(title, 8.2) + 24, tw(badge, 6.4) + 16, ...Array.from({ length: rows }, (_, i) => lw(i) + rw(i) + 36));
+    const bw = Math.max(70, noteW(id), tw(title, 8.2) + 24, tw(badge, 6.4) + 16, ...Array.from({ length: rows }, (_, i) => lw(i) + rw(i) + 36));
     const top = 34;
     const bh = top + rows * 20 + 6;
     const portY = (i: number) => top + i * 20 + 8;
@@ -1063,7 +1069,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       } else if (named(b)) {
         // A let node: `name =`, its value wired in; its uses are get nodes.
         const label = `${name(b)} =`;
-        const bw = Math.max(44, tw(label, 8.2) + 20), bh = 26;
+        const bw = Math.max(44, noteW(b), tw(label, 8.2) + 20), bh = 26;
         item(b, bw, bh, (g) => {
           g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn letn${sel(b)}`, "data-id": b, "data-move": b }), `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}: a let node. Its uses are get nodes; drag its dot to use it elsewhere`));
           g.append(s("text", { x: bw / 2, y: 17, class: "cl", "text-anchor": "middle" }, label));
@@ -1145,7 +1151,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     shift(at, v, 0, 0);
     const title = `${name(arm.variant)}(…) =`;
     const lw = Math.max(0, ...arm.binds.map((b) => tw(name(b), 6.8)));
-    const bw = Math.max(64, tw(title, 8.2) + 24, lw + 30), bh = 30 + arm.binds.length * 20;
+    const bw = Math.max(64, noteW(id), tw(title, 8.2) + 24, lw + 30), bh = 30 + arm.binds.length * 20;
     const portY = (i: number) => 30 + i * 20;
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn letn${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), `${name(arm.variant)}(${arm.binds.map(name).join(", ")}) = …: the value taken apart, a name for each part`));
@@ -1240,7 +1246,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     }
     if (n.kind === "match" && n.otherwise) { labels.push("otherwise"); addCase(n.otherwise, [], n.otherwise, ""); }
     const lw = Math.max(0, ...labels.map((l) => tw(l, 6.6)));
-    const bw = Math.max(64, tw(title, 8.2) + 24, lw + 30);
+    const bw = Math.max(64, noteW(id), tw(title, 8.2) + 24, lw + 30);
     const bh = 30 + inputs.length * 20;
     const portY = (i: number) => 30 + i * 20;
     item(id, bw, bh, (g) => {
@@ -1280,7 +1286,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // interface's own picture (BACKLOG E141).
     if (td.interface) for (const f of td.variants.flatMap((v) => (node(v) as NodeOf<"variant">).fields)) {
       const label = typeText((node(f) as NodeOf<"field">).type);
-      const bw = Math.max(64, tw(name(f), 8.2) + 24, tw(label, 6.6) + 22), bh = 48;
+      const bw = Math.max(64, noteW(f), tw(name(f), 8.2) + 24, tw(label, 6.6) + 22), bh = 48;
       const k = item(f, bw, bh, (g) => {
         g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${sel(f)}`, "data-id": f, "data-move": f }), `${name(f)}: an operation of ${name(defId)}, ${label}. Each implementation says how its type does it`));
         g.append(s("text", { x: bw / 2, y: 19, class: "cl", "text-anchor": "middle" }, name(f)));
@@ -1294,7 +1300,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       const { fields: fs, returns } = node(v) as NodeOf<"variant">;
       const labels = fs.map((f) => `${name(f)}: ${typeText((node(f) as NodeOf<"field">).type)}`);
       const gives = returns ? `returns ${typeText(returns)}` : "";
-      const bw = Math.max(64, tw(name(v), 8.2) + 24, ...labels.map((l) => tw(l, 6.6) + 22), gives ? tw(gives, 6.6) + 22 : 0);
+      const bw = Math.max(64, noteW(v), tw(name(v), 8.2) + 24, ...labels.map((l) => tw(l, 6.6) + 22), gives ? tw(gives, 6.6) + 22 : 0);
       const bh = Math.max(30, 28 + fs.length * 18) + (gives ? 18 : 0);
       const k = item(v, bw, bh, (g) => {
         g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${sel(v)}`, "data-id": v, "data-move": v }), td.effect ? `${name(v)}: an operation of ${name(defId)}${gives ? `; it ${gives}` : ""}` : `${name(v)}: makes a ${name(defId)}`));
@@ -1423,7 +1429,7 @@ const wide = (it: { w: number }) => it.w;
 // of the node, never a line floating above it): the node's box grown
 // upward by the row, in its frame and background, so it moves and selects
 // with the node; the first line cut to the box's width, the whole on hover.
-const NOTEPX = 6.2;
+const NOTEPX = 6.2, NOTEMAX = 180;
 function noteRow(g: SVGGElement, w: number, top: number, text: string): void {
   const box = [...g.children].find((c) => c.tagName === "rect" && Number(c.getAttribute("width")) === w) as SVGElement | undefined;
   if (box) {
