@@ -20,11 +20,14 @@
 // A code → code pass, the program checked again only when one was found.
 
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { copyNodes, freshId, isCall, subtree } from "../../ters/src/model.ts";
+import { copyNodes, freshId, isCall, isUse, nodeEntries, subtree, useTarget } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { CELL, HASH_SET, INT, NUMBER, Subst, TABLE } from "../../ters/src/lang/types.ts";
 import { SIGS } from "../../ters/src/lang/std.ts";
+import { PRELUDE_DEFS, originalOf } from "../../ters/src/lang/prelude-ids.ts";
+
+const INVERSE = PRELUDE_DEFS["inverse"];
 
 // Answers not worth keeping: numbers, and what can change.
 const NOT_KEPT = new Set<Id>([NUMBER, INT, CELL, TABLE, HASH_SET]);
@@ -34,9 +37,10 @@ export function literalCalls(code: Code, info: Info, names: Names, roots: readon
   let nodes: Code["nodes"] | null = null;
   const more: Names = {};
   const byKey = new Map<string, Id>();
+  const solved = solvedDefs(code);
   for (const d of code.defs) {
     const def = code.nodes[d];
-    if (def?.kind !== "def" || !def.body || code.nodes[def.body]?.kind !== "lambda" || roots.includes(d)) continue;
+    if (def?.kind !== "def" || !def.body || code.nodes[def.body]?.kind !== "lambda" || roots.includes(d) || solved.has(d)) continue;
     for (const id of subtree(code, def.body)) {
       const call = code.nodes[id];
       if (!isCall(call) || !call.args.length) continue;
@@ -67,6 +71,27 @@ export function literalCalls(code: Code, info: Info, names: Names, roots: readon
   }
   if (!nodes) return { code, names, made };
   return { code: { nodes, defs: [...code.defs, ...made] }, names: { ...names, ...more }, made };
+}
+
+// The definitions a solve runs (a `use`, or what `inverse` is given:
+// json read's json spelled run backwards) and those they call: their literals stay where they are
+// written, as the solver plans a call of a builtin on literals and not a
+// definition's value (C346 had json read refused, "data holding a Bool").
+function solvedDefs(code: Code): Set<Id> {
+  const out = new Set<Id>(), todo: Id[] = [];
+  const defsIn = (id: Id) => { for (const x of subtree(code, id)) { const r = code.nodes[x]; if (r?.kind === "ref" && code.nodes[r.target]?.kind === "def") todo.push(r.target); } };
+  for (const [, n] of nodeEntries(code.nodes)) {
+    if (isUse(n)) todo.push(useTarget(code.nodes, n));
+    else if (isCall(n) && n.args.length) { const f = code.nodes[n.fn]; if (f?.kind === "ref" && originalOf(f.target) === INVERSE) defsIn(n.args[0]); }
+  }
+  while (todo.length) {
+    const d = todo.pop()!;
+    const def = code.nodes[d];
+    if (out.has(d) || def?.kind !== "def" || !def.body) continue;
+    out.add(d);
+    defsIn(def.body);
+  }
+  return out;
 }
 
 export function withLiteralCalls(code: Code, info: Info, names: Names, roots: readonly Id[]): { code: Code; info: Info; names: Names } {
