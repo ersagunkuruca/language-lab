@@ -15,7 +15,7 @@
 // partial evaluation (Futamura, 1971; Jones, Gomard and Sestoft, 1993).
 
 import type { Bound, Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
-import { dependencies, freshId, isCall, SCHEMA, subtree, copyNodes, dropNode, nodeIds } from "../../ters/src/model.ts";
+import { dependencies, freshId, isCall, SCHEMA, subtree, copyNodes, dropNode, nodeIds, ownerOfTypeParts } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
@@ -54,6 +54,50 @@ export function expandInverses(code: Code, names: Names, info?: Info, left?: Set
     const p = param(fn)!, x = add({ kind: "binder" } as Omit<Node, "id">);
     more[x] = names[p] ?? "x";
     out.nodes[id] = { id, kind: "call", fn, given: { out: y }, binds: { [p]: x }, body: ref(x) } satisfies Bound;
+  };
+  // A definition of one input, a record (one case), that reads it only
+  // through its fields, every field: the case and its fields in order
+  // (null otherwise). Read backwards, the record is made from its fields
+  // read back (larder's `spelled item`: an amount, a unit and a food
+  // joined), as the relational interpreter fills in a record's fields.
+  let owner: Map<Id, Id> | undefined;
+  const fieldsRead = (fn: Id): { variant: Id; fields: Id[] } | null => {
+    const p = param(fn);
+    const def = out.nodes[(out.nodes[fn] as NodeOf<"ref">).target] as NodeOf<"def">;
+    const inside = subtree(out, def.body!);
+    const uses = inside.filter((x) => { const r = out.nodes[x]; return r?.kind === "ref" && r.target === p; });
+    const reads = inside.flatMap((x) => { const c = out.nodes[x]; return isCall(c) && c.args?.length === 1 && uses.includes(c.args[0]) ? [c] : []; });
+    if (!uses.length || reads.length !== uses.length) return null;
+    const read = new Set(reads.map((c) => (out.nodes[c.fn] as NodeOf<"ref"> | undefined)?.target ?? ""));
+    if (![...read].every((f) => out.nodes[f]?.kind === "field")) return null;
+    owner ??= ownerOfTypeParts(out);
+    const typeDefs = new Set([...read].map((f) => owner!.get(f)));
+    const t = typeDefs.size === 1 ? out.nodes[(out.nodes[[...typeDefs][0] ?? ""] as NodeOf<"def"> | undefined)?.body ?? ""] : undefined;
+    if (t?.kind !== "typedef" || t.variants.length !== 1) return null;
+    const variant = t.variants[0], fields = (out.nodes[variant] as NodeOf<"variant">).fields;
+    return fields.length === read.size && fields.every((f) => read.has(f)) ? { variant, fields } : null;
+  };
+  // inverse(F, y), F reading its record only through its fields → solve F
+  // over the fields (a copy, each field read its own input) given out = y,
+  // the record made from them.
+  const fromFields = (id: Id, fn: Id, y: Id, { variant, fields }: { variant: Id; fields: Id[] }) => {
+    const def = out.nodes[(out.nodes[fn] as NodeOf<"ref">).target] as NodeOf<"def">;
+    const body = copy(def.body!), lam = out.nodes[body] as NodeOf<"lambda">, q = lam.params[0];
+    const ps = fields.map((f) => { const b = add({ kind: "binder" } as Omit<Node, "id">); more[b] = names[f] ?? LIBRARY.names[f] ?? "field"; return b; });
+    for (const x of subtree(out, lam.body)) {
+      const c = out.nodes[x];
+      if (!isCall(c) || c.args?.length !== 1) continue;
+      const a = out.nodes[c.args[0]], f = out.nodes[c.fn];
+      if (a?.kind === "ref" && a.target === q && f?.kind === "ref") out.nodes[x] = { id: x, kind: "ref", target: ps[fields.indexOf(f.target)] } as Node;
+    }
+    out.nodes[body] = { ...lam, params: ps };
+    const d = freshId();
+    out.nodes[d] = { id: d, kind: "def", body } as Node;
+    out.defs.push(d);
+    more[d] = `${names[def.id] ?? "printer"} of its fields`;
+    const xs = ps.map((b) => { const x = add({ kind: "binder" } as Omit<Node, "id">); more[x] = more[b]; return x; });
+    const made = add({ kind: "call", fn: ref(variant), args: xs.map((x) => ref(x)) } as Omit<Node, "id">);
+    out.nodes[id] = { id, kind: "call", fn: ref(d), given: { out: y }, binds: Object.fromEntries(ps.map((b, j) => [b, xs[j]])), body: made } satisfies Bound;
   };
   // A tree again with ids of its own, its references to its own binders
   // to the new ones (a function written in conjugate's call, used twice).
@@ -256,7 +300,14 @@ export function expandInverses(code: Code, names: Names, info?: Info, left?: Set
     // escape read, L72e1b): left as they are; descent and the written reader
     // read them where the library's printers are read, and a solve on them
     // doesn't check.
-    if (param(c.args[0])) { if (LIBRARY.code.nodes[id]) continue; inverse(id, c.args[0], c.args[1]); expanded.push(id); continue; }
+    if (param(c.args[0])) {
+      if (LIBRARY.code.nodes[id]) continue;
+      const fields = fieldsRead(c.args[0]);
+      if (fields) fromFields(id, c.args[0], c.args[1], fields);
+      else inverse(id, c.args[0], c.args[1]);
+      expanded.push(id);
+      continue;
+    }
     // inverse((y) => y · c, o) and the like, of Float64s or fractions:
     // the arithmetic undone, o ÷ c, with no answer where c is 0, as the
     // relational interpreter's rules for them have it (relate.ts
