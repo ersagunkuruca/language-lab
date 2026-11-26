@@ -3463,7 +3463,10 @@ int main(int argc, char **argv) {
           label = l;
           const v = ex(e.body, lines, d, union(keep, okFree));
           if (budget) lines.push(`${d}lab_fuel = ${budget.s};`);
-          if (e.k === "attempt") lines.push(`${d}${local(res)} = ${v};`);
+          // A body that always leaves (`fail`, or one that stops) has no answer to
+          // set: its "0" isn't a value of every type (an Array's is a struct).
+          if (/^\s*(goto \w+|return\b[^;]*);$/.test(lines[lines.length - 1] ?? "")) { if (e.k !== "attempt") given = zero(typeOf(e.body, f.locals)); }
+          else if (e.k === "attempt") lines.push(`${d}${local(res)} = ${v};`);
           else { given = temp(typeOf(e.body, f.locals)); lines.push(`${d}${given} = ${v};`); }
         });
         // On with an answer: what only otherwise would use goes.

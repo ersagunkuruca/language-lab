@@ -5,6 +5,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Code, Id } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
@@ -945,4 +947,17 @@ test("bounce's frames logged in C replay in the evaluator to where C ended (L280
   const page = showPage({ code: p0.code, info, names: p0.pres.names, main, program: "bounce", doc: fakeDoc(), store: store(), console: { log() {}, error() {} }, frame: () => {}, replay: log });
   assert.equal((page.root as FakeEl).html(), r.stdout.toString().split("\x1e\n").slice(0, -1).at(-1));
   page.stop();
+});
+
+// A `try` whose body always has no answer (pedal's bands read backwards):
+// its answer isn't set from the "0" the body's C gives, which isn't a
+// value of every type (an Array's is a struct), so pedal's page builds as
+// an app's C (built as `ters build-native-app` writes it, checked by the C
+// compiler alone).
+test("pedal's page compiles to C", { skip }, () => {
+  const out = mkdtempSync(join(tmpdir(), "pedal-c-"));
+  const r = spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/ters.ts"), "build-native-app", join(import.meta.dirname, "../../ters/examples/pedal"), "--windows", "-o", out], { encoding: "utf8", env: { ...process.env, TERS_NO_KEPT_OUTPUT: "1" } });
+  assert.equal(r.status, 0, r.stderr);
+  const cc = spawnSync(process.env.CC ?? "cc", ["-std=c99", "-w", "-fsyntax-only", join(out, "page.c")], { encoding: "utf8" });
+  assert.equal(cc.status, 0, cc.stderr);
 });
