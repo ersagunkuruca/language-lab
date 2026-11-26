@@ -83,7 +83,7 @@ import { shareFoldItems } from "./fold-items.ts";
 import { finiteChecks } from "./finite-checks.ts";
 import { envSet } from "./zero-parts.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { FLOAT32_TYPE, LIBRARY } from "../../ters/src/lang/library.ts";
+import { DUAL_TYPE, FLOAT32_TYPE, LIBRARY } from "../../ters/src/lang/library.ts";
 import { SITES, STOPS } from "./stops.ts";
 import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
@@ -272,6 +272,8 @@ export const isData = (t: LType): t is DType => typeof t === "object" && "cases"
 export const isRecord = (t: LType): t is RType => typeof t === "object" && "variant" in t;
 // A Float32 (L286): its one Float64, rounded to a binary32 at every step,
 // so a target may hold it in 32 bits (C309).
+// The numbers module's Dual: a value and a slope, two Float64s.
+export const isDual = (t: LType): boolean => isRecord(t) && !t.mutable && t.def === DUAL_TYPE && t.fields.length === 2 && t.fields.every((x) => x.t === "f64");
 export const isFloat32 = (t: LType): boolean => isRecord(t) && !t.mutable && t.def === FLOAT32_TYPE && t.fields.length === 1 && t.fields[0].t === "f64";
 export const isFn = (t: LType): t is FType => typeof t === "object" && "result" in t;
 // A closure's own struct: the function type it has and what it captured.
