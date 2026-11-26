@@ -5783,8 +5783,10 @@ no walk.
 Measured in Node too, `ters compile` against flock.ideal.js, 20 ticks:
 27 ms against 8 ms a tick at 2,000 birds, 980 against 155 ms at 20,000.
 On the page the map runs on the main thread (its workers didn't pay at
-either size). This is round 3's FL3: birds as objects holding Vec3
-objects, columns for lists of records (G1b with G3d) the fix.
+either size). This is round 3's FL3: in the profile the birds are
+objects holding Vec3 objects, read field by field in the neighbour walk.
+Columns for lists of records (G1b, #3040) exist in JavaScript, but these
+birds aren't held as columns; why is the first thing to find out.
 
 **FR3. The drawing reads the birds as a list, three times a draw
 (I380).** gpu-frame.ts reads a draw's instances with `fromList` (items),
@@ -5800,8 +5802,8 @@ leaves of the same list can share one buffer.
 
 **FR5. Packing reads records, not columns.** With FR3 and FR4 gone, the
 drawing still reads each bird's place and velocity through two objects
-(G8b's packing loop), where the page by hand copies six columns. Columns
-(G1b with G3d) serve this as they serve FR2.
+(G8b's packing loop), where the page by hand copies six columns. Birds
+held as columns would serve this as they serve FR2.
 
 The frame itself costs nothing: `frame of` makes three passes and seven
 draws in under 0.2 ms, and the matching keeps the meshes, lines and image
@@ -5811,4 +5813,4 @@ on the GPU (0 bytes for them after the first frame, as by hand).
 
 1. I380 (FR3, FR4), the drawing: Editor lane, gpu-frame.ts.
 2. C347 (FR1), cells turned by their types: Compiler lane.
-3. FR2 and FR5 wait on columns for lists of records (G1b with G3d).
+3. FR2 and FR5: why the birds aren't columns here (C348).
