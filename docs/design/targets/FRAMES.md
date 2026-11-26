@@ -270,8 +270,10 @@ uploaded, draw calls.
   was under 1% of the flock page's main thread.
 - **G9d**: the flock page drawn with `render`, 2,000 birds and then
   20,000, and its CPU time a frame against today's `paint`.
-- **G10**: depth (already in G9b's rasterizer, in WebGPU here), texture
-  targets, `sampled`, pass order, and the flock with a fog pass.
+- **G10** (done): depth (already in G9b's rasterizer, in WebGPU here),
+  texture targets, `sampled`, pass order, and the flock with a fog pass
+  (flock-frame-page: the scene and its distance into two textures, then a
+  full-screen pass reading both).
 - **G11**: `Image` from a file, sampled; the OBJ-subset mesh reader in
   Ters; a mesh drawn from a file.
 - **Round**: the stage's bigger-program round on the flock drawn with data,
