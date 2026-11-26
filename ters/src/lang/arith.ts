@@ -326,11 +326,18 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   const otherwise = (v: number): Type => ((s.whole.has(v) && !s.fractional.has(v) && !s.numbers.has(v) && s.arith.has(v)) || !fitsAt(v, num)) && intFits(v) ? int : num;
   // A type with the definition's variables replaced, and every number-type
   // variable left open made its default.
+  // (A part with nothing to close is the one given, as `open` below.)
   const close = (t: Type, env: Env): Type => {
-    t = s.resolve(t);
-    if (t.t === "var") return env.has(t.v) ? env.get(t.v)! : s.arith.has(t.v) ? otherwise(t.v) : t;
-    if (t.t === "con") return { t: "con", id: t.id, args: t.args.map((a) => close(a, env)) };
-    return { t: "fn", params: t.params.map((p) => close(p, env)), ret: close(t.ret, env), eff: s.resolveRow(t.eff) };
+    const r = s.resolve(t);
+    if (r.t === "var") return env.has(r.v) ? env.get(r.v)! : s.arith.has(r.v) ? otherwise(r.v) : r;
+    if (r.t === "con") { const args = closed(r.args, env); return args === r.args ? r : { t: "con", id: r.id, args }; }
+    const params = closed(r.params, env), ret = close(r.ret, env), eff = s.resolveRow(r.eff);
+    return params === r.params && ret === r.ret && eff === r.eff ? r : { t: "fn", params, ret, eff };
+  };
+  const closed = (ts: Type[], env: Env): Type[] => {
+    let out: Type[] | null = null;
+    for (let i = 0; i < ts.length; i++) { const c = close(ts[i], env); if (c !== ts[i]) (out ??= ts.slice())[i] = c; }
+    return out ?? ts;
   };
   const constrained = (sc: Scheme) => [...new Set([...(sc.arith ?? []), ...(sc.less ?? []), ...(sc.ordered ?? []), ...(sc.needs ?? []).map(([v]) => v)])];
   // What a scheme's variables stand for at one use: walk its type beside
@@ -828,16 +835,24 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   // closed types.
   // A record-generic variable (the vectors module's) stays: the scalar
   // profile lowers those once per record.
+  // A type with nothing to close is the one given (the same object, so
+  // what is kept by a node's type knows it again next compile, L266).
   const open = (t: Type): Type => {
-    t = s.resolve(t);
-    if (t.t === "var") return s.arith.has(t.v) && !s.numbers.has(t.v) ? otherwise(t.v) : t;
-    if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(open) };
-    return { t: "fn", params: t.params.map(open), ret: open(t.ret), eff: s.resolveRow(t.eff) };
+    const r = s.resolve(t);
+    if (r.t === "var") return s.arith.has(r.v) && !s.numbers.has(r.v) ? otherwise(r.v) : r;
+    if (r.t === "con") { const args = opened(r.args); return args === r.args ? r : { t: "con", id: r.id, args }; }
+    const params = opened(r.params), ret = open(r.ret), eff = s.resolveRow(r.eff);
+    return params === r.params && ret === r.ret && eff === r.eff ? r : { t: "fn", params, ret, eff };
+  };
+  const opened = (ts: Type[]): Type[] => {
+    let out: Type[] | null = null;
+    for (let i = 0; i < ts.length; i++) { const o = open(ts[i]); if (o !== ts[i]) (out ??= ts.slice())[i] = o; }
+    return out ?? ts;
   };
   // Read through to the check's, the nodes the program has (a library
   // body it doesn't reach isn't typed for this).
-  if (typeOf instanceof OverMap) { for (const id of nodeIds(nodes)) { const t = typeOf.get(id); if (t) typeOf.set(id, open(t)); } }
-  else for (const [id, t] of typeOf) typeOf.set(id, open(t));
+  if (typeOf instanceof OverMap) { for (const id of nodeIds(nodes)) { const t = typeOf.get(id); if (t) { const o = open(t); if (o !== t) typeOf.set(id, o); } } }
+  else for (const [id, t] of typeOf) { const o = open(t); if (o !== t) typeOf.set(id, o); }
   for (const [d, sc] of schemes) {
     // One left as it was keeps its scheme, so resolving the program again
     // (a runner made of it: grades.ts algebrasOf) leaves it as it is too.
