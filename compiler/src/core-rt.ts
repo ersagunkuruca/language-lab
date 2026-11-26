@@ -7,7 +7,7 @@
 import { bordered } from "../../ters/src/lang/border.ts";
 import { ARRAY_OPS, CELL_OPS, CONS, FALSE, LOCALE_V, NIL, NONE, SOME, TICKET_V, TRUE } from "../../ters/src/lang/std-ids.ts";
 import { madeItem } from "../../ters/src/lang/over.ts";
-import { ArrayView, arrayOf, arrayOfItems, rangeArray, arrayView, pushFrontOwned, pushOwned, replaceOwned } from "../../ters/src/lang/array-view.ts";
+import { ArrayView, arrayOf, arrayOfItems, rangeArray, arrayView, pushFrontOwned, pushOwned, replaceOwned, emptyFor } from "../../ters/src/lang/array-view.ts";
 import { hashset$items, show as showFloat, table$empty, table$entries, table$has, table$keys, table$put, table$remove, table$size } from "../../ters/src/lang/std-run.ts";
 import { directRead, directTable, tableRead, tablePutOwned, tableRemoveOwned, type Table } from "../../ters/src/lang/table.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
@@ -518,7 +518,7 @@ export const moded = (make: (...a: unknown[]) => (...xs: unknown[]) => Iterable<
 export const RUNTIME = {
   FAIL, OUT, Aborted, Pending, Unsupported, planned, moded,
   // An array's item read in place (core-js.ts, G3d).
-  ArrayView, arrayView,
+  ArrayView, arrayView, emptyFor,
   // A list over one array (Bytes' items, a table's keys), read by position
   // in place (core-js.ts, C321), and a list made one: Bytes made in
   // compiled code hold their items so.

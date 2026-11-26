@@ -157,6 +157,7 @@ const LITERAL = /^(?:\(?-?(?:[\d.]+(?:e[+-]?\d+)?n?|Infinity|NaN)\)?|true|false|
 const THROWS = /\bR\.(?!FAIL\b|stop\(|step\(|mod\(|remk\()|\brt\d+\(|\bw\d+\(|\btry\b|\bthrow\b|\byield\b/;
 
 // `only`: the functions printed (reachedFuncs), the rest left out.
+const FILLED = /^filled(·|$)/;
 export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names: string[]; worlds: string[]; parts: string[][]; head: string[] } {
   const names = ir.funcs.map((_, i) => `f${i}`);
   // The partial functions, whose bodies may throw no answer (an attempt's try).
@@ -417,6 +418,14 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
     // A call's inputs where a statement begins: one that is a partial call
     // is checked as a slot when everything before it is a value already
     // (so computing it first changes no order).
+    // fill-arrays.ts's `filled` called on the empty array, 0 and a count
+    // starts from an empty array with room for that many (C303).
+    function filledFrom(e: Extract<SExpr, { k: "call" }>, xs: string[], out: string[], d: string): string[] {
+      const [a0, a1] = e.args;
+      if (!FILLED.test(ir.funcs[e.fn].name) || xs.length < 3 || a0?.k !== "rt" || !/^array\.empty\.a\d+$/.test(a0.fn) || !((a1?.k === "num" || a1?.k === "int") && Number(a1.v) === 0)) return xs;
+      const n = named(xs[2], out, d);
+      return [`R.emptyFor(${n})`, xs[1], n, ...xs.slice(3)];
+    }
     function inputs(args: SExpr[], out: string[], d: string): string[] {
       const atomic = (a: SExpr) => ["local", "num", "int", "text", "bool", "cap"].includes(a.k);
       return exs(args, out, d, (a, own, j) => (args.slice(0, j).every(atomic) ? slot(a, own, d) : ex(a, own, d)));
@@ -444,7 +453,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
       const partial = (e.k === "call" && ir.funcs[e.fn].partial) || (e.k === "apply" && e.t.partial);
       if (!onFail || !partial) return ex(e, out, d);
       let c: string;
-      if (e.k === "call") c = call(e.fn, inputs(e.args, out, d));
+      if (e.k === "call") c = call(e.fn, filledFrom(e, inputs(e.args, out, d), out, d));
       else { const fn = ex(e.fn, out, d), xs = inputs(e.args, out, d); out.push(`${d}${local(e.tmp)} = ${fn};`); c = ap(e.t, [local(e.tmp), ...xs]); }
       const t = temp();
       out.push(`${d}const ${t} = ${c};`, `${d}if (${t} === R.FAIL) ${onFail}`);
@@ -486,8 +495,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
         case "call": {
           // Its inputs computed first: a call's own statements must not
           // come between them.
-          const xs = exs(e.args, pre, d);
-          const c = call(e.fn, xs);
+          const c = call(e.fn, filledFrom(e, exs(e.args, pre, d), pre, d));
           return ir.funcs[e.fn].partial ? `R.ck(${c})` : c;
         }
         case "make": {
@@ -747,7 +755,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
       const failable = to === "return" ? !!f.partial : !!to.fails;
       const give = (x: string) => [...out, ...(to === "return" ? [`${d}return ${x};`] : x === to.set ? [] : [`${d}${to.set} = ${x};`])];
       if (failable && e.k === "fail") return give("R.FAIL");
-      if (failable && e.k === "call" && ir.funcs[e.fn].partial && !(to === "return" && e.fn === i && e.tail)) return give(call(e.fn, inputs(e.args, out, d)));
+      if (failable && e.k === "call" && ir.funcs[e.fn].partial && !(to === "return" && e.fn === i && e.tail)) return give(call(e.fn, filledFrom(e, inputs(e.args, out, d), out, d)));
       if (failable && e.k === "attempt" && !(e.resumes && !cycle)) {
         const ok = tried(e, out, d);
         return [...out, `${d}if (${ok}) {`, ...block(e.ok, to, d + "  "), `${d}} else {`, ...block(e.otherwise, to, d + "  "), `${d}}`];

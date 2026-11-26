@@ -220,3 +220,12 @@ export const replaceOwned = (a: ArrayValue, i: I.Int, x: unknown): ArrayView => 
   return v;
 };
 export const itemsIn = (a: ArrayValue): unknown[] => { const v = arrayView(a); return v.buf.items.slice(v.start, v.start + v.n); };
+// An empty array with room behind for n pushes (C303): what fill-arrays.ts's
+// `filled` starts from in the core IR's JavaScript, where n is known, so
+// filling it item by item copies nothing; from the shared empty array an
+// array of 25,000 items was copied twelve times, a fifth of mnist's Adam
+// pass. Room for a million at most: past that the pushes copy as usual.
+export const emptyFor = (n: number): ArrayView => {
+  const k = Math.min(Math.max(4, Number(n) || 0), 1 << 20);
+  return new ArrayView(versionOf({ items: new Array(4 + k).fill(0), lo: 4, hi: 4 }), 4, 0);
+};
