@@ -70,7 +70,8 @@ export const ARRAY_OPS: typeof Std.ARRAY_OPS = {
   "slice": "builtin.array.slice",
   "replaceAt": "builtin.array.replaceAt",
   "firstIfAny": "builtin.array.firstIfAny",
-  "front": "builtin.array.front"
+  "front": "builtin.array.front",
+  "sorted": "builtin.array.sorted"
 };
 export const ARRAY_TAG: typeof Std.ARRAY_TAG = "std.array";
 export const ASK_PERMISSION_OP: typeof Std.ASK_PERMISSION_OP = "std.permissions.ask permission";
@@ -248,6 +249,7 @@ export const BUILTIN_INPUTS: typeof Std.BUILTIN_INPUTS = {
   "builtin.array.replaceAt": 3,
   "builtin.array.firstIfAny": 1,
   "builtin.array.front": 1,
+  "builtin.array.sorted": 1,
   "builtin.table.at": 2,
   "builtin.table.empty": 0,
   "builtin.table.put": 3,
@@ -447,6 +449,7 @@ export const COMPUTE_ONLY: typeof Std.COMPUTE_ONLY = [
   "builtin.array.replaceAt",
   "builtin.array.firstIfAny",
   "builtin.array.front",
+  "builtin.array.sorted",
   "builtin.table.at",
   "builtin.table.empty",
   "builtin.table.put",
@@ -1312,6 +1315,7 @@ export const stdNames: typeof Std.stdNames = {
   "builtin.array.replaceAt": "replace in array",
   "builtin.array.firstIfAny": "first of array if any",
   "builtin.array.front": "front of array",
+  "builtin.array.sorted": "sorted array",
   "builtin.table.at": "table value at",
   "builtin.table.empty": "empty table",
   "builtin.table.put": "table put",

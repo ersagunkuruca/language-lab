@@ -207,6 +207,10 @@ export const TARGETS: Record<Id, Target> = {
   // A slice, for `drop` and `take` (C221): a view on the same buffer.
   [ARRAY_OPS.slice]: { js: "impl", scalar: ARRAYS },
   [ARRAY_OPS.firstIfAny]: { js: "impl", scalar: ARRAYS },
+  // Sorted by compare (C355): the evaluator's by JavaScript's stable sort
+  // (run.ts, with the program's order of cases); scalar.ts writes a merge
+  // sort over positions, one copy per item type.
+  [ARRAY_OPS.sorted]: { js: written("run.ts: by compare, which knows the program's cases"), scalar: written("scalar.ts arraySort: with `data`, a merge sort over positions; not on shaders") },
   [ARRAY_OPS.front]: { js: "impl", scalar: ARRAYS },
   // Replacing an item (C93c): in JS a new version of the buffer (Baker's,
   // std.ts); in C in place when the array has one holder, otherwise and in

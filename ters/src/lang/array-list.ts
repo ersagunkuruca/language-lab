@@ -28,7 +28,7 @@ import { ARRAY_OPS, COMPARE, CONS, COST, INT_OPS, JOBS, NIL, NONE, PAIR_V, REPRE
 // written, with its costs), which the chooser weighs it against.
 export interface ArrayList { representations: Id[]; defs: Id[] }
 
-const cost = (k: Lang, c: "constant" | "linear" | "quadratic") => k.x(`${COST}.${c}`);
+const cost = (k: Lang, c: "constant" | "linear" | "linearithmic" | "quadratic") => k.x(`${COST}.${c}`);
 
 export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayList {
   const defs: Id[] = [];
@@ -118,6 +118,12 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
   const show = def("array show", ["array"], (a) => k.call(SHOW_ANY, items(a)));
   const compare = def("array compare", ["a", "b"], (a, b) => k.call(COMPARE, items(a), items(b)));
 
+  // A sort (C355): the array sorted by the target's own sort, by compare,
+  // equal items in the order they were, as the list's merge sort has
+  // them. That merge conses its answer up, which on an array is a call
+  // deep an item (clinic's percentiles: past 1000 deep, a generator step
+  // each).
+  const sorted = def("array sort", ["array"], (a) => k.call(ARRAY_OPS.sorted, a));
   const rep = k.def("array of List");
   k.define(rep, k.call(REPRESENTATION_V, k.x(ARRAY_OPS.items), cost(k, "linear"), k.list(
     k.call(JOBS.job, k.x(NIL), k.x(nil), cost(k, "constant")),
@@ -138,6 +144,7 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.job, k.x(prelude("replace at")), k.x(replaced), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("drop")), k.x(dropped), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("take")), k.x(taken), cost(k, "constant")),
+    k.call(JOBS.job, k.x(prelude("sort")), k.x(sorted), cost(k, "linearithmic")),
     k.call(JOBS.hides, k.x(CONS), k.int(1)),
     // A whole list from outside: one array of it (C76).
     k.call(JOBS.storeBy, k.x(ARRAY_OPS.of)),
@@ -159,6 +166,7 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.asWritten, k.x(prelude("replace at")), cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("drop")), cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("take")), cost(k, "linear")),
+    k.call(JOBS.asWritten, k.x(prelude("sort")), cost(k, "linearithmic")),
   )));
   defs.push(spec);
   return { representations: [rep, spec], defs };

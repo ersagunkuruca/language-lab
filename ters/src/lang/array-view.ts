@@ -233,6 +233,9 @@ export const replaceOwned = (a: ArrayValue, i: I.Int, x: unknown): ArrayView => 
   return v;
 };
 export const itemsIn = (a: ArrayValue): unknown[] => { const v = arrayView(a); return v.buf.items.slice(v.start, v.start + v.n); };
+// The items in an order (C355): JavaScript's sort is stable, so equal
+// items keep their order, as the library's merge sort keeps them.
+export const sortedBy = (a: ArrayValue, compare: (x: unknown, y: unknown) => number): ArrayView => arrayOf(itemsIn(a).sort(compare));
 // An empty array with room behind for n pushes (C303): what fill-arrays.ts's
 // `filled` starts from in the core IR's JavaScript, where n is known, so
 // filling it item by item copies nothing; from the shared empty array an

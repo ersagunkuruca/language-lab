@@ -67,6 +67,7 @@ import { needsResolving, preludeDef, resolveArithmetic } from "./arith.ts";
 import { fractionCase } from "./prelude-ids.ts";
 import { infer } from "./infer.ts";
 import { ALGEBRAIC_OPS, ALGEBRAIC_V, ARRAY_OPS, PAIR_V } from "./std.ts";
+import { sortedBy, type ArrayValue } from "./array-view.ts";
 import { ofAlg, toAlg } from "./std-values.ts";
 import * as Alg from "./algebraic.ts";
 import { realRoots, type Algebraic } from "./algebraic.ts";
@@ -1809,7 +1810,8 @@ export function interpreter(given: Code, opts: Options = {}) {
     // isn't a search worth making.
     const many = STD_MANY[id] ?? (STD_IMPL[id] ? (...xs: Value[]) => [STD_IMPL[id](...xs)] : id === SHOW_ANY ? (x: Value) => [showValue(x, code, opts.names ?? stdNames, true, opts.shown)]
       : id === CASE_NAME ? (x: Value) => [caseName(x, opts.names ?? stdNames)]
-      : id === COMPARE ? (a: Value, b: Value) => [ORDER_VALUES[compareValues(a, b, variantOrder(code), opts.ordered) + 1]] : null);
+      : id === COMPARE ? (a: Value, b: Value) => [ORDER_VALUES[compareValues(a, b, variantOrder(code), opts.ordered) + 1]]
+      : id === ARRAY_OPS.sorted ? (a: Value) => [sortedBy(a as ArrayValue, (x, y) => compareValues(x as Value, y as Value, variantOrder(code), opts.ordered)) as unknown as Value] : null);
     const algOp = id === ALGEBRAIC_OPS.add ? "add" : id === ALGEBRAIC_OPS.sub ? "sub" : id === ALGEBRAIC_OPS.mul ? "mul" : id === ALGEBRAIC_OPS.neg ? "neg" : null;
     if (many && algOp) {
       // As an Int operation (intEquation), with an input unknown an

@@ -888,6 +888,10 @@ export const ARRAY_OPS = {
   // an empty array. One call, so it runs backwards too (modes.ts,
   // relate.ts): the array from its first item and rest.
   front: builtin("array.front", "front of array", ofItem((a) => [[arrayOf_(a)], optional({ t: "con", id: PAIR, args: [a, arrayOf_(a)] })])),
+  // The items in compare's order, equal ones as they were (C355): the
+  // target's own sort, where `sort`'s merge would cons its answer up one
+  // call deep an item onto an array (`array of List`'s sort).
+  sorted: builtin("array.sorted", "sorted array", (s) => { const a = s.fresh(true); return fn([arrayOf_(a)], arrayOf_(a), s.freshRow()); }),
 };
 
 const tableOf_ = (k: Type, v: Type): Type => ({ t: "con", id: TABLE, args: [k, v] });
