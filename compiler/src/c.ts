@@ -3912,7 +3912,8 @@ failed:
     const dropAll = (x: string) => g.params.map((t, i) => (counted(t) ? drop(t, `${x}${i}`) : "")).join(" ");
     return `typedef struct { lab_dc_task t; ${g.params.map((t, i) => `${ty(t)} a${i};`).join(" ")} ${R} r; int bad; } ${J};
 static _Thread_local ${R} lab_both_r_${gi};
-static int lab_both_quick_${gi} = 0;
+static int lab_both_quick_${gi} = 0, lab_both_rest_${gi} = 0, lab_both_dear_${gi} = 0;
+static _Thread_local unsigned lab_both_tick_${gi} = 0;
 static void lab_both_one_${gi}(lab_dc_task *t) {
   ${J} *j = (${J} *)t;${stops ? `
   jmp_buf here, *was = lab_stop_at;
@@ -3950,6 +3951,16 @@ static ${R} lab_both_${gi}(${params}) {
   struct timespec t0;
   ${J} ja = { { lab_both_one_${gi}, 0, 0, lab_dc_depth + 1 }, ${[...ins("a"), zero(g.result), "1"].join(", ")} }, jb = { { lab_both_one_${gi}, 0, 0, lab_dc_depth + 1 }, ${[...ins("b"), zero(g.result), "1"].join(", ")} };
   if (top) {
+    // A site whose last runs on the threads cost more to share than they
+    // ran stays alone a while (C328): 64 calls, twice as many each time
+    // in a row.
+    if (!always) {
+      int rest = __atomic_load_n(&lab_both_rest_${gi}, __ATOMIC_RELAXED);
+      if (rest > 0) { __atomic_store_n(&lab_both_rest_${gi}, rest - 1, __ATOMIC_RELAXED); return lab_both_alone_${gi}(${[...ins("a"), ...ins("b")].join(", ")}); }
+    }
+    // A quick site's calls are timed one in 16: reading the clock twice
+    // was most of bazaar's 826 k quick calls.
+    if (!always && __atomic_load_n(&lab_both_quick_${gi}, __ATOMIC_RELAXED) && (++lab_both_tick_${gi} & 15)) return lab_both_alone_${gi}(${[...ins("a"), ...ins("b")].join(", ")});
     clock_gettime(CLOCK_MONOTONIC, &t0);
     if (!always && __atomic_load_n(&lab_both_quick_${gi}, __ATOMIC_RELAXED)) {
       ${R} r = lab_both_alone_${gi}(${[...ins("a"), ...ins("b")].join(", ")});
@@ -3961,8 +3972,15 @@ static ${R} lab_both_${gi}(${params}) {
   size_t mk = lab_mk_n;
   ${g.params.map((t, i) => (counted(t) ? share(t, `b${i}`) : "")).join(" ")}
   lab_shared();
-  // Its inputs are given away: their marks are forgotten, not undone.
-  lab_mk_n = mk;
+  // Its inputs are given away: below the top, their marks are forgotten,
+  // not undone (what they reach may be freed by another thread). At the
+  // top they are held (ka, kb) until every thread is done, and then
+  // counted by this thread alone again (C328): else every later count of
+  // what they reach is an atomic one, bazaar's rows for the rest of the
+  // run.
+  if (!top || lab_share_no) lab_mk_n = mk;
+  struct timespec t1;
+  if (top) clock_gettime(CLOCK_MONOTONIC, &t1);
   if (lab_share_no) return lab_both_alone_${gi}(${[...ins("a"), ...ins("b")].join(", ")});
   if (top) {
     ${g.params.map((t, i) => `${ty(t)} ka${i} = ${dup(t, `a${i}`)}; ${ty(t)} kb${i} = ${dup(t, `b${i}`)};`).join(" ")}
@@ -3970,6 +3988,14 @@ static ${R} lab_both_${gi}(${params}) {
     lab_dc_done = 0; lab_dc_failed = 0;
     lab_dc_push(&jb.t);
     lab_pool_run(lab_both_top_${gi}, &c);
+    lab_unshare(mk);
+    if (!always) {
+      struct timespec t2;
+      clock_gettime(CLOCK_MONOTONIC, &t2);
+      double share = (double)(t1.tv_sec - t0.tv_sec) * 1e3 + (double)(t1.tv_nsec - t0.tv_nsec) / 1e6, run = (double)(t2.tv_sec - t1.tv_sec) * 1e3 + (double)(t2.tv_nsec - t1.tv_nsec) / 1e6;
+      if (share >= run) { int d = __atomic_load_n(&lab_both_dear_${gi}, __ATOMIC_RELAXED); __atomic_store_n(&lab_both_rest_${gi}, 64 << d, __ATOMIC_RELAXED); if (d < 16) __atomic_store_n(&lab_both_dear_${gi}, d + 1, __ATOMIC_RELAXED); }
+      else __atomic_store_n(&lab_both_dear_${gi}, 0, __ATOMIC_RELAXED);
+    }
     if (lab_dc_failed) {
       if (!ja.bad) { ${dropR("ja.r")} }
       if (!jb.bad) { ${dropR("jb.r")} }
