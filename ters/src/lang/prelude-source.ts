@@ -1009,18 +1009,42 @@ export function buildPrelude(): Module {
         k.let("text", k.if(k.call(S.less, places, k.lit(0.5)), k.call(S.show, w),
           k.call(S.concat, k.call(S.show, w), k.call(S.concat, k.lit("."), k.call(paddedDigits, n.sub(m, n.mul(w, scale)), places)))), (text) =>
           k.if(k.call(S.and, k.call(S.less, x, k.lit(0)), k.call(S.less, k.lit(0), m)), k.call(S.concat, k.lit("-"), text), text))))))));
+  // Each item's key worked out once (I376: larder's shopping asked key 2n
+  // log n times, its keys sums of packs): the items paired with their keys
+  // in order, the pairs merge sorted by their keys as sort by sorts, then
+  // the items taken back out (decorate, sort, undecorate: Perl's
+  // Schwartzian transform, Python's key=).
+  const keyOf = (p: Id, f: (key: Id, item: Id) => Id) => k.match(p, [{ variant: PAIR_V, names: ["key", "item"], body: ([a, b]) => f(a, b) }]);
+  const mergeKeyed = k.def("merge keyed");
+  k.define(mergeKeyed, k.fn(["xs", "ys"], (xs, ys) => k.match(xs, [
+    { variant: NIL, names: [], body: () => ys },
+    { variant: CONS, names: ["x", "xs rest"], body: ([x, xr]) => k.match(ys, [
+      { variant: NIL, names: [], body: () => xs },
+      { variant: CONS, names: ["y", "ys rest"], body: ([y, yr]) => k.match(keyOf(y, (ky) => keyOf(x, (kx) => k.call(COMPARE, ky, kx))), [
+        { variant: ORDER_V.before, names: [], body: () => k.call(CONS, y, k.call(mergeKeyed, xs, yr)) },
+      ], k.call(CONS, x, k.call(mergeKeyed, xr, ys))) },
+    ]) },
+  ])));
+  const addRunKeyed = k.def("add run keyed");
+  k.define(addRunKeyed, k.fn(["run", "slots"], (run, slots) => k.match(slots, [
+    { variant: NIL, names: [], body: () => k.call(CONS, k.call(SOME, run), k.x(NIL)) },
+    { variant: CONS, names: ["slot", "higher"], body: ([slot, higher]) => k.match(slot, [
+      { variant: NONE, names: [], body: () => k.call(CONS, k.call(SOME, run), higher) },
+      { variant: SOME, names: ["held"], body: ([held]) => k.call(CONS, k.x(NONE), k.call(addRunKeyed, k.call(mergeKeyed, run, held), higher)) },
+    ]) },
+  ])));
   const sortBy = k.def("sort by");
-  k.define(sortBy, k.fn(["list", "key"], (xs, key) => k.fold(
-    k.fold(xs, [
+  k.define(sortBy, k.fn(["list", "key"], (xs, key) => k.call(map, k.fold(
+    k.fold(k.call(map, xs, k.fn(["item"], (x) => k.call(PAIR_V, k.call(key, x), x))), [
       { variant: NIL, names: [], body: () => k.x(NIL) },
-      { variant: CONS, names: ["item", "rest"], results: [null, "slots"], body: ([item], [, slots]) => k.call(addRunByKey, key, k.call(CONS, item, k.x(NIL)), slots!) },
+      { variant: CONS, names: ["pair", "rest"], results: [null, "slots"], body: ([pair], [, slots]) => k.call(addRunKeyed, k.call(CONS, pair, k.x(NIL)), slots!) },
     ]), [
       { variant: NIL, names: [], body: () => k.x(NIL) },
       { variant: CONS, names: ["slot", "higher"], results: [null, "merged"], body: ([slot], [, merged]) => k.match(slot, [
         { variant: NONE, names: [], body: () => merged! },
-        { variant: SOME, names: ["run"], body: ([run]) => k.call(mergeByKey, key, run, merged!) },
+        { variant: SOME, names: ["run"], body: ([run]) => k.call(mergeKeyed, run, merged!) },
       ]) },
-    ])));
+    ]), k.fn(["keyed"], (p) => keyOf(p, (_, item) => item)))));
 
   // Sorting by an order the program gives (L214d): a collation for
   // people's names, or any (a, b) → Order. The same stable merge sort as
@@ -2524,8 +2548,10 @@ export function buildPrelude(): Module {
     [addRunWith]: "A helper of sort with, not offered.",
     [sortCollated]: "The list sorted by each item's name in the locale's order, as sort with(list, (a, b) => collate(name(a), name(b), locale)) sorts it: sort collated(files, (f) => f.name, my locale()). Items with the same name keep their order. On C and WebAssembly each name's weights are worked out once.",
     [collated]: "People's order for text in a language (the Unicode Collation Algorithm with that language's rules): Turkish puts ç after c and ğ after g, German ä with a. Give it to sort with. It never changes compare or <, which stay code-point order.",
-    [sortBy]: "The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps, each calling key.",
+    [sortBy]: "The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps; key is called once for each item, in order.",
     [mergeByKey]: "Two lists sorted by key as one. A helper of sort by, not offered.",
+    [mergeKeyed]: "Two lists of (key, item) pairs sorted by key as one. A helper of sort by, not offered.",
+    [addRunKeyed]: "A helper of sort by, as add run is of sort. Not offered.",
     [addRunByKey]: "A helper of sort by, as add run is of sort. Not offered.",
     [attempt]: "The action's answer as done(answer), or refused(reason) when it aborts: an Abort kept as data, so it can go in a list (Rust's Result is the influence).",
     [valueOrAbort]: "The value in done(value); refused(reason) aborts with the reason again. attempt run backwards.",
