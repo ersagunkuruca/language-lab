@@ -146,6 +146,42 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
     for (let i = 0; i < y.n; i++) xs[x.n + i] = B[y.start + i];
     return xs.length >= 16 ? arrayOfItems(new ItemsList(xs, 0) as never) : arrayOf(xs);
   },
+  // contracted's one pair of axes at Float64 (core-js.ts stridedProducts,
+  // C351a): result item i·nb + j the sum over count of xs from a starts[i]
+  // and ys from b starts[j], a stride apart, added in order from 0 as the
+  // definition adds it; 0 where a walk leaves its array. Two rows by four
+  // columns at once, so each item read serves four sums.
+  "array.stridedProducts": (x0: Parameters<typeof arrayView>[0], y0: Parameters<typeof arrayView>[0], a0: Parameters<typeof arrayView>[0], b0: Parameters<typeof arrayView>[0], sa0: I.Int, sb0: I.Int, n0: I.Int) => {
+    const x = arrayView(x0), y = arrayView(y0), av = arrayView(a0), bv = arrayView(b0), X = x.buf.items as number[], Y = y.buf.items as number[];
+    const xs = x.start, ys = y.start, sa = Number(sa0), sb = Number(sb0), count = Number(n0), na = av.n, nb = bv.n;
+    const inX = (p: number) => count <= 0 || (p >= 0 && p < x.n && p + (count - 1) * sa >= 0 && p + (count - 1) * sa < x.n);
+    const inY = (p: number) => count <= 0 || (p >= 0 && p < y.n && p + (count - 1) * sb >= 0 && p + (count - 1) * sb < y.n);
+    const A = av.buf.items, B = bv.buf.items, as = new Array<number>(na), bs = new Array<number>(nb + 4).fill(0), aok = new Array<boolean>(na), bok = new Array<boolean>(nb + 4).fill(false);
+    for (let i = 0; i < na; i++) { as[i] = Number(A[av.start + i]); aok[i] = inX(as[i]); }
+    for (let j = 0; j < nb; j++) { bs[j] = Number(B[bv.start + j]); bok[j] = inY(bs[j]); }
+    const out = new Array<number>(na * nb).fill(0);
+    const one = (a: number, b: number) => { let s = 0; for (let k = 0; k < count; k++, a += sa, b += sb) s = s + X[xs + a] * Y[ys + b]; return s; };
+    for (let i = 0; i < na; i += 2) {
+      const two = i + 1 < na, ok0 = aok[i], ok1 = two && aok[i + 1], o0 = i * nb, o1 = o0 + nb;
+      let j = 0;
+      if (ok0 && ok1) for (; j + 4 <= nb && bok[j] && bok[j + 1] && bok[j + 2] && bok[j + 3]; j += 4) {
+        let s00 = 0, s01 = 0, s02 = 0, s03 = 0, s10 = 0, s11 = 0, s12 = 0, s13 = 0;
+        let p = xs + as[i], q = xs + as[i + 1], c0 = ys + bs[j], c1 = ys + bs[j + 1], c2 = ys + bs[j + 2], c3 = ys + bs[j + 3];
+        for (let k = 0; k < count; k++, p += sa, q += sa, c0 += sb, c1 += sb, c2 += sb, c3 += sb) {
+          const u = X[p], v = X[q], e0 = Y[c0], e1 = Y[c1], e2 = Y[c2], e3 = Y[c3];
+          s00 = s00 + u * e0; s01 = s01 + u * e1; s02 = s02 + u * e2; s03 = s03 + u * e3;
+          s10 = s10 + v * e0; s11 = s11 + v * e1; s12 = s12 + v * e2; s13 = s13 + v * e3;
+        }
+        out[o0 + j] = s00; out[o0 + j + 1] = s01; out[o0 + j + 2] = s02; out[o0 + j + 3] = s03;
+        out[o1 + j] = s10; out[o1 + j + 1] = s11; out[o1 + j + 2] = s12; out[o1 + j + 3] = s13;
+      }
+      for (; j < nb; j++) {
+        out[o0 + j] = ok0 && bok[j] ? one(as[i], bs[j]) : 0;
+        if (two) out[o1 + j] = ok1 && bok[j] ? one(as[i + 1], bs[j]) : 0;
+      }
+    }
+    return arrayOf(out);
+  },
   "array.get": (a: Parameters<typeof arrayView>[0], k: number) => { const v = arrayView(a), i = Number(k); if (!(i >= 0 && i < v.n)) throw FAIL; return v.buf.items[v.start + i]; },
   // The array's items from place k on, a view of the same buffer (C30 s2b:
   // the rest an array's fold hands its arm, scalar.ts restAsView).
