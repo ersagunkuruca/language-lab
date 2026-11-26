@@ -764,7 +764,8 @@ static void lab_wrote(void *c) {
 // as HTML the way the tests' fake document prints it (ters/test/
 // fakedom.ts), and a main that does what its arguments say, printing the
 // page after each: click:ID, keydown:ID:KEY, input:ID:TEXT (typed into the
-// field, then "input"), frames:N:MS (N frames MS apart). ID is the first
+// field, then "input"), frames:N:MS (N frames MS apart), left: (the app
+// left, left:stopped and stopped there). ID is the first
 // element whose id attribute it is.
 // Each page printed ends with a record separator (\x1e) and a newline.
 const HEADLESS_C = String.raw`
@@ -846,6 +847,14 @@ int main(int argc, char **argv) {
       int m = 0;
       for (char *w = strtok(id, "+"); w; w = strtok(0, "+")) m |= !strcmp(w, "ctrl") ? 1 : !strcmp(w, "shift") ? 2 : !strcmp(w, "alt") ? 4 : !strcmp(w, "meta") ? 8 : 0;
       ters_page_held(m);
+      free(s);
+      continue;
+    }
+    if (!strcmp(s, "left")) {
+      // left:, the app left (a phone's pause); left:stopped, and stopped
+      // there with nothing more written, as a phone may stop it (L280d).
+      ters_page_log_mark();
+      if (!strcmp(id, "stopped")) { fflush(stdout); _Exit(0); }
       free(s);
       continue;
     }
@@ -1797,6 +1806,9 @@ void ters_page_files(const char *dir);
 // file:" and a name, where to keep it; "ask for file:" and kinds, which
 // to read), told before the answer's yes.
 void ters_page_chosen(const char *path);
+// The app left (a phone's pause): with TERS_LOG set, its log is a whole
+// file from here, in case the app is stopped without exiting (L280d).
+void ters_page_log_mark(void);
 static ters_host *ters_h;
 // Run after the page changed (c-layout.ts lays it out again).
 static void (*ters_after)(void);
@@ -2392,6 +2404,7 @@ void ters_page_held(int held) { ters_page_lock(); ters_held = held; ters_page_un
 int ters_page_clock(void) { ters_page_lock(); int r = ters__page_clock(); ters_page_unlock(); return r; }
 int ters_page_frame(void) { ters_page_lock(); int r = ters__page_frame(); ters_page_unlock(); return r; }
 int ters_page_permission(int yes) { ters_page_lock(); int r = ters__page_permission(yes); ters_page_unlock(); return r; }
+void ters_page_log_mark(void) { ters_page_lock(); lab__log_mark(); ters_page_unlock(); }
 void ters_page_chosen(const char *path) {
 #ifdef LAB_ASKS
   size_t n = strlen(path) + 1;

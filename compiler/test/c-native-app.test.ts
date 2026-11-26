@@ -17,6 +17,7 @@ import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
 import { compile } from "./c-harness.ts";
 import { nativeAppFolder, PACKAGE } from "../../ters/cli/native-app.ts";
+import { isEvent, readLog } from "../../ters/src/lang/worldlog.ts";
 
 const jdk = ["/usr/lib/jvm/java-21-openjdk-amd64", process.env.JAVA_HOME ?? ""].find((d) => d && existsSync(join(d, "include", "jni.h")));
 const have = (cmd: string) => spawnSync(cmd, ["-version"]).status === 0;
@@ -30,10 +31,11 @@ import java.util.*;
 import java.math.*;
 public class MainActivity {
   static { System.loadLibrary("page"); }
-  native int nativeStart(double width, int dark);
-  native void nativeResize(double width, int dark);
+  native int nativeStart(double width, double height, int dark, String log);
+  native void nativeResize(double width, double height, int dark);
   native int nativeEvent(int handler, String value, String key, double x, double y, double seconds);
   native int nativePermission(int yes);
+  native void nativeLeft();
   static class N { String tag, text; boolean shown; int bold, bg, colour; double x, y, w, h, size, radius, border; List<N> kids = new ArrayList<>(); List<String> ev = new ArrayList<>(); List<Integer> eh = new ArrayList<>(); }
   final HashMap<Integer, N> nodes = new HashMap<>();
   int next = 1;
@@ -96,11 +98,13 @@ public class MainActivity {
   }
   public static void main(String[] args) throws Exception {
     MainActivity a = new MainActivity();
-    N root = a.nodes.get(a.nativeStart(360, 0));
+    N root = a.nodes.get(a.nativeStart(360, 0, 0, System.getProperty("log")));
     java.io.PrintStream out = new java.io.PrintStream(System.out, true, "UTF-8");
     out.print(a.show(root));
     for (String s : args) {
       String[] p = s.split(":", 2);
+      // left:, the app left (onPause); left:stopped, then stopped there, as Android may (L280d).
+      if (p[0].equals("left")) { a.nativeLeft(); if (p[1].equals("stopped")) Runtime.getRuntime().halt(0); continue; }
       if (p[0].equals("permission")) { a.nativePermission(p[1].equals("yes") ? 1 : 0); out.print(a.show(root)); continue; }
       N e = find(root, p[1]);
       List<Integer> hs = new ArrayList<>();
@@ -136,6 +140,11 @@ test("dice's native app, its C and JNI screen on a stand-in MainActivity, lays o
   assert.equal(c.status, 0, c.stderr.toString());
   assert.match(c.stdout.toString(), /Rolls: 100;/);
   assert.equal(r.stdout.toString("utf8"), c.stdout.toString());
+  // Started with a log (the intent's TERS_LOG), left and stopped there: the
+  // log is a whole file with the click (L280d).
+  const left = spawnSync("java", [`-Djava.library.path=${dir}`, "-Dlog=log.json", "-cp", join(dir, "classes"), `${PACKAGE}.MainActivity`, "click:Roll 100 with seed 7", "left:", "left:stopped"], { cwd: dir });
+  assert.equal(left.status, 0, left.stderr.toString());
+  assert.deepEqual(readLog(readFileSync(join(dir, "log.json"), "utf8")).filter(isEvent).map((e) => e.op), ["event"]);
 });
 
 // A native app's own effect answered in Java (C204): hosts/android.java's

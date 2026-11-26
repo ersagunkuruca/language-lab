@@ -120,6 +120,10 @@ Made by \`ters build-native-app\` (NATIVE-APPS.md, C199c): the program is
 C (app/src/main/cpp/page.c), which also styles and lays out its page,
 and the page is Android's own views, with no webview. Build the debug APK with \`gradle assembleDebug\` here (Android
 SDK and NDK installed); it is app/build/outputs/apk/debug/app-debug.apk.
+
+To log a run for \`ters decisions --measure --replay\` (L280d): start it with
+\`adb shell am start -n ${nativeAppId(title)}/${PACKAGE}.MainActivity --es TERS_LOG log.json\`,
+leave the app, and \`adb exec-out run-as ${nativeAppId(title)} cat files/log.json > log.json\`.
 `,
   };
 }
@@ -402,7 +406,9 @@ static char **j_tree_list(const char *p, size_t *n);
 #endif
 // The page on a screen width dp wide and height high, dark or not: its root's number, 0
 // when main has no answer.
-JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, jobject self, jdouble width, jdouble height, jint dark) {
+// log: where to log the run (TERS_LOG, L280d), from the intent that
+// started the app, which is all an app is given: null for no log.
+JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, jobject self, jdouble width, jdouble height, jint dark, jstring log) {
   ters_j = env;
   ters_a = (*env)->NewGlobalRef(env, self);
   jclass k = (*env)->GetObjectClass(env, self);
@@ -426,6 +432,8 @@ JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, 
     if (c) { if (chdir(c)) perror(c); (*env)->ReleaseStringUTFChars(env, d, c); }
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
   }
+  // A log's file name is then in the app's own files too.
+  if (log) { const char *c = (*env)->GetStringUTFChars(env, log, 0); if (c) { setenv("TERS_LOG", c, 1); (*env)->ReleaseStringUTFChars(env, log, c); } }
 #ifdef TERS_SOUND_APP
   // The app's assets, where a page's recordings are.
   jmethodID ga = (*env)->GetMethodID(env, k, "getAssets", "()Landroid/content/res/AssetManager;");
@@ -561,6 +569,8 @@ JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativePermission(JNIEnv *
 #endif
   return ters_page_permission(yes);
 }
+// The app left: its log, if kept, a whole file from here (L280d).
+JNIEXPORT void JNICALL Java_app_ters_page_MainActivity_nativeLeft(JNIEnv *env, jobject self) { (void)self; ters_j = env; ters_page_log_mark(); }
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeClock(JNIEnv *env, jobject self) { (void)env; (void)self; return ters_page_clock(); }
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeFrame(JNIEnv *env, jobject self) { (void)self; ters_j = env; return ters_page_frame(); }
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeEvent(JNIEnv *env, jobject self, jint h, jstring value, jstring key, jdouble x, jdouble y, jdouble seconds) {
@@ -657,7 +667,8 @@ import java.util.HashMap;
 // activity's views, which C asks for by the methods below.
 public class MainActivity extends Activity {
   static { System.loadLibrary("page"); }
-  native int nativeStart(double width, double height, int dark);
+  native int nativeStart(double width, double height, int dark, String log);
+  native void nativeLeft();
   native void nativeResize(double width, double height, int dark);
   native int nativeEvent(int handler, String value, String key, double x, double y, double seconds);
   // Whether what the page shows read the clock, and a frame that shows it
@@ -695,7 +706,9 @@ public class MainActivity extends Activity {
     height = getResources().getDisplayMetrics().heightPixels / density;
     dark = darkMode(getResources().getConfiguration());
     picked(null);
-    View root = views.get(nativeStart(width, height, dark));
+    // \`adb shell am start -n <app>/${PACKAGE}.MainActivity --es TERS_LOG log.json\`
+    // logs the run in the app's files, as TERS_LOG does a program's (L280d).
+    View root = views.get(nativeStart(width, height, dark, getIntent().getStringExtra("TERS_LOG")));
     if (root != null) page.addView(root);
     else { TextView t = new TextView(this); t.setText("This page has no answer to draw."); page.addView(t); }
     // Below the status bar and above the navigation bar, which Android 15
@@ -844,7 +857,7 @@ public class MainActivity extends Activity {
     return heard;
   }
   @Override public void onBackPressed() { if (!moment("back")) super.onBackPressed(); }
-  @Override protected void onPause() { super.onPause(); paused = true; moment("pause"); }
+  @Override protected void onPause() { super.onPause(); paused = true; moment("pause"); nativeLeft(); }
   @Override protected void onResume() { super.onResume(); if (paused) { paused = false; moment("resume"); } }
 
   // A page's sound plays on with the screen off or the app left (C260b):

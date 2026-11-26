@@ -925,6 +925,14 @@ static int lab__log_on(void) {
   }
   return lab_log != 0;
 }
+// The log as a whole file now, for an app that may be stopped from here
+// on without exiting (a phone's app, left: L280d): the brackets that close
+// it written, then written over by what comes next.
+static void lab__log_mark(void) {
+  if (!lab_log) return;
+  lab__frames_end();
+  fputc(']', lab_log); fflush(lab_log); fseek(lab_log, -1, SEEK_CUR);
+}
 static void lab__log_raw(const char *s) { fputs(s, lab_log); }
 static void lab__log_str(const uint8_t *b, size_t n) {
   fputc('"', lab_log);
