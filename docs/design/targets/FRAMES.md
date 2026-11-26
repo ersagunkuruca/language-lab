@@ -258,7 +258,7 @@ uploaded, draw calls.
   depth and with what the vertex carried put between the corners in
   perspective. frames.test checks small frames pixel by pixel against
   answers worked out by hand.
-- **G9c**: the vertex and fragment stages printed to WGSL from a draw's
+- **G9c** (done): the vertex and fragment stages printed to WGSL from a draw's
   functions (wgsl.ts, beside today's fragment-only picture), with captures
   as a uniform and instances as storage buffers of whole records (one
   record a slot, no columns yet). The runtime keeps a pipeline per draw.
@@ -268,14 +268,16 @@ uploaded, draw calls.
   bytes sent per frame. Done as G8a (only the leaves read) and G8b (a
   packing loop printed per site); columns closed, measured: the drawing
   was under 1% of the flock page's main thread.
-- **G9d**: the flock page drawn with `render`, 2,000 birds and then
+- **G9d** (done): the flock page drawn with `render`, 2,000 birds and then
   20,000, and its CPU time a frame against today's `paint`.
 - **G10** (done): depth (already in G9b's rasterizer, in WebGPU here),
   texture targets, `sampled`, pass order, and the flock with a fog pass
   (flock-frame-page: the scene and its distance into two textures, then a
   full-screen pass reading both).
 - **G11**: `Image` from a file, sampled; the OBJ-subset mesh reader in
-  Ters; a mesh drawn from a file.
+  Ters; a mesh drawn from a file. Done as G11a (a page carries the files
+  its program reads by a name written in it) and G11b (`obj mesh`, and the
+  flock's bird read from bird.obj); the `Image` is left.
 - **Round**: the stage's bigger-program round on the flock drawn with data,
   measured against flock.ideal-gpu.js, with the gaps going into GAPS.md.
 
