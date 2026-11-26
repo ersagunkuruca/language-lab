@@ -15,7 +15,7 @@
 // stays. Inside another search (all, count, first, optional) or a use,
 // nothing is taken: there every way may count.
 import type { Code, Id, Node } from "../model.ts";
-import { parentLookup, SCHEMA, subtree, freshId, isCall, dependenciesOfAll, copyNodes, nodeValues } from "../model.ts";
+import { SCHEMA, subtree, subtreeKept, freshId, isCall, dependenciesOfAll, copyNodes, nodeValues } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, inferRewritten, type Info } from "./infer.ts";
 import { S } from "./std.ts";
@@ -35,7 +35,8 @@ const takenKept = keptMap<string, Set<Id>>();
 // firsts, then finds its page's handler performing Choice, each compile
 // (two checks, 0.2 s an edit).
 const refusedKept = keptMap<string, true>();
-const optionsKey = (o: Info["options"]) => JSON.stringify(o ?? {}, (k, v) => (k === "cache" ? undefined : v instanceof Set ? [...v].sort() : Array.isArray(v) && v.every((x) => typeof x === "string") ? [...v].sort() : v));
+// (Each option written out once for the value it holds: class-key.ts.)
+const optionsKey = (o: Info["options"]) => optionsText(o);
 
 const SEARCHES = new Set<Id>([S.all, S.count, S.first, S.optional]);
 
@@ -52,8 +53,10 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
     if (th?.kind === "lambda" && th.params.length === 0 && chooses(typeOf(th.id))) sites.push(n.id);
   }
   if (!sites.length) return { code, info, names, taken: 0 };
-  const parent = parentLookup(code), defs = new Set(code.defs), holding = new Set<Id>();
-  for (const s of sites) { let at: Id | undefined = s; while (at !== undefined && !defs.has(at)) at = parent(at); if (at !== undefined) holding.add(at); }
+  // The definitions holding them, read off their walks (kept while their
+  // nodes are: each node's parent looked up was a fifth of this).
+  const at = new Set(sites), holding = new Set<Id>();
+  for (const d of code.defs) if (code.nodes[d] && subtreeKept(code, d).some((x) => at.has(x))) holding.add(d);
   const read = new Set([...holding, ...dependenciesOfAll(code, [...holding])]);
   const key = `${optionsKey(info.options)}\n${defsKey(code, info, [...read].filter((d) => code.nodes[d]?.kind === "def").sort())}`;
   if (noneTaken.has(key)) return { code, info, names, taken: 0 };
