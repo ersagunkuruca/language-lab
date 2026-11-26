@@ -20,6 +20,8 @@
 // then the fields, one C struct per case. A case with no fields is one
 // static cell whose count is 0, which means it is never counted or freed.
 import { TICKET_V } from "../../ters/src/lang/std.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
+import { originalOf } from "../../ters/src/lang/prelude-ids.ts";
 // Values are owned: whoever holds one gives it on (to a call, a field, a
 // let) or drops it, so a function owns its inputs. Each use of a local is
 // the last one or a `dup`, and a local that one branch doesn't use is
@@ -109,6 +111,17 @@ const PRINTED = new Set<SExpr["k"]>([
 ]);
 // std's Array's runtime functions, one copy per item type (scalar.ts).
 const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
+// The library's `grid found` (neighbours on a grid), which gridC writes.
+const GRID_FOUND = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "grid found");
+// A place by its cell's key, and its number; sorted by key, then number.
+const GRID_C = `#ifndef LAB_GRID_SIDE
+#define LAB_GRID_SIDE ((int64_t)1 << 18)
+typedef struct { int64_t key; uint32_t i; } lab_grid_entry;
+static int lab_grid_order(const void *a, const void *b) {
+  const lab_grid_entry *x = a, *y = b;
+  return x->key < y->key ? -1 : x->key > y->key ? 1 : x->i < y->i ? -1 : x->i > y->i;
+}
+#endif`;
 // An array of records read and written field by field (columns.ts, C60):
 // on C its items stay structs in the buffer, each field read or written in
 // its slot.
@@ -2344,6 +2357,93 @@ int main(int argc, char **argv) {
 }`;
   }
 
+  // neighbours on a grid's `grid found` (C293): each place's neighbours,
+  // the places j other than i whose squared differences, added part by
+  // part as the definition adds them, are no more than reach squared,
+  // in order. The definition's own cells merge 27 lists a place made of
+  // big-capable Ints; here, as near.ts does in JavaScript's runtime, the
+  // places are sorted by a cell a little wider than reach, each place
+  // looks through the cells around its own, and the ones it keeps are
+  // sorted. Same lists: two places within reach are at most a cell apart
+  // on each part. Places of up to 3 Float64 parts, in an array, the
+  // lists Ints in arrays; otherwise as compiled.
+  function gridC(f: SFunc): string[] | null {
+    const pa = f.params[0], r = f.result;
+    if (f.params.length !== 5 || originalOf(f.def) !== GRID_FOUND || !isArray(pa) || f.params[4] !== "f64" || !isArray(r) || !isArray(r.item) || r.item.item !== "int") return null;
+    const pt = pa.item, D = pt === "f64" ? 1 : isRecord(pt) && !pt.mutable && pt.fields.length <= 3 && pt.fields.every((x) => x.t === "f64") ? pt.fields.length : 0;
+    if (!D || !aname.has(pa.key) || !aname.has(r.key) || !aname.has(r.item.key)) return null;
+    const P = pa.index, O = r.index, I = r.item.index, OB = aname.get(r.key)!.buf, IB = aname.get(r.item.key)!.buf;
+    arrayFns.add(`array.getb.a${P}`).add(`array.lengthb.a${P}`).add(`array.lengthb.a${O}`).add(`array.lengthb.a${I}`);
+    const ds = [...Array(D).keys()], part = (k: number) => (pt === "f64" ? "it" : `it.f${k}`);
+    const sum = ds.map((k) => `(lab_g_x[(size_t)i * ${D} + ${k}] - lab_g_x[(size_t)j * ${D} + ${k}]) * (lab_g_x[(size_t)i * ${D} + ${k}] - lab_g_x[(size_t)j * ${D} + ${k}])`);
+    return [
+      "  uint32_t n = p0.n, *lab_g_near;",
+      "  double r2 = p4 * p4, cell = p4 * (1 + 0x1p-20), *lab_g_x;",
+      "  int64_t *lab_g_c;",
+      "  lab_grid_entry *lab_g_by;",
+      `  lab_g_x = malloc(((size_t)n + 1) * ${D} * sizeof(double)); lab_g_c = malloc(((size_t)n + 1) * ${D} * sizeof(int64_t)); lab_g_by = malloc(((size_t)n + 1) * sizeof(lab_grid_entry)); lab_g_near = malloc(((size_t)n + 1) * sizeof(uint32_t));`,
+      "  if (!lab_g_x || !lab_g_c || !lab_g_by || !lab_g_near) lab_oom();",
+      "  for (uint32_t i = 0; i < n; i++) {",
+      `    ${ty(pt)} it = lab_array_getb_a${P}(p0, LAB_SMALL(i));`,
+      "    int64_t key = 0;",
+      ...ds.map((k) => `    lab_g_x[(size_t)i * ${D} + ${k}] = ${part(k)}; lab_g_c[(size_t)i * ${D} + ${k}] = (int64_t)floor(${part(k)} / cell); key = key * LAB_GRID_SIDE + lab_g_c[(size_t)i * ${D} + ${k}] + LAB_GRID_SIDE / 2;`),
+      "    lab_g_by[i] = (lab_grid_entry){ key, i };",
+      "  }",
+      // The box of cells the places are in, with one more around: where it
+      // has few more cells than places, each cell's run starts at a slot of
+      // its own (a counting sort); else the places sorted by key, each run
+      // found by halving.
+      "  int64_t lab_g_lo[3] = { 0, 0, 0 }, lab_g_hi[3] = { 0, 0, 0 }, lab_g_st[3] = { 0, 0, 0 }, cells = 1;",
+      `  for (int k = 0; k < ${D}; k++) { lab_g_lo[k] = INT64_MAX; lab_g_hi[k] = INT64_MIN; for (uint32_t i = 0; i < n; i++) { int64_t c = lab_g_c[(size_t)i * ${D} + k]; if (c < lab_g_lo[k]) lab_g_lo[k] = c; if (c > lab_g_hi[k]) lab_g_hi[k] = c; } }`,
+      `  for (int k = ${D} - 1; k >= 0; k--) { lab_g_st[k] = cells; cells = cells * (lab_g_hi[k] - lab_g_lo[k] + 3); if (cells > 4 * (int64_t)n + 4096) break; }`,
+      "  uint32_t *lab_g_start = 0;",
+      "  if (cells <= 4 * (int64_t)n + 4096) {",
+      "    lab_g_start = calloc((size_t)cells + 1, sizeof(uint32_t));",
+      "    if (!lab_g_start) lab_oom();",
+      "    for (uint32_t i = 0; i < n; i++) {",
+      "      int64_t at = 0;",
+      `      for (int k = 0; k < ${D}; k++) at += (lab_g_c[(size_t)i * ${D} + k] - lab_g_lo[k] + 1) * lab_g_st[k];`,
+      "      lab_g_by[i].key = at;",
+      "      lab_g_start[at + 1]++;",
+      "    }",
+      "    for (int64_t q = 0; q < cells; q++) lab_g_start[q + 1] += lab_g_start[q];",
+      "    for (uint32_t i = 0; i < n; i++) lab_g_near[lab_g_start[lab_g_by[i].key]++] = i;",
+      "    for (int64_t q = cells; q > 0; q--) lab_g_start[q] = lab_g_start[q - 1];",
+      "    lab_g_start[0] = 0;",
+      "    for (uint32_t q = 0; q < n; q++) lab_g_by[q] = (lab_grid_entry){ 0, lab_g_near[q] };",
+      "  } else qsort(lab_g_by, n, sizeof(lab_grid_entry), lab_grid_order);",
+      `  ${OB} *ob = lab__buf_a${O}(n, 0);`,
+      "  for (uint32_t i = 0; i < n; i++) {",
+      "    uint32_t m = 0;",
+      `    for (int o = 0; o < ${3 ** D}; o++) {`,
+      "      uint32_t lo, hi;",
+      "      if (lab_g_start) {",
+      "        int64_t at = 0;",
+      `        for (int k = 0, w = o; k < ${D}; k++, w /= 3) at += (lab_g_c[(size_t)i * ${D} + k] - lab_g_lo[k] + 1 + (w % 3 - 1)) * lab_g_st[k];`,
+      "        lo = lab_g_start[at]; hi = lab_g_start[at + 1];",
+      "      } else {",
+      "        int64_t key = 0;",
+      `        for (int k = 0, w = o; k < ${D}; k++, w /= 3) key = key * LAB_GRID_SIDE + lab_g_c[(size_t)i * ${D} + k] + (w % 3 - 1) + LAB_GRID_SIDE / 2;`,
+      "        lo = 0; hi = n;",
+      "        while (lo < hi) { uint32_t mid = lo + (hi - lo) / 2; if (lab_g_by[mid].key < key) lo = mid + 1; else hi = mid; }",
+      "        for (hi = lo; hi < n && lab_g_by[hi].key == key; hi++) {}",
+      "      }",
+      "      for (uint32_t q = lo; q < hi; q++) {",
+      "        uint32_t j = lab_g_by[q].i;",
+      "        if (j == i) continue;",
+      `        double s = ${sum[0]};`,
+      ...sum.slice(1).map((x) => `        s = s + ${x};`),
+      "        if (!(r2 < s)) { uint32_t z = m++; while (z > 0 && lab_g_near[z - 1] > j) { lab_g_near[z] = lab_g_near[z - 1]; z--; } lab_g_near[z] = j; }",
+      "      }",
+      "    }",
+      `    ${IB} *ib = lab__buf_a${I}(m, 0);`,
+      "    for (uint32_t q = 0; q < m; q++) ib->it[ib->lo + q] = LAB_SMALL((int64_t)lab_g_near[q]);",
+      `    ob->it[ob->lo + i] = lab__view_a${I}((lab_cell *)ib, ib->lo, m);`,
+      "  }",
+      "  free(lab_g_x); free(lab_g_c); free(lab_g_by); free(lab_g_near); free(lab_g_start);",
+    ];
+  }
+
   function func(f: SFunc, i: number): string {
     const loops = calls(f.body).some((x) => x.fn === i && x.tail);
     const local = (j: number) => (j < f.params.length ? `p${j}` : `l${j}`);
@@ -2357,6 +2457,14 @@ int main(int argc, char **argv) {
     // A lent input isn't this function's to give on or drop, nor is a
     // local that holds it or a part of it without a count (C241).
     const mine = lent.get(i);
+    const grid = gridC(f);
+    if (grid) {
+      const body = [...grid, ...f.params.flatMap((t, j) => (counted(t) && !mine?.has(j) ? [`  ${drop(t, `p${j}`)}`] : [])), `  return lab__view_a${(f.result as AType).index}((lab_cell *)ob, ob->lo, n);`];
+      const text = [GRID_C, `// ${f.name.replace(/\n/g, " ")}, on a grid`, `${header(i, !!mine)} {`, ...body, "}"].join("\n");
+      if (!mine) return text;
+      const ps = f.params.map((_, j) => `p${j}`);
+      return [text, `${header(i)} {`, `  ${ty(f.result)} r = ${bnames.get(i)}(${ps.join(", ")});`, ...[...mine].map((j) => `  ${drop(f.params[j], `p${j}`)}`), "  return r;", "}"].join("\n");
+    }
     const aliases = mine ? borrowed(f.body, mine, owns) : new Set<number>();
     const isCounted = (j: number) => counted(f.locals[j]) && !aliases.has(j);
     // A part of a lent input read into such a local: no count taken.

@@ -90,3 +90,36 @@ test("C and a WASI command find a program's neighbours on the grid and print wha
   closeSync(fd);
   assert.equal(readFileSync(out, "utf8"), want);
 });
+
+// C's own grid (c.ts gridC, C293) on places of one part and of two, and
+// on places spread too far apart for a cell table, where it sorts them
+// by cell: the lists the evaluator gives.
+test("C's own grid gives the evaluator's lists on a line, in the plane, and spread far apart", { skip }, () => {
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-near-grid-c-")), "near");
+  mkdirSync(dir);
+  writeFileSync(join(dir, "code.json"), JSON.stringify({ nodes: {}, defs: [] }) + "\n");
+  writeFileSync(join(dir, "names.default.json"), "{}\n");
+  const ask = (name: string, args: Record<string, unknown>) => { const r = call(name, args); assert.equal(r.error, false, `${name}: ${r.text}`); return r.text; };
+  const def = (name: string, params: string[], body: string) => {
+    ask("define", { name, kind: "function", params });
+    const r = call("replace", { at: name, find: "□", text: body }), as = r.error ? /Give `as` \("([^"]+)"/.exec(r.text)?.[1] : undefined;
+    if (r.error) ask("replace", { at: name, find: "□", text: body, as });
+  };
+  ask("open", { path: dir });
+  ask("define", { name: "Vec2", kind: "type", first: "vec2(x: Float64, y: Float64)" });
+  def("random", ["s"], "first(remainder(s * 16807, 2147483647), else 1)");
+  def("chance", ["s"], "first(as float64(s) / 2147483647.0, else 0.0)");
+  def("on line", ["i"], "60.0 * chance(random(i * 7919 + 13))");
+  // Twenty clusters a few metres wide, far apart.
+  def("far", ["i"], "100000.0 * chance(random(first(remainder(i, 20), else 0) * 7919 + 13)) + 3.0 * chance(random(random(i * 31 + 5)))");
+  def("in plane", ["i"], "vec2(40.0 * chance(random(i * 7919 + 13)), 40.0 * chance(random(random(i * 7919 + 13))))");
+  def("told", ["close"], 'show(sum(map(close, length))) ++ " " ++ show(sum(map(close, sum))) ++ " " ++ show(item at(close, 7, nil))');
+  def("main", ["arguments"], 'n = first(read whole number(item at(arguments, 0, "300")), else 300)\nprint(told(neighbours(map(range from(0, n), on line), (p) => p, 1.5)))\nprint(told(neighbours(map(range from(0, n), far), (p) => p, 2.0)))\nprint(told(neighbours(map(range from(0, n), in plane), (p) => p, 3.0)))');
+  const ters = join(import.meta.dirname, "../cli/ters.ts");
+  const run = (...args: string[]) => { const r = spawnSync(process.execPath, ["--no-warnings", ...args], { encoding: "utf8" }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
+  const want = run(ters, "run", dir, "300");
+  assert.match(want, /^\d+ \d+ \[/);
+  run(ters, "native", dir, "-o", join(dir, "near"));
+  assert.match(readFileSync(join(dir, "near.c"), "utf8"), /grid found, on a grid/);
+  assert.equal(spawnSync(join(dir, "near"), ["300"], { encoding: "utf8" }).stdout, want);
+});
