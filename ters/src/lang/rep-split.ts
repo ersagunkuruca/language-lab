@@ -22,7 +22,7 @@
 // variables represented differently (Schonberg, Schwartz and Sharir, 1981).
 
 import { SPLIT_COPIED_FROM, originalOf } from "./prelude-ids.ts";
-import { dependencies, dependenciesOfAll, freshId, mapIds, merge, subtree, isCall, type Code, type Id, type Node, type NodeOf, copyNodes, nodeValues, withNodes } from "../model.ts";
+import { dependencies, dependenciesOfAll, freshId, mapIds, merge, subtree, isCall, type Code, type Id, type Node, type NodeOf, copyNodes, withNodes } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { BY_VALUE, listBoundary, loopsOnto, withTrees } from "./library-reps.ts";
@@ -252,12 +252,14 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   };
   let refused = false;
   const ref = (target: Id) => { const id = freshId(); nodes[id] = { id, kind: "ref", target }; return id; };
-  // Each call by the node it calls, made at the first ask: a seed used other
-  // than called looked for its call among every node (I203: a tenth of
-  // clinic's check for running). A call wrapped below moves to its inner id.
-  let callOf: Map<Id, Id> | null = null;
+  // Each call by the node it calls: a seed used other than called looked
+  // for its call among every node (I203: a tenth of clinic's check for
+  // running). Noted as the walk below meets each call, which is before
+  // what it calls (subtree's order), as a call is in the same definition
+  // as what it calls: all the program's calls were a tenth of machine's
+  // split. A call wrapped below moves to its inner id.
+  const callOf = new Map<Id, Id>();
   const callOfFn = (fn: Id) => {
-    if (!callOf) { callOf = new Map(); for (const p of nodeValues(nodes)) if (isCall(p)) callOf.set(p.fn, p.id); }
     const p = callOf.get(fn);
     return p !== undefined && isCall(nodes[p]) && (nodes[p] as { fn: Id }).fn === fn ? p : undefined;
   };
@@ -265,7 +267,7 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   const wrap = (id: Id, conv: Id) => {
     const inner = freshId();
     const was0 = nodes[id];
-    if (callOf && isCall(was0)) callOf.set(was0.fn, inner);
+    if (isCall(was0)) callOf.set(was0.fn, inner);
     nodes[inner] = { ...nodes[id], id: inner } as Node;
     wrapped.set(inner, wrapped.get(id) ?? id);
     const was = innerOf.get(id);
@@ -282,6 +284,7 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
       // steps, given on to place of in compass): what it was.
       while (innerOf.has(id)) id = innerOf.get(id)!;
       const n = nodes[id];
+      if (isCall(n)) callOf.set(n.fn, id);
       if (n.kind === "arm" && holders.has(n.variant) && other(holders.get(n.variant)!)) {
         // A match on one: its list binders converted, by a let.
         n.binds.forEach((b, i) => {
