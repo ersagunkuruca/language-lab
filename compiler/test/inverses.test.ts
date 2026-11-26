@@ -10,7 +10,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
-import { S } from "../../ters/src/lang/std.ts";
+import { ARITH, S } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { compiledDefs } from "../src/core-js.ts";
 
@@ -80,5 +80,33 @@ test("conjugate of a function written in place: a solve on the function it calls
     const want = [...r.call(r.value(d), c, x)][0] as number;
     assert.ok(close(defs["doubled about"](c, x) as number, want), `doubled about(${c}, ${x})`);
     assert.ok(close(want, 2 * x - c), `doubled about(${c}, ${x}) = ${want}`);
+  }
+});
+
+// inverse((y) ↦ y · c, o) and with + or −, either side, of Float64s or
+// fractions (larder's portions, I374): the arithmetic undone in place, so
+// no interpreter is shipped; the evaluator's answers, none where c is 0.
+test("inverse of a product, sum or difference written in place: the arithmetic undone, the evaluator's answers", async () => {
+  const { emitCoreJs, lowerCore, plainValue } = await import("../src/core-js.ts");
+  const k = new Lang(LIBRARY.code);
+  const all = (f: (y: Id) => Id, o: Id) => k.call(S.all, k.thunk(() => k.call(lib("inverse"), k.fn(["y"], f), o)));
+  const exports: string[] = [];
+  for (const [kind, made] of [["fraction", (n: Id) => k.call(lib("as fraction"), n)], ["float", (n: Id) => k.call(B.add, n, k.lit(0.5))]] as const)
+    for (const [op, f] of [["times", ARITH.mul], ["plus", ARITH.add], ["minus", ARITH.sub]] as const)
+      for (const side of ["y first", "y second"]) {
+        const name = `${kind} ${op} ${side}`;
+        k.define(k.def(name), k.fn(["c", "o"], (c0, o0) => k.let("c", made(c0), (c) => k.let("o", made(o0), (o) => all((y) => (side === "y first" ? k.call(f, y, k.x(c)) : k.call(f, k.x(c), y)), k.x(o))))));
+        exports.push(name);
+      }
+  const code = base(k.code), names = { ...baseNames(), ...k.names };
+  const info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  const ids = exports.map((n) => Object.keys(names).find((d) => names[d] === n && code.nodes[d]?.kind === "def")!);
+  assert.doesNotMatch(emitCoreJs(lowerCore(code, info, names, ids)).js, /solveAll/);
+  const defs = compiledDefs(code, info, names, exports) as Record<string, (...a: unknown[]) => unknown>;
+  const r = makeRunner(code, info, { print: () => {} });
+  for (const [i, name] of exports.entries()) for (const [c, o] of [[2, 6], [-3, 1], [0, 0], [0, 4]]) {
+    const want = [...r.call(r.value(ids[i]), c, o)][0];
+    assert.deepEqual(plainValue(defs[name](c, o)), want, `${name}(${c}, ${o})`);
   }
 });

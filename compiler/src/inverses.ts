@@ -20,15 +20,16 @@ import type { Names } from "../../ters/src/presentation.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { writeReader } from "../../ters/src/lang/reader.ts";
-import { PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
-import { INT_OPS, NONE, S, SOME, TEXT_OPS } from "../../ters/src/lang/std.ts";
+import { fractionCase, PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
+import { ARITH, DIVIDE, INT_OPS, NONE, S, SOME, TEXT_OPS } from "../../ters/src/lang/std.ts";
+import { NUMBER } from "../../ters/src/lang/types.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { analyzer } from "../../ters/src/lang/modes.ts";
 
 const prelude = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name);
 const INVERSE = prelude("inverse"), CONJUGATE = prelude("conjugate"), SPACED = prelude("spaced");
 
-export function expandInverses(code: Code, names: Names): { code: Code; names: Names; expanded: Id[] } {
+export function expandInverses(code: Code, names: Names, info?: Info, left?: Set<Id>): { code: Code; names: Names; expanded: Id[] } {
   const out: Code = { nodes: copyNodes(code.nodes), defs: [...code.defs] };
   const more: Names = {};
   const add = (n: Omit<Node, "id">) => { const id = freshId(); out.nodes[id] = { id, ...n } as Node; return id; };
@@ -202,9 +203,36 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     Object.assign(more, k.names);
     return (unspaced = d);
   };
+  // (y) => F(…) with F one of + − · or negate, y one of its inputs and
+  // the other not reading y, at Float64 or Rational: F undone on o, as a
+  // call made in place of the inverse (null where it isn't one).
+  const RATIONAL = fractionCase(LIBRARY.code)?.type;
+  const arithmeticUndone = (fn: Id, o: Id, checked: Info): Id | null => {
+    const l = out.nodes[fn];
+    if (l?.kind !== "lambda" || l.params.length !== 1) return null;
+    const y = l.params[0], c = out.nodes[l.body], f = isCall(c) ? out.nodes[c.fn] : undefined;
+    if (!isCall(c) || f?.kind !== "ref" || !c.args) return null;
+    const t0 = checked.typeOf.get(y), t = t0 && checked.subst.zonk(t0);
+    if (t?.t !== "con" || t.args.length || (t.id !== NUMBER && t.id !== RATIONAL)) return null;
+    const isY = (a: Id) => (out.nodes[a] as NodeOf<"ref"> | undefined)?.kind === "ref" && (out.nodes[a] as NodeOf<"ref">).target === y;
+    const reads = (a: Id) => subtree(out, a).some(isY);
+    const at = c.args.findIndex(isY), other = c.args[1 - at];
+    if (at < 0 || c.args.some((a, j) => j !== at && reads(a))) return null;
+    const k = new Lang(out);
+    const made = f.target === ARITH.neg && c.args.length === 1 ? k.call(ARITH.neg, o)
+      : c.args.length !== 2 ? null
+      : f.target === ARITH.mul ? k.call(DIVIDE, o, other)
+      : f.target === ARITH.add ? k.call(ARITH.sub, o, other)
+      : f.target === ARITH.sub ? (at === 0 ? k.call(ARITH.add, o, other) : k.call(ARITH.sub, other, o))
+      : null;
+    if (!made) return null;
+    Object.assign(out.nodes, k.code.nodes);
+    Object.assign(more, k.names);
+    return made;
+  };
   for (const id of nodeIds(out.nodes)) {
     const c = calls(INVERSE, id);
-    if (!c || c.args.length !== 2) continue;
+    if (!c || c.args.length !== 2 || left?.has(id)) continue;
     const f0 = out.nodes[c.args[0]];
     // inverse(show, t): the number read from t, when t is show's own
     // spelling of it (relate.ts's show run backwards: no spaces, "1e3" or
@@ -229,6 +257,17 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     // read them where the library's printers are read, and a solve on them
     // doesn't check.
     if (param(c.args[0])) { if (LIBRARY.code.nodes[id]) continue; inverse(id, c.args[0], c.args[1]); expanded.push(id); continue; }
+    // inverse((y) => y · c, o) and the like, of Float64s or fractions:
+    // the arithmetic undone, o ÷ c, with no answer where c is 0, as the
+    // relational interpreter's rules for them have it (relate.ts
+    // solveFraction; larder's portions, I374).
+    const undone = info ? arithmeticUndone(c.args[0], c.args[1], info) : null;
+    if (undone) {
+      out.nodes[id] = { ...out.nodes[undone], id } as Node;
+      dropNode(out.nodes, undone);
+      expanded.push(id);
+      continue;
+    }
     const a = around(c.args[0]);
     if (!a) continue;
     // The line read by the printer's reader: its reading, or no answer.
@@ -261,8 +300,17 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
 // lowering, and `ters native` and WebAssembly's, which lower scalar.ts's
 // core IR straight).
 export function withInverses(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
-  const inv = expandInverses(code, names);
+  let inv = expandInverses(code, names, info);
   if (!inv.expanded.length) return { code, info, names };
-  const checked = infer(inv.code, inv.names, undefined, info.options);
+  let checked = infer(inv.code, inv.names, undefined, info.options);
+  // Those the check refuses (a printer whose solve can't run that way:
+  // larder's spelled item, nothing giving its unit) left as they were, so
+  // the others are kept (larder's product undone, I374).
+  const refused = new Set(checked.errors.length > info.errors.length ? checked.errors.flatMap((e) => (e.id && inv.expanded.includes(e.id) ? [e.id] : [])) : []);
+  if (refused.size) {
+    inv = expandInverses(code, names, info, refused);
+    if (!inv.expanded.length) return { code, info, names };
+    checked = infer(inv.code, inv.names, undefined, info.options);
+  }
   return checked.errors.length <= info.errors.length ? { code: inv.code, info: checked, names: inv.names } : { code, info, names };
 }
