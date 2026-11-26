@@ -9614,6 +9614,108 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       struct.new $Bytes
       i32.const 0`,
   },
+  // A file handed to the person and one they choose (L271a), as world.ts
+  // on the command line: an offered file written in the folder the
+  // command runs in, under its name alone ("file" when it has none); asking
+  // for one fails, with no one there to choose.
+  "wasi.offerFile": {
+    params: [["name", "text"], ["b", "Bytes" as VT]], result: "i32", list: "std.list<type.int<>>",
+    locals: [["end", "i32"], ["start", "i32"], ["i", "i32"], ["t", "text"]],
+    uses: ["text.size", "text.byte", "text.new", "text.put", "wasi.writeBytes"],
+    body: `
+      local.get $name
+      call $text.size
+      local.set $end
+      block void
+        loop void
+          local.get $end
+          i32.eqz
+          br_if 1
+          local.get $name
+          local.get $end
+          i32.const 1
+          i32.sub
+          call $text.byte
+          i32.const 47
+          i32.ne
+          br_if 1
+          local.get $end
+          i32.const 1
+          i32.sub
+          local.set $end
+          br 0
+        end
+      end
+      local.get $end
+      local.set $start
+      block void
+        loop void
+          local.get $start
+          i32.eqz
+          br_if 1
+          local.get $name
+          local.get $start
+          i32.const 1
+          i32.sub
+          call $text.byte
+          i32.const 47
+          i32.eq
+          br_if 1
+          local.get $start
+          i32.const 1
+          i32.sub
+          local.set $start
+          br 0
+        end
+      end
+      local.get $end
+      local.get $start
+      i32.eq
+      if text
+        ${lit("file")}
+      else
+        local.get $end
+        local.get $start
+        i32.sub
+        call $text.new
+        local.set $t
+        block void
+          loop void
+            local.get $start
+            local.get $i
+            i32.add
+            local.get $end
+            i32.ge_u
+            br_if 1
+            local.get $t
+            local.get $i
+            local.get $name
+            local.get $start
+            local.get $i
+            i32.add
+            call $text.byte
+            call $text.put
+            drop
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            br 0
+          end
+        end
+        local.get $t
+      end
+      local.get $b
+      call $wasi.writeBytes`,
+  },
+  "wasi.askForFile": {
+    params: [["kinds", "text"]], result: "Bytes" as VT, partial: true, list: "std.list<type.int<>>", locals: [], uses: [],
+    body: `
+      ref.null $Bytes
+      ${lit("there's no one to choose a file on the command line: read one with read bytes")}
+      global.set $reason
+      i32.const 2`,
+  },
   "wasi.writeBytes": {
     params: [["path", "text"], ["b", "Bytes" as VT]], result: "i32", list: "std.list<type.int<>>",
     locals: [["fd", "i32"], ["e", "i32"], ["n", "i32"], ["nil", "i32"], ["l", "list"], ["p", "i32"], ["w", "i32"]],

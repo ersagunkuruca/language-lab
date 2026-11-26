@@ -1019,7 +1019,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     }
     // A Locale's struct (C315).
     if (fn === "world.myLocale") return { cons: "", nil: "", type: 0, tag: 0, head: 0, record: sname.get(LOCALE_T)! };
-    const bytes = fn === "world.keptBytes" || fn === "world.keptAddBytes" || fn === "world.readBytes" || fn === "world.writeBytes";
+    const bytes = fn === "world.keptBytes" || fn === "world.keptAddBytes" || fn === "world.readBytes" || fn === "world.writeBytes" || fn === "world.putBytes" || fn === "world.offerFile" || fn === "world.askForFile";
     const d = data.get(fn === "world.readLine" || fn === "world.keptLine" || fn === "world.environmentVariable" ? OPTION_TEXT : fn === "world.keptOpen" ? OPTION_INT : bytes ? LIST_INT : fn.startsWith("world.") ? LIST_TEXT : runtime(fn).list ?? LIST_TEXT)!;
     if (bytes) {
       const tag = d.cases.findIndex((c) => c.fields.length > 0);
