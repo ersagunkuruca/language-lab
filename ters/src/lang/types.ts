@@ -193,6 +193,8 @@ export class OverSet<K> extends Set<K> {
 
 // A substitution for type and row variables. Cheap to copy, so the editor can
 // try a candidate for a hole and throw the attempt away.
+// Each once, in order (as a resolved row's effects are).
+const sortedOnce = (xs: readonly string[]): boolean => { for (let i = 1; i < xs.length; i++) if (!(xs[i - 1] < xs[i])) return false; return true; };
 export class Subst {
   types = new Map<number, Type>();
   rows = new Map<number, Row>();
@@ -454,6 +456,9 @@ export class Subst {
   }
 
   resolveRow(r: Row): Row {
+    // A row that is already as resolved is itself (the same object: what
+    // is kept by a type knows it again, L266).
+    if ((r.tail === null || !this.rows.has(r.tail)) && r.args === undefined && (r.name === undefined || r.tail === null) && sortedOnce(r.effs) && Object.keys(r).length === (r.name === undefined ? 2 : 3)) return r;
     const effs = new Set(r.effs);
     const args: Record<Id, Type[]> = { ...r.args };
     let tail = r.tail;
