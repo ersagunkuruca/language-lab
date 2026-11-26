@@ -133,7 +133,6 @@ Flock's page, interpreted in node, ticked twice a frame: 7.2 s a frame before L2
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C346 | A pure builtin called on literals alone (`characters("ABC…")`, as the library's base64 and hex decoders did, L291) is made once, as a constant of the module, not at each call: in the compiled JS of digits it was rebuilt for each of 130K characters. | I371 | mid | S | |
 
 ### Memory and layout (STABLE-REFERENCES.md §3 to §6)
 

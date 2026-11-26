@@ -49,6 +49,7 @@ import { useDirections } from "../../ters/src/lang/directions.ts";
 import { withInverses } from "./inverses.ts";
 import { withOperationLambdas } from "./operation-values.ts";
 import { withCharacterMaps } from "./character-maps.ts";
+import { withLiteralCalls } from "./literal-calls.ts";
 import { hoistInvariants } from "./hoist.ts";
 import { idsSeeded, ownerOfTypeParts, type Code, type Id, type NodeOf, type Use, nodeIds } from "../../ters/src/model.ts";
 import { bindsOf } from "./uses.ts";
@@ -963,6 +964,9 @@ function front(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): 
   // changes a unit, so units aren't checked again (I261: trek's 5.9 s).
   info = { ...info, options: { ...info.options, units: false } };
   code = reachedImplementing(useDirections(code), roots, info);
+  // A pure builtin on literals alone, a definition of no inputs, made once
+  // (literal-calls.ts, C346).
+  ({ code, info, names } = withLiteralCalls(code, info, names, roots));
   const h = hoistInvariants(code, info, names);
   if (h.hoisted) ({ code, info, names } = h);
   // inverse(f, …) of a named f is a solve on f (inverses.ts), as compile.ts
