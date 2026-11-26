@@ -32,23 +32,49 @@
 import { isArray, isTable, isData, isFn, isRecord, kids, type CoreIR, type LType, type SExpr, type SFunc } from "./scalar.ts";
 
 // The abstract holders of a value: one ("U"), maybe more ("S"), not yet
-// known ("T", the start of the fixpoint), or a record's, field by field.
-type AV = "T" | "U" | "S" | { f: AV[] };
+// known ("T", the start of the fixpoint), a record's, field by field, or
+// a value of a data type (a list) with one holder, `it` what is in it
+// (each item, and whatever its cases hold but more of the type).
+type AV = "T" | "U" | "S" | { f: AV[] } | { it: AV };
 
 const meet = (a: AV, b: AV): AV => {
   if (a === "T") return b;
   if (b === "T") return a;
   if (a === "S" || b === "S") return "S";
   if (a === "U" && b === "U") return "U";
-  if (typeof a === "object" && typeof b === "object" && a.f.length === b.f.length) return { f: a.f.map((x, i) => meet(x, b.f[i])) };
+  if (typeof a === "object" && typeof b === "object") {
+    if ("f" in a && "f" in b && a.f.length === b.f.length) return { f: a.f.map((x, i) => meet(x, b.f[i])) };
+    if ("it" in a && "it" in b) return { it: meet(a.it, b.it) };
+  }
   return "S";
 };
-const same = (a: AV, b: AV): boolean => (typeof a === "object" && typeof b === "object" ? a.f.length === b.f.length && a.f.every((x, i) => same(x, b.f[i])) : a === b);
+const same = (a: AV, b: AV): boolean => {
+  if (typeof a !== "object" || typeof b !== "object") return a === b;
+  if ("f" in a && "f" in b) return a.f.length === b.f.length && a.f.every((x, i) => same(x, b.f[i]));
+  return "it" in a && "it" in b && same(a.it, b.it);
+};
+// Kept a few levels deep: a type holding another that holds it would
+// nest without end.
+const capped = (v: AV, n = 6): AV => (typeof v !== "object" ? v : n === 0 ? "S" : "f" in v ? { f: v.f.map((x) => capped(x, n - 1)) } : { it: capped(v.it, n - 1) });
+const fieldsOf = (r: AV): AV[] | null => (typeof r === "object" && "f" in r ? r.f : null);
 
-// Not an array, a table or a record: nothing writes one in place, and
-// what is read out of one (a case's field, a capture) may have more than
-// one holder, so it may be held anywhere (a number, a text, a list).
-const plain = (t: LType | undefined) => t !== undefined && t !== "host" && !(isArray(t) || isTable(t) || isRecord(t));
+// Holding nothing written in place (no array, table or record, in it or
+// in what it holds): it may be held anywhere (a number, a text, a list of
+// texts, a function, whose captures are read as shared).
+const writable = (t: LType, seen: Set<object>): boolean => {
+  if (typeof t !== "object") return t === "host";
+  if (isArray(t) || isTable(t) || isRecord(t)) return true;
+  if (!isData(t) || seen.has(t)) return false;
+  seen.add(t);
+  return t.cases.some((c) => c.fields.some((x) => writable(x.t, seen)));
+};
+const plainOf = new Map<LType, boolean>();
+const plain = (t: LType | undefined) => {
+  if (t === undefined) return false;
+  let p = plainOf.get(t);
+  if (p === undefined) plainOf.set(t, (p = !writable(t, new Set())));
+  return p;
+};
 
 const flat = (t: LType | undefined) => t !== undefined && isRecord(t) && t.fields.every((x) => plain(x.t));
 // The local a record is made from fields of, when every field of its type
@@ -118,6 +144,29 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
     else if ("item" in t) looseIn(t.item);
     else if ("keyT" in t) { looseIn(t.keyT as LType); looseIn(t.value); }
   };
+  // What a value handed out may hold, from what it is made of: a
+  // closure, or any of the types of the locals, calls and fields it reads
+  // (a literal holds none; what the runtime or the world gives is theirs).
+  const handed = (g: SFunc, a: SExpr): void => {
+    switch (a.k) {
+      case "closure": loose.add(a.t.key); return;
+      case "local": return looseIn(g.locals[a.i]);
+      case "call": return looseIn(funcs[a.fn]?.result);
+      case "apply": return looseIn(a.t.result);
+      case "get": return looseIn(a.t.fields[a.i]?.t);
+      case "field": return looseIn(a.t.cases[a.c]?.fields[a.i]?.t);
+      case "cap": return looseIn(ir.shapes[a.shape]?.caps[a.i]);
+      case "let": return handed(g, a.body);
+      case "if": handed(g, a.then); return handed(g, a.else);
+      case "case": a.arms.forEach((x) => x && handed(g, x)); return;
+      // Made by the runtime from what it was given, already counted.
+      case "rt": case "world": case "op": return;
+    }
+    kids(a).forEach((k) => handed(g, k));
+  };
+  const unreached = new Set<number>();
+  // Definitions a printer runs by their sites.
+  const sited = new Set<string>([...(ir.drawSites ?? []).flatMap((d) => [d.at, d.vertex, d.fragment]), ...(ir.sharedSites ?? []).map((d) => d.at), ...(ir.nearSites ?? []).map((d) => d.at)].filter((x): x is string => !!x));
   // Each closure code's type.
   const codeOf = new Map<number, string>();
   const scan = (g: SFunc, e: SExpr) => {
@@ -127,7 +176,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
     // name: not the digits an id starts with, as `handleK:8li2…`).
     if (e.k === "rt") for (const m of e.fn.matchAll(/:(\d+)(?=:|$)/g)) outside.add(Number(m[1]));
     if (e.k === "rt" || e.k === "world") {
-      for (const a of e.args) { if (a.k === "closure") loose.add(a.t.key); else if (a.k === "local") looseIn(g.locals[a.i]); else loose.add("*"); }
+      for (const a of e.args) handed(g, a);
       if (e.k === "world") looseIn(e.t);
     }
     kids(e).forEach((k) => scan(g, k));
@@ -140,7 +189,10 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   const inner = (k: string) => !loose.has("*") && !loose.has(k);
   funcs.forEach((g, i) => {
     const code = codeOf.get(i);
-    if (code !== undefined ? !inner(code) || called.has(i) : !called.has(i)) outside.add(i);
+    // Nothing calls it: not looked at (what it would give a closure's
+    // code isn't given).
+    if (code === undefined && !called.has(i) && !outside.has(i) && !away.has(g.def) && !sited.has(g.def)) unreached.add(i);
+    if (code !== undefined ? !inner(code) : !called.has(i)) outside.add(i);
     if (away.has(g.def)) outside.add(i);
   });
   // The codes of each type the program's applies run.
@@ -191,8 +243,14 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
           if (e.rec.k === "local") { const k = `${e.rec.i}.${e.i}`; if (plain(e.t.fields[e.i]?.t)) return; if (s.gone.has(e.rec.i) || s.took.has(k)) offF(k); if (!read) s.took.add(k); return; }
           return walk(e.rec, s, false);
         }
+        // So is a case's field, the match's local its value.
+        case "field": {
+          if (e.rec.k === "local") { const k = `${e.rec.i}.${e.i}`; if (plain(e.t.cases[e.c]?.fields[e.i]?.t)) return; if (s.gone.has(e.rec.i) || s.took.has(k)) offF(k); if (!read) s.took.add(k); return; }
+          return walk(e.rec, s, false);
+        }
         case "if": case "case": {
-          walk(e.k === "if" ? e.cond : e.scrut, s, e.k === "if");
+          // A match only looks at its value; its arms take its fields.
+          walk(e.k === "if" ? e.cond : e.scrut, s, e.k === "if" || e.scrut.k === "local");
           const arms = e.k === "if" ? [e.then, e.else] : e.arms.filter((a): a is SExpr => !!a);
           const ends = arms.map((a) => { const t = { gone: new Set(s.gone), took: new Set(s.took) }; walk(a, t, false); return t; });
           for (const t of ends) { t.gone.forEach((x) => s.gone.add(x)); t.took.forEach((x) => s.took.add(x)); }
@@ -268,7 +326,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
         case "let": env[e.i] = av(self, e.value, env, at); return av(self, e.body, env, at);
         case "if": av(self, e.cond, env, at); return meet(av(self, e.then, env, at), av(self, e.else, env, at));
         case "case": {
-          av(self, e.scrut, env, at); env[e.s] = "S";
+          env[e.s] = av(self, e.scrut, env, at);
           return e.arms.reduce<AV>((m, a) => (a ? meet(m, av(self, a, env, at)) : m), "T");
         }
         case "get": {
@@ -276,12 +334,31 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
             const r = whole[e.rec.i] || fields.get(`${e.rec.i}.${e.i}`) !== false ? env[e.rec.i] : "S";
             // Not known yet: its fields aren't either.
             if (r === "T") return "T";
-            return fields.get(`${e.rec.i}.${e.i}`) !== false && typeof r === "object" ? r.f[e.i] ?? "S" : "S";
+            return fields.get(`${e.rec.i}.${e.i}`) !== false ? fieldsOf(r)?.[e.i] ?? "S" : "S";
           }
           const r = av(self, e.rec, env, at);
-          return r === "T" ? "T" : typeof r === "object" ? r.f[e.i] ?? "S" : "S";
+          return r === "T" ? "T" : fieldsOf(r)?.[e.i] ?? "S";
         }
-        case "make": return { f: e.args.map((a) => av(self, a, env, at)) };
+        // A case's field: more of the type is the value's own kind, the
+        // rest what is in it.
+        case "field": {
+          const one = e.rec.k !== "local" || whole[e.rec.i] || fields.get(`${e.rec.i}.${e.i}`) !== false;
+          const r = e.rec.k === "local" ? (one ? env[e.rec.i] ?? "S" : "S") : av(self, e.rec, env, at);
+          if (r === "T") return "T";
+          if (typeof r !== "object" || !("it" in r) || (e.rec.k === "local" && fields.get(`${e.rec.i}.${e.i}`) === false)) return "S";
+          const t = e.t.cases[e.c]?.fields[e.i]?.t;
+          return typeof t === "object" && isData(t) && t.key === e.t.key ? r : r.it;
+        }
+        case "new": {
+          const fs = e.t.cases[e.c]?.fields ?? [];
+          let it: AV = "T";
+          for (const [i, a] of e.args.entries()) {
+            const x = av(self, a, env, at), t = fs[i]?.t;
+            if (typeof t === "object" && isData(t) && t.key === e.t.key) { if (x === "T") continue; if (typeof x !== "object" || !("it" in x)) { it = "S"; continue; } it = meet(it, x.it); } else if (!plain(t)) it = meet(it, x);
+          }
+          return capped({ it });
+        }
+        case "make": return capped({ f: e.args.map((a) => av(self, a, env, at)) });
         // No value: the other paths decide.
         case "fail": case "abort": kids(e).forEach((k) => av(self, k, env, at)); return "T";
         case "call": {
@@ -330,6 +407,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   for (let rounds = 0; changed && rounds < 100; rounds++) {
     changed = false;
     funcs.forEach((_, i) => {
+      if (unreached.has(i)) return;
       const r = meet(results[i], body(i, () => {}));
       if (!same(r, results[i])) { results[i] = r; changed = true; }
     });
@@ -340,13 +418,13 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   if (changed) return none;
   const vals = new Map<SExpr, AV>();
   const into = new Set<SExpr>();
-  funcs.forEach((_, i) => body(i, (e, v, env) => {
+  funcs.forEach((_, i) => !unreached.has(i) && body(i, (e, v, env) => {
     vals.set(e, v);
     if (e.k !== "make") return;
     const y = rebuilds(e);
     if (y === null) return;
     const ys = e.args.flatMap((a) => (a.k === "get" && fieldOf(a, e.t.key, y) ? [{ f: a.i }] : []));
-    if (once[i][y] && typeof env[y] === "object" && ys.every((x) => fieldOnce[i].get(`${y}.${x.f}`) !== false)) into.add(e);
+    if (once[i][y] && fieldsOf(env[y]) !== null && ys.every((x) => fieldOnce[i].get(`${y}.${x.f}`) !== false)) into.add(e);
   }));
   funcs.forEach((g) => {
     const look = (e: SExpr) => {

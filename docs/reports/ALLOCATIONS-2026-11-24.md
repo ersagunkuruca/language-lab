@@ -833,3 +833,27 @@ Left (part 4b): a record given to a map's function as an item of a list
 or an array (drift's `moved`). holders.ts gives what is read out of a
 list or an array more than one holder, so there owned-records.ts still
 asks one-holder.ts.
+
+## C327f part 4b, a list's items (2026-11-26)
+
+holders.ts now has a value for a list with one holder: `{it}`, the
+holders of what is in it. A list made here (`new`) holds what it was
+made of; a case's field of one gives the rest of the list as the list's
+own kind and an item as its items'. A match only looks at its value, so
+its arms can take the fields one by one. drift's `moved`, given each
+mote of a list it maps, now writes it in place per value on core
+JavaScript's lists.
+
+Two things kept that from working before. A function nothing calls (the
+generic `map`, left after its copies were made) applied every closure of
+its type to items from nowhere; it is no longer looked at. And any value
+other than a closure or a local handed to the runtime, an Int literal
+too, counted as holding every closure, so every closure's code took its
+inputs from outside; now what a value may hold is read from its type.
+
+Left, part 4c: four sites still need one-holder.ts's rule by type. An
+array's items (drift with its list as an array, the way `ters compile`
+holds it), a record captured by a closure given to a map (housefit's
+`weather of`), an item read out of a set before the set is changed
+(crew's `give`), and a result `both` ran on the threads (bazaar's
+`plan anti`).
