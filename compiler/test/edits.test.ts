@@ -13,6 +13,9 @@ import { compile, edited, literalEdits } from "../../ters/bench/edits.ts";
 import { choicesAgain } from "../../ters/cli/represented.ts";
 import { stepsAgain } from "../../ters/src/lang/literals-again.ts";
 import { passesAgainCount } from "../src/ir-again.ts";
+import { ZP } from "../src/zero-parts.ts";
+import { copyNodes, onLayer, parentOf, type Code } from "../../ters/src/model.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
 
 const ROOT = join(import.meta.dirname, "../..");
 for (const [name, edits] of [["machine", 2], ["collatz", 2], ["bounce", 1], ["depot", 1]] as const) {
@@ -54,6 +57,34 @@ test("machine: an edit of a number takes the choice again, as a fresh compile pr
   assert.equal(stepsAgain, steps + 4, "lowering's front, its handlers, its prepared steps and the passes before lowering were made again");
   // And the passes after the scalar lowering (ir-again.ts).
   assert.equal(passesAgainCount, passes + 1, "the passes after lowering were taken again");
+  forgetKept();
+  const fresh = compile(next, p.pres.names, p.options, main, own);
+  assert.equal(got.text, fresh.text);
+});
+
+// An edit of a body (a number n written add(n, 0)) reads again the zero
+// parts of the functions it changed and what they reach: the rest are
+// taken from the last compile's reads (zero-parts.ts), and it prints what
+// a fresh compile does.
+test("bounce: an edit of a body takes the other functions' zero parts again, as a fresh compile prints", () => {
+  const p = loadProgram(join(ROOT, "ters/examples/bounce"));
+  const main = p.named("main"), own = p.own.defs;
+  forgetKept();
+  const first = compile(p.code, p.pres.names, p.options, main, own);
+  const lits = literalEdits(p.code, own), lit = lits[Math.floor(lits.length / 2)];
+  const at = parentOf(p.code, lit)!;
+  const nodes = copyNodes(p.code.nodes);
+  nodes["zzf"] = { id: "zzf", kind: "ref", target: "builtin.arith.add" } as never;
+  nodes["zzz"] = { id: "zzz", kind: "lit", value: 0, of: (p.code.nodes[lit] as { of?: string }).of } as never;
+  nodes["zzc"] = { id: "zzc", kind: "call", fn: "zzf", args: [lit, "zzz"] } as never;
+  const par = { ...(nodes[at.parent] as unknown as Record<string, unknown>) };
+  if (at.slot === "args") { const a = [...(par.args as string[])]; a[at.index!] = "zzc"; par.args = a; } else par[at.slot] = "zzc";
+  nodes[at.parent] = par as never;
+  const next: Code = { nodes, defs: p.code.defs };
+  onLayer(next, LIBRARY.code);
+  const again = ZP.again, read = ZP.read;
+  const got = compile(next, p.pres.names, p.options, main, own, { code: p.code, info: first.info });
+  assert.ok(ZP.again - again > 10 * (ZP.read - read), `${ZP.again - again} reads taken again, ${ZP.read - read} made`);
   forgetKept();
   const fresh = compile(next, p.pres.names, p.options, main, own);
   assert.equal(got.text, fresh.text);

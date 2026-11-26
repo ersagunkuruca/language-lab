@@ -51,7 +51,7 @@ const OWN = new Set(["code", "info"]);
 // Each type of the lowering a token by its place, and the types written
 // out with those tokens (the passes mark types, so the text is taken
 // before they run).
-function typesOf(ir: CoreIR): { text: string; tokens: Map<object, string> } {
+export function typesOf(ir: CoreIR): { text: string; tokens: Map<object, string> } {
   const tokens = new Map<object, string>();
   const lists: [string, object[]][] = [["r", ir.records], ["d", ir.data], ["a", ir.arrays], ["t", ir.tables], ["f", ir.fns], ["e", ir.escapes]];
   for (const [p, ts] of lists) ts.forEach((t, i) => { if (!tokens.has(t)) tokens.set(t, `${p}${i}`); });
