@@ -558,6 +558,8 @@ export const FRAME_V: typeof Std.FRAME_V = {
   "frame": "std.frame.frame",
   "draw": "builtin.frame.draw",
   "texel": "std.texel.texel",
+  "image": "std.image.image",
+  "copy": "std.pass.copy",
   "sampled": "builtin.frame.sampled"
 };
 export const FROM_FRACTION: typeof Std.FROM_FRACTION = "std.literal.literal.from fraction";
@@ -587,6 +589,7 @@ export const HTML_V: typeof Std.HTML_V = {
   "recording": "std.input.recording",
   "noInput": "std.input.no input"
 };
+export const IMAGE: typeof Std.IMAGE = "std.image";
 export const INPUT: typeof Std.INPUT = "std.input";
 export const INSTANT: typeof Std.INSTANT = "std.instant";
 export const INSTANT_V: typeof Std.INSTANT_V = "std.instant.instant";
@@ -1681,22 +1684,30 @@ export const stdNames: typeof Std.stdNames = {
   "std.target.texture.height": "height",
   "std.target.texture": "texture",
   "std.target": "Target",
-  "std.draw": "Draw",
-  "std.pass.pass.into": "into",
-  "std.pass.pass.clear": "clear",
-  "std.pass.pass.depth": "depth",
-  "std.pass.pass.draws": "draws",
-  "std.pass.pass": "pass",
-  "std.pass": "Pass",
-  "std.frame.frame.passes": "passes",
-  "std.frame.frame": "frame",
-  "std.frame": "Frame",
   "std.texel.texel.red": "red",
   "std.texel.texel.green": "green",
   "std.texel.texel.blue": "blue",
   "std.texel.texel.alpha": "alpha",
   "std.texel.texel": "texel",
   "std.texel": "Texel",
+  "std.image.image.width": "width",
+  "std.image.image.height": "height",
+  "std.image.image.texels": "texels",
+  "std.image.image": "image",
+  "std.image": "Image",
+  "std.draw": "Draw",
+  "std.pass.pass.into": "into",
+  "std.pass.pass.clear": "clear",
+  "std.pass.pass.depth": "depth",
+  "std.pass.pass.draws": "draws",
+  "std.pass.pass": "pass",
+  "std.pass.copy.image": "image",
+  "std.pass.copy.into": "into",
+  "std.pass.copy": "copy",
+  "std.pass": "Pass",
+  "std.frame.frame.passes": "passes",
+  "std.frame.frame": "frame",
+  "std.frame": "Frame",
   "builtin.frame.draw": "draw",
   "builtin.frame.sampled": "sampled",
   "std.file kind.plain file": "plain file",

@@ -83,6 +83,7 @@ export function rasterize(frame: Value, width: number, height: number, call: Cal
   const textures = new Map<string, Texture>();
   withTextures(textures, () => {
     for (const pass of items(part(frame, 0))) {
+      if ((pass as Data).tag === FRAME_V.copy) { const [name, t] = copied(pass); textures.set(name, t); continue; }
       const into = part(pass, 0) as Data;
       const t = into.tag === FRAME_V.texture ? { width: Math.max(1, Number(part(into, 1))), height: Math.max(1, Number(part(into, 2))) } : null;
       const target = t ? { ...t, colour: new Float64Array(t.width * t.height * 4) } : screen;
@@ -98,6 +99,18 @@ export function rasterize(frame: Value, width: number, height: number, call: Cal
   const rgba = new Uint8ClampedArray(width * height * 4);
   for (let i = 0; i < screen.colour.length; i++) rgba[i] = Math.round(Math.min(1, Math.max(0, screen.colour[i])) * 255);
   return { width, height, rgba };
+}
+
+// A copy pass (G11): the texture its target names holds the image, at the
+// image's own size, each part kept from 0 to 1 as a texture keeps it.
+export function copied(pass: Value): [string, Texture] {
+  const image = part(pass, 0), into = part(pass, 1) as Data;
+  if (into.tag !== FRAME_V.texture) throw new Error("copy puts an image into a texture, not the screen");
+  const width = Number(part(image, 0)), height = Number(part(image, 1)), texels = items(part(image, 2));
+  if (!(width >= 1 && height >= 1) || texels.length !== width * height) throw new Error(`an image ${width} by ${height} has ${width * height} texels, not ${texels.length}`);
+  const colour = new Float64Array(width * height * 4);
+  texels.forEach((t, i) => { for (let k = 0; k < 4; k++) colour[i * 4 + k] = Math.min(1, Math.max(0, Number(part(t, k)))); });
+  return [String(part(into, 0)), { width, height, colour }];
 }
 
 interface Placed { x: number; y: number; z: number; w: number; carried: Value; leaves: number[] }

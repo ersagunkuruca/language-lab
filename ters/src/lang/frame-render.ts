@@ -6,16 +6,17 @@ import { fromList, type Data, type Value } from "./run-values.ts";
 import type { El, Mount } from "./html.ts";
 import { rasterize } from "./raster.ts";
 import { GpuFrames, sitedOf } from "./gpu-frame.ts";
+import { FRAME_V } from "./std-ids.ts";
 
 // A canvas renders with WebGPU when every draw of its first frame has a
 // site the compiled page printed (gpu-frame.ts), and with raster.ts on the
 // CPU otherwise: a canvas keeps the one kind of context it first gave. While
 // WebGPU starts, the latest frame waits and is drawn once it can be.
 const rendering = new WeakMap<El, { gpu: GpuFrames | null | "opening"; latest: Value | null }>();
-// Every draw with a site.
+// Every draw with a site (a copy pass has none to have).
 const listed = (v: Value): Value[] => (Array.isArray(v) ? v : fromList(v));
 const fieldOf = (o: Value, i: number): Value => (o as unknown as Record<string, Value>)[`f${i}`] ?? (o as Data).fields[i];
-const allSited = (frame: Value) => listed(fieldOf(frame, 0)).every((p) => listed(fieldOf(p, 3)).every((d) => sitedOf(d as Data)));
+const allSited = (frame: Value) => listed(fieldOf(frame, 0)).every((p) => (p as Data).tag === FRAME_V.copy || listed(fieldOf(p, 3)).every((d) => sitedOf(d as Data)));
 export function renderFrame(e: El, v: Value | null, call: Mount["call"]): void {
   if (v === null) return;
   let r = rendering.get(e);

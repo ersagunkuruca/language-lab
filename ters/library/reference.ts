@@ -111,7 +111,7 @@ export const SECTIONS: Section[] = [
   { title: "Sound files", intro: "A Sound is its rate and each channel's samples. wav of writes one as a WAV file's bytes, 16-bit PCM or 32-bit float; sound of wav reads either back, any number of channels.",
     ids: sounds("Sound", "wav of", "sound of wav") },
   { title: "Frames", intro: "What a canvas renders (FRAMES.md): a Frame is passes, each drawing into the screen or a texture, cleared to a CSS colour, with or without a depth buffer. A draw is a mesh, its instances, a vertex function that places each corner for each instance, and a fragment function that gives the colour; both are pure, as a shader is. A pass into a texture draws it for a later pass's fragment to read with sampled. A page's canvas with a render attribute draws the frame its cell holds.",
-    ids: [...t("mesh", "placed", "target", "draw", "pass", "frame", "texel"), ...b("frame.draw", "frame.sampled")] },
+    ids: [...t("mesh", "placed", "target", "draw", "pass", "frame", "texel", "image"), ...b("frame.draw", "frame.sampled")] },
   { title: "Points, colours and slopes", intro: "A record whose fields are all Float64s (a point, a direction, a colour) can be worked on part by part, and the vectors module is written that way.",
     ids: [...b("mapParts", "zipParts", "total", "set", "fields.mapped", "fields.listed", "derivative", "gradient", "valueAndGradient"), ...vectors("plus", "minus", "times", "scale", "dot", "magnitude", "distance", "unit", "mix", "clamp", "reflect")] },
 ];

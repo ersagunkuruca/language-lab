@@ -17,7 +17,7 @@
 
 import { fromList, type Data, type Value } from "./run-values.ts";
 import { FRAME_V, TRUE } from "./std-ids.ts";
-import { cssColour } from "./raster.ts";
+import { copied, cssColour } from "./raster.ts";
 
 export type Word = "f32" | "i32" | "bool";
 export interface Leaf { path: number[]; kind: Word }
@@ -85,6 +85,8 @@ export class GpuFrames {
   private slots = new Map<string, Slot>();
   private depths = new Map<string, GPUTexture>();
   private textures = new Map<string, GPUTexture>();
+  // The image a copy pass last wrote to a texture.
+  private held = new WeakMap<GPUTexture, Value>();
   private sampler: GPUSampler | null = null;
   private device: GPUDevice;
   private context: GPUCanvasContext;
@@ -153,18 +155,37 @@ export class GpuFrames {
   // before a pass of the frame draws it is refused, as raster.ts refuses it.
   draw(frame: Value, siteOf: (d: Data) => Sited | null): Drawn | false {
     const passes = items(part(frame, 0));
-    const sited = passes.map((p) => items(part(p, 3)).map((d) => siteOf(d as Data)));
+    const isCopy = (p: Value) => (p as Data).tag === FRAME_V.copy;
+    const sited = passes.map((p) => (isCopy(p) ? [] : items(part(p, 3)).map((d) => siteOf(d as Data))));
     if (sited.some((ds) => ds.some((s) => !s))) return false;
     const drawn: Drawn = { draws: 0, bytes: 0 };
     const enc = this.device.createCommandEncoder();
     const screen = this.context.getCurrentTexture().createView();
     const drawnNow = new Set<string>();
     passes.forEach((pass, pi) => {
+      // A copy pass (G11): the image is written to its texture only when
+      // it isn't the image that texture last held.
+      if (isCopy(pass)) {
+        const image = part(pass, 0), [name, t] = copied(pass);
+        const tex = this.texture(name, [t.width, t.height]);
+        if (this.held.get(tex) !== image) {
+          const bytes = new Uint8Array(t.colour.length);
+          for (let i = 0; i < bytes.length; i++) bytes[i] = Math.round(t.colour[i] * 255);
+          this.device.queue.writeTexture({ texture: tex }, bytes, { bytesPerRow: t.width * 4 }, [t.width, t.height]);
+          this.held.set(tex, image);
+          drawn.bytes += bytes.length;
+        }
+        drawnNow.add(name);
+        return;
+      }
       const into = part(pass, 0) as Data;
       const name = into.tag === FRAME_V.texture ? String(part(into, 0)) : null;
       const size: [number, number] = name === null ? [this.canvas.width, this.canvas.height] : [Math.max(1, Number(part(into, 1))), Math.max(1, Number(part(into, 2)))];
       const format = name === null ? this.format : TEXTURE_FORMAT;
-      const view = name === null ? screen : this.texture(name, size).createView();
+      const drawnInto = name === null ? null : this.texture(name, size);
+      // A pass drawing into a texture a copy filled leaves it unlike the image.
+      if (drawnInto) this.held.delete(drawnInto);
+      const view = drawnInto ? drawnInto.createView() : screen;
       const depth = (part(pass, 2) as Data).tag === TRUE || (part(pass, 2) as unknown) === true;
       const [r, g, b, a] = cssColour(String(part(pass, 1)));
       const rp = enc.beginRenderPass({
@@ -244,7 +265,7 @@ export class GpuFrames {
     let t = this.textures.get(name);
     if (t && t.width === width && t.height === height) return t;
     t?.destroy();
-    this.textures.set(name, (t = this.device.createTexture({ size: [width, height], format: TEXTURE_FORMAT, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING })));
+    this.textures.set(name, (t = this.device.createTexture({ size: [width, height], format: TEXTURE_FORMAT, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST })));
     return t;
   }
 

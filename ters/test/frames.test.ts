@@ -124,19 +124,23 @@ test("draws of different instance types go in one list, and a fragment must give
 // by 1 covers its right half. The screen, 4 by 2, is one square whose
 // fragment samples the texture across, at its height's middle: kept to
 // the edge at the ends, a mix between.
-const sampling = (order: "written" | "read first") => program((k, t) => {
+// G11: the same texture as an image put there by a copy pass.
+const sampling = (order: "written" | "read first" | "copied", texels = 2) => program((k, t) => {
   const glow = () => k.call(FRAME_V.texture, k.lit("glow"), k.int(2), k.int(1));
   const shifted = k.fn(["shift", "c"], (s, c) => k.call(FRAME_V.placed, t.point(k.call(B.add, t.cx(c), s), t.cy(c), k.lit(0.5)), k.lit(0)));
-  const into = k.call(FRAME_V.pass, glow(), k.lit("#ff0000"), k.false, k.list(k.call(FRAME_OPS.draw, t.square(), k.list(k.lit(1)), shifted, k.fn(["_"], () => t.colour(k.lit(0), k.lit(1), k.lit(0))))));
+  const texel = (r: number, g: number) => k.call(FRAME_V.texel, k.lit(r), k.lit(g), k.lit(0), k.lit(1));
+  const image = k.call(FRAME_V.image, k.int(2), k.int(1), k.list(...[texel(1, 0), texel(0, 1)].slice(0, texels)));
+  const into = order === "copied" ? k.call(FRAME_V.copy, image, glow())
+    : k.call(FRAME_V.pass, glow(), k.lit("#ff0000"), k.false, k.list(k.call(FRAME_OPS.draw, t.square(), k.list(k.lit(1)), shifted, k.fn(["_"], () => t.colour(k.lit(0), k.lit(1), k.lit(0))))));
   const across = k.fn(["_", "c"], (_, c) => k.call(FRAME_V.placed, t.point(t.cx(c), t.cy(c), k.lit(0.5)), k.call(B.add, k.call(B.mul, t.cx(c), k.lit(0.5)), k.lit(0.5))));
   const read = k.fn(["u"], (u) => k.call(FRAME_OPS.sampled, glow(), t.corner2(u, k.lit(0.5))));
   const onto = t.pass("#000", false, k.call(FRAME_OPS.draw, t.square(), k.list(k.lit(0)), across, read));
   const main = k.def("main");
-  k.define(main, k.thunk(() => k.call(FRAME_V.frame, order === "written" ? k.list(into, onto) : k.list(onto, into))));
+  k.define(main, k.thunk(() => k.call(FRAME_V.frame, order !== "read first" ? k.list(into, onto) : k.list(onto, into))));
   return { main };
 });
-test("a pass draws into a texture and a later pass samples it, between texels and kept to its edges", () => {
-  const { info, frame } = sampling("written");
+for (const order of ["written", "copied"] as const) test(`a texture ${order === "written" ? "a pass draws" : "a copy pass fills from an image"} is sampled by a later pass, between texels and kept to its edges`, () => {
+  const { info, frame } = sampling(order);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const img = rasterize(frame(), 4, 2, evaluatorCall);
   assert.deepEqual(px(img, 0, 0), [255, 0, 0, 255]);
@@ -147,6 +151,11 @@ test("a pass draws into a texture and a later pass samples it, between texels an
 test("a texture read before a pass of the frame draws it is refused with its name", () => {
   const { frame } = sampling("read first");
   assert.throws(() => rasterize(frame(), 4, 2, evaluatorCall), /"glow" is read before a pass of this frame draws it/);
+});
+
+test("an image whose texels aren't its width by its height is refused", () => {
+  const { frame } = sampling("copied", 1);
+  assert.throws(() => rasterize(frame(), 4, 2, evaluatorCall), /an image 2 by 1 has 2 texels, not 1/);
 });
 
 test("CSS colours as a clear colour", () => {
@@ -167,15 +176,20 @@ test("the flock page's first frame: sky, floor and birds", async () => {
   const named = (n: string) => p.own.defs.find((d) => p.pres.names[d] === n)!;
   const r = makeRunner(p.code, info, { print: () => {} });
   const sky = r.value(named("start sky"));
-  // Its bird, from the OBJ file beside it (G11).
+  // Its bird and its floor, from the files beside it (G11).
   const { readFileSync } = await import("node:fs");
-  const bird = [...r.call(r.value(named("obj mesh")), readFileSync(join(import.meta.dirname, "../examples/flock-frame-page/bird.obj"), "utf8"))][0] as Value;
-  const frame = [...r.call(r.value(named("frame of")), sky, bird)][0] as Value;
+  const file = (f: string) => readFileSync(join(import.meta.dirname, "../examples/flock-frame-page", f), "utf8");
+  const floor = [...r.call(r.value(named("ppm image")), file("floor.ppm"))][0] as Value;
+  const bird = [...r.call(r.value(named("obj mesh")), file("bird.obj"))][0] as Value;
+  const frame = [...r.call(r.value(named("frame of")), sky, bird, floor)][0] as Value;
   const img = rasterize(frame, 64, 60, evaluatorCall);
   const colours = new Set<string>();
   for (let i = 0; i < img.rgba.length; i += 4) colours.add(img.rgba.slice(i, i + 3).join(","));
   assert.deepEqual(px(img, 0, 0), [11, 18, 32, 255], "the clear colour");
-  assert.ok(colours.has([0.07, 0.11, 0.18].map((x) => Math.round(x * 255)).join(",")), "the floor");
+  // The floor's two tiles, from floor.ppm, the far ones faded: its darker
+  // tile as it is, and some of its lighter.
+  assert.ok(colours.has("14,22,38"), "the floor's darker tile");
+  assert.ok([...colours].some((c) => { const [r, g, b] = c.split(",").map(Number); return r < 31 && b > 50 && b <= 70 && g < 45; }), "the floor's lighter tile");
   // Birds: something pale (red above 150) in the picture.
   assert.ok([...colours].some((c) => Number(c.split(",")[0]) > 150), "birds");
 });

@@ -83,6 +83,9 @@ const across = (s, c) => ({ tag: FRAME_V.placed, fields: [rec(c.fields[0] + s, c
 const sampling = { tag: FRAME_V.frame, fields: [list(
   { tag: FRAME_V.pass, fields: [glow, "#ff0000", { tag: FALSE, fields: [] }, list({ tag: FRAME_V.draw, fields: [square, list(1), shift, () => rec(0, 1, 0), "t0", []] })] },
   { tag: FRAME_V.pass, fields: [{ tag: FRAME_V.screen, fields: [] }, "#000", { tag: FALSE, fields: [] }, list({ tag: FRAME_V.draw, fields: [square, list(0), across, (u) => sampled(glow, rec(u, 0.5)), "u0", [glow]] })] })] };
+// G11: the same texture filled by a copy pass from a 2 × 1 image.
+const image = { tag: FRAME_V.image, fields: [2, 1, list(rec(1, 0, 0, 1), rec(0, 1, 0, 1))] };
+const copying = { tag: FRAME_V.frame, fields: [list({ tag: FRAME_V.copy, fields: [image, glow] }, sampling.fields[0].fields[1].fields[0])] };
 const frameOf = (scale) => ({ tag: FRAME_V.frame, fields: [list({ tag: FRAME_V.pass, fields: [{ tag: FRAME_V.screen, fields: [] }, "#102030", { tag: TRUE, fields: [] },
   list({ tag: FRAME_V.draw, fields: [square, birds, vertex(scale), fragment, "s0", [scale]] })] })] });
 window.run = async () => { let stage = 'open'; try {
@@ -110,7 +113,14 @@ window.run = async () => { let stage = 'open'; try {
   const tc = t2.getContext("2d"); tc.drawImage(t, 0, 0);
   const tGot = Array.from(tc.getImageData(0, 0, W, H).data);
   const tWant = Array.from(rasterize(sampling, W, H, (f, ...xs) => f(...xs)).rgba);
-  return { first, again, moved, got, want, drew, tGot, tWant };
+  // The copied image on the same canvas, drawn twice.
+  stage = "copy";
+  const copied = tg.draw(copying, sitedOf);
+  const c3 = document.createElement("canvas"); c3.width = W; c3.height = H;
+  const cc = c3.getContext("2d"); cc.drawImage(t, 0, 0);
+  const cGot = Array.from(cc.getImageData(0, 0, W, H).data);
+  const copiedAgain = tg.draw(copying, sitedOf);
+  return { first, again, moved, got, want, drew, tGot, tWant, copied, copiedAgain, cGot };
   } catch (e) { return { error: stage + ': ' + e }; }
 };
 `;
@@ -151,5 +161,12 @@ try {
   assert.deepEqual(tAt(0), [255, 0, 0], "red kept to the left edge");
   assert.deepEqual(tAt(31), [0, 255, 0], "green kept to the right edge");
   assert.ok(tAt(16)[0] > 100 && tAt(16)[1] > 100, "a mix between");
+  // The copied image: the same pixels; its 8 bytes sent once.
+  const cr = r as unknown as { copied: { draws: number; bytes: number }; copiedAgain: { bytes: number }; cGot: number[] };
+  assert.equal(cr.copied.draws, 1);
+  assert.equal(cr.copiedAgain.bytes, 0, "the same image again sends nothing");
+  let cOff = 0;
+  for (let i = 0; i < cr.cGot.length; i += 4) for (const k of [0, 1, 2]) if (Math.abs(cr.cGot[i + k] - tr.tWant[i + k]) > 2) cOff++;
+  assert.equal(cOff, 0, `copied image: ${cOff} channels differ from raster.ts's`);
   console.log(`ok: GPU and CPU frames agree (${off} edge pixels differ), the same frame sends 0 bytes, a moved camera ${r.moved.bytes}; a sampled texture agrees with raster.ts (worst ${worst})`);
 } finally { await browser.close(); }
