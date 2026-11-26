@@ -144,13 +144,26 @@ export const pushFrontOwned = (a: ArrayValue, x: unknown): ArrayView => {
 // A push to the back of a view nobody else holds (C327f, compiler/src/
 // holders.ts): written into the room after it as `push` does, but the
 // view given isn't marked as sharing its buffer, since nothing reads it
-// again; a later owned replace then writes in place, not a version.
+// again; a later owned replace then writes in place, not a version. The
+// view itself grows, as pushFrontOwned's does, no new view a push (L271c:
+// a fill pushing each item made one each); an empty one may be shared,
+// so it gets a view of its own. Full, it moves to a buffer twice as long
+// with all its room after it, since what's pushed at the back stays so.
 export const pushOwned = (a: ArrayValue, x: unknown): ArrayView => {
   if (!(a instanceof ArrayView) || a.rest || !a.ver.cur) return pushBack(a, x);
   const b = a.ver.cur, end = a.start + a.n;
-  if (end !== b.hi || end >= b.items.length) return pushBack(a, x);
+  if (end !== b.hi) return pushBack(a, x);
+  if (end >= b.items.length) {
+    const n = a.n, items = new Array(2 * n + 8).fill(0);
+    for (let i = 0; i < n; i++) items[i] = b.items[a.start + i];
+    items[n] = x;
+    return new ArrayView(versionOf({ items, lo: 0, hi: n + 1 }), 0, n + 1);
+  }
   b.items[end] = x; b.hi++;
-  return new ArrayView(a.ver, a.start, a.n + 1);
+  if (a.n === 0) return new ArrayView(a.ver, a.start, 1);
+  const v = a as unknown as { n: number; f: unknown };
+  v.n++; v.f = null;
+  return a;
 };
 // A rest is a view on the same buffer, so a list taken apart item by item
 // would keep its whole first buffer however little is left (Go's slices
