@@ -5169,7 +5169,10 @@ Tried by hand on the compiled module, the same output:
   pure and end, so skipping the rest is invisible, though `and` is
   strict (L259). This took 1.12 to 1.05 s (6%).
 - `sort by` as one array sort with the compiled compare, stable as the
-  merge is. This took 1.05 to 1.03 s (5%).
+  merge is. This took 1.05 to 1.03 s (5%). Built as a runtime sort
+  (`list.sortBy`, giving the evaluator's cons cells), it made the bench
+  slower, 0.87-0.92 s to 1.09 s, since the cells that come back aren't
+  the program's own classes. Not kept.
 
 Neither reaches the 10% bar alone. The tables' reads were three Map
 reads each: a tuple key's spelling found by its parts (two), then the
