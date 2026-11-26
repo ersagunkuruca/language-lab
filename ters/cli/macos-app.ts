@@ -487,6 +487,7 @@ static int u_ask(void *c, const char *s, size_t n) {
   // A file the page offers or asks for (L271c): where to keep it in the
   // Mac's own save panel, named as the page names it, or which to read
   // in its open panel; or -ters-choose's path for a check.
+  if ([what hasPrefix:@"offered:"]) return 1;
   BOOL offer = [what hasPrefix:@"offer file:"], open = [what hasPrefix:@"ask for file:"];
   if (offer || open) {
     NSString *f = [NSUserDefaults.standardUserDefaults stringForKey:@"ters-choose"];

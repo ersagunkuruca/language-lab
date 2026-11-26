@@ -2119,7 +2119,8 @@ static void u_frame(uv *v, double s) {
 }
 static void u_show(uv *root) { printf("page %g %g bg %08X%s", u_pw, u_ph, (unsigned)u_pbg, u_scrolled ? "" : "\n"); if (u_scrolled) printf(" scrolled %g\n", u_scrolled); u_print(root, 0, 0, 0); fputs("\x1e\n", stdout); }
 // The person is asked (L236b), and answers later with permission:yes.
-static int u_ask(void *c, const char *what, size_t n) { (void)c; printf("ask %.*s\n", (int)n, what); return -1; }
+// Told a file was offered (L271c), it has nothing to hand it to: yes.
+static int u_ask(void *c, const char *what, size_t n) { (void)c; printf("ask %.*s\n", (int)n, what); return n >= 8 && !memcmp(what, "offered:", 8) ? 1 : -1; }
 #ifdef TERS_BLOCK
 // Its sound (C217): a recording is the file at its address, at 48000 a
 // second; play:N:FRAMES plays sound n on a thread of its own, as a

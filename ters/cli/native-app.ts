@@ -545,6 +545,14 @@ JNIEXPORT void JNICALL Java_app_ters_page_MainActivity_nativeTree(JNIEnv *env, j
 // A finger on a picture (C199f), in dp from its top left: kind 0 down, 1
 // move, 2 up, 3 cancelled. Whether the page listened.
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativePointer(JNIEnv *env, jobject self, jint id, jint kind, jdouble x, jdouble y) { (void)self; ters_j = env; return ters_ui_pointer(ters_view_of(id), kind, x, y); }
+// The file the person chose for what the page asked (L271c).
+void ters_page_chosen(const char *path);
+JNIEXPORT void JNICALL Java_app_ters_page_MainActivity_nativeChosen(JNIEnv *env, jobject self, jstring path) {
+  (void)self;
+  const char *p = (*env)->GetStringUTFChars(env, path, 0);
+  ters_page_chosen(p);
+  (*env)->ReleaseStringUTFChars(env, path, p);
+}
 // The person's answer to the permission the page asked for (L236b).
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativePermission(JNIEnv *env, jobject self, jint yes) {
   (void)self; ters_j = env;
@@ -659,6 +667,7 @@ public class MainActivity extends Activity {
   native int nativeFrame();
   native int nativePermission(int yes);
   native void nativeTree(int on);
+  native void nativeChosen(String path);
 
   private final HashMap<Integer, View> views = new HashMap<>();
   private int next = 1;
@@ -901,8 +910,40 @@ public class MainActivity extends Activity {
     tree = u;
     try { nativeTree(1); } catch (UnsatisfiedLinkError e) { tree = null; }
   }
+  // A file the page offers or asks for (L271c): one offered is written in
+  // the app's cache, then kept where the person makes a document for it
+  // (ACTION_CREATE_DOCUMENT); one asked for is chosen
+  // (ACTION_OPEN_DOCUMENT) and copied into the cache to be read.
+  private static final int OFFERED = 2711, CHOSEN = 2712;
+  private String offered;
+  private static boolean copied(java.io.InputStream in, java.io.OutputStream out) {
+    try (java.io.InputStream i = in; java.io.OutputStream o = out) {
+      byte[] b = new byte[65536];
+      for (int k; (k = i.read(b)) > 0;) o.write(b, 0, k);
+      return true;
+    } catch (Exception e) { Log.w("ters", "copying a file: " + e); return false; }
+  }
+  private void fileResult(int code, android.net.Uri u) {
+    if (code == OFFERED) {
+      String from = offered;
+      offered = null;
+      if (u != null && from != null) try { copied(new java.io.FileInputStream(from), getContentResolver().openOutputStream(u, "wt")); } catch (Exception e) { Log.w("ters", "keeping " + from + ": " + e); }
+      Log.d("ters", "offered " + (u != null ? "kept" : "not kept"));
+      return;
+    }
+    boolean yes = false;
+    if (u != null) {
+      java.io.File f = new java.io.File(getCacheDir(), "chosen");
+      try { yes = copied(getContentResolver().openInputStream(u), new java.io.FileOutputStream(f)); } catch (Exception e) { Log.w("ters", "reading the chosen file: " + e); }
+      if (yes) nativeChosen(f.getAbsolutePath());
+    }
+    Log.d("ters", "ask for file " + (yes ? "yes" : "no"));
+    nativePermission(yes ? 1 : 0);
+    tick();
+  }
   @Override protected void onActivityResult(int code, int result, android.content.Intent data) {
     super.onActivityResult(code, result, data);
+    if (code == OFFERED || code == CHOSEN) { fileResult(code, result == RESULT_OK && data != null ? data.getData() : null); return; }
     if (code != PICKED) return;
     android.net.Uri u = result == RESULT_OK && data != null ? data.getData() : null;
     if (u != null) {
@@ -979,6 +1020,26 @@ public class MainActivity extends Activity {
   // Android 13. Files are a folder they pick (C313).
   private static final int ASKED = 236;
   int ask(String what) {
+    if (what.startsWith("offer file:")) {
+      java.io.File d = new java.io.File(getCacheDir(), "offered");
+      d.mkdirs();
+      nativeChosen(new java.io.File(d, what.substring(11)).getAbsolutePath());
+      return 1;
+    }
+    if (what.startsWith("offered:")) {
+      offered = what.substring(8);
+      android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT).addCategory(android.content.Intent.CATEGORY_OPENABLE).setType("application/octet-stream").putExtra(android.content.Intent.EXTRA_TITLE, new java.io.File(offered).getName());
+      Log.d("ters", "offered " + new java.io.File(offered).getName());
+      try { startActivityForResult(i, OFFERED); } catch (android.content.ActivityNotFoundException e) { offered = null; }
+      return 1;
+    }
+    if (what.startsWith("ask for file:")) {
+      String kinds = what.substring(13);
+      android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).addCategory(android.content.Intent.CATEGORY_OPENABLE).setType(kinds.contains("/") && !kinds.contains(",") ? kinds : "*/*");
+      Log.d("ters", "ask " + what);
+      try { startActivityForResult(i, CHOSEN); } catch (android.content.ActivityNotFoundException e) { return 0; }
+      return -1;
+    }
     if (what.equals("files")) {
       if (tree != null) return 1;
       Log.d("ters", "ask files");
