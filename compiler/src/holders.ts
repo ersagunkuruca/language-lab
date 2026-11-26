@@ -501,10 +501,21 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
 // The replaces holders() finds, made `replaceOwned`, and the pushes it
 // finds, marked for ownPushes to make `pushOwned` once columns.ts has read
 // them as pushes (an array built by pushes may become columns); how many.
-export function ownedPerValue(ir: CoreIR, roots: number[]): number {
-  const owned = holders(ir, roots).owned;
+export function ownedPerValue(ir: CoreIR, roots: number[], shared?: () => Holders): number {
+  const owned = (shared ?? (() => holders(ir, roots)))().owned;
   for (const e of owned) if (e.k === "rt") { if (op(e) === "push") e.own = true; else if (op(e) === "replaceAt") e.fn = e.fn.replace("array.replaceAt.", "array.replaceOwned."); }
   return owned.size;
+}
+
+// holders() of these roots, worked out when first asked and kept: the
+// passes after mapsInPlace read one answer (owned-arrays.ts, ownedPerValue,
+// owned-tables.ts, and on WebAssembly owned-records.ts), as what they
+// change between them (a replace made replaceOwned, a push marked own)
+// changes nothing holders() reads. owned-pushes.ts does (it puts calls in
+// place), so a pass after it asks again.
+export function sharedHolders(ir: CoreIR, roots: number[]): () => Holders {
+  let h: Holders | undefined;
+  return () => (h ??= holders(ir, roots));
 }
 
 // Those pushes, where they are still pushes onto an array (not made
