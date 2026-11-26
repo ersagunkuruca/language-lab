@@ -705,10 +705,15 @@ const sameSteady = (a: Node, b: Node): boolean => {
   const ka = Object.keys(a), kb = Object.keys(b);
   return ka.length === kb.length && ka.every((k) => k in b && sameField((a as unknown as Record<string, unknown>)[k], (b as unknown as Record<string, unknown>)[k]));
 };
-export function steadied(code: Code, defs: readonly Id[] = code.defs): Code {
+// Over other nodes (the library's), only the nodes it holds itself: those
+// under are the same objects in every compile (machine: the library's
+// 50,000 looked up each time, 20 ms of an edit's choice).
+export function steadied(code: Code, defs?: readonly Id[]): Code {
   if (steadyKept.size > 200_000) steadyKept.clear();
   let swap: Record<Id, Node> | null = null;
-  for (const d of defs) for (const id of subtreeKept(code, d)) {
+  const under = defs ? undefined : nodesUnder(code.nodes);
+  const ids = under ? ownNodeIds(code.nodes) : (defs ?? code.defs).flatMap((d) => subtreeKept(code, d));
+  for (const id of ids) {
     const n = code.nodes[id];
     if (!n) continue;
     const ks = steadyKept.get(id);
