@@ -39,10 +39,10 @@ import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
-import { ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT, PAIR_V, TENSOR, TENSOR_V } from "./std-ids.ts";
+import { ARRAY_OPS, ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT, PAIR_V, TENSOR, TENSOR_V } from "./std-ids.ts";
 import { COMPUTE_ONLY, FILE_OPS, KEPT_FILES, LOCALE_V, MY_LOCALE_OP, MY_LATENCY_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, ORDERED, CASE_NAME, SOME, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std-ids.ts";
 import { tupleVariant } from "./std-values.ts";
-import { ArrayView } from "./array-view.ts";
+import { ArrayView, sortedBy, type ArrayValue } from "./array-view.ts";
 import { floatText, shownImplementations, implementationsOf } from "./std-values.ts";
 import { STD_IMPL, STD_MANY } from "./std-impl.ts";
 import { intLit } from "./int.ts";
@@ -544,6 +544,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.stop]: (why) => { throw new Aborted(why as string); },
     [S.equal]: (a, b) => one(ones[S.equal](a, b)),
     [COMPARE]: (a, b) => one(ORDER_VALUES[compareValues(a, b, (cmpOrder ??= variantOrder(code)), orderedBy) + 1]),
+    [ARRAY_OPS.sorted]: (a) => one(sortedBy(a as ArrayValue, (x, y) => compareValues(x as Value, y as Value, (cmpOrder ??= variantOrder(code)), orderedBy)) as unknown as Value),
     [S.and]: (a, b) => one(ones[S.and](a, b)),
     [S.or]: (a, b) => one(ones[S.or](a, b)),
     [S.not]: (a) => one(ones[S.not](a)),

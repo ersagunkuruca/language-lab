@@ -61,7 +61,7 @@ import { gpuDraws, packsOf } from "./gpu-draws.ts";
 import { rangeArrays, rangeChoices } from "./range-choices.ts";
 import { originalOf, PRELUDE_DEFS, typedOriginalOf } from "../../ters/src/lang/prelude-ids.ts";
 import { earlyAnd } from "./early-and.ts";
-import { ARRAY_RT, emptyArray, isArray, isDual, isTable, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, poolHeld, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, emptyArray, isArray, isDual, isTable, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, poolHeld, type AType, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import type { Type } from "../../ters/src/lang/types.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
@@ -265,6 +265,9 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
   const memo = envSet("NO_MEMO") ? new Set<number>() : memoFuncs(ir, new Set(deep.keys()));
   const parts = ir.funcs.map((f, i) => {
     if (only && !only.has(i)) return [];
+    // An array of numbers sorted (C355): JavaScript's own sort, the same
+    // order as the merge scalar.ts wrote.
+    if (f.sorts && ["f64", "int"].includes((f.params[0] as AType).item as string)) return [`function ${names[i]}(l0) {\n  return R.sortedNumbers(l0);\n}`];
     // A loop keeping two arrays or more, or counting in numbers, printed a
     // second time as it was (kept-arrays.ts): the first goes on in that
     // one where two are versions of one buffer, or a count isn't small.

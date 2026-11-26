@@ -685,6 +685,12 @@ export const RUNTIME = {
   FAIL, OUT, Aborted, Pending, Unsupported, planned, moded,
   // An array's item read in place (core-js.ts, G3d).
   ArrayView, arrayView, emptyFor, rowsOf,
+  // An array of numbers sorted by compare (C355, scalar.ts arraySort):
+  // JavaScript's own sort, which is stable, NaN after every other number.
+  sortedNumbers: (a: Parameters<typeof arrayView>[0]): ArrayView => {
+    const v = arrayView(a), xs = v.buf.items.slice(v.start, v.start + v.n) as number[];
+    return arrayOf(xs.sort((x, y) => (x < y ? -1 : x > y ? 1 : x === x ? (y === y ? 0 : -1) : y === y ? 1 : 0)));
+  },
   // A list over one array (Bytes' items, a table's keys), read by position
   // in place (core-js.ts, C321), and a list made one: Bytes made in
   // compiled code hold their items so.

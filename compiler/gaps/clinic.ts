@@ -1,6 +1,6 @@
 // clinic (GAPS.md round 10), a walk-in clinic simulation written in the
-// editor, in three ways: the evaluator (`ters run`), the module printed from
-// the core IR (`ters compile`, C137d19) and the hand-written ideal
+// editor, in four ways: the evaluator (`ters run`), the module printed from
+// the core IR (`ters compile`, C137d19), `ters native` and the hand-written ideal
 // (clinic.ideal.js). Each runs in
 // a folder holding a clinic.txt that sets the hours the clinic is open (the
 // rest is the program's default config), and the comparison is what it
@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { clinic, defaultConfig } from "./clinic.ideal.js";
 
-export type Name = "evaluator" | "core" | "ideal";
+export type Name = "evaluator" | "core" | "native" | "ideal";
 export interface Run { out: string[]; csv: string | null; ms: number }
 export const folder = join(import.meta.dirname, "clinic");
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
@@ -36,8 +36,21 @@ export function compiledModule(): string {
   if (!module) { module = join(dir, "clinic.mjs"); execFileSync(process.execPath, [lab, "compile", folder, "-o", module], { stdio: "ignore" }); }
   return module;
 }
+let binary = "";
+export function nativeBinary(): string {
+  if (!binary) { binary = join(dir, "clinic"); execFileSync(process.execPath, [lab, "native", folder, "-o", binary], { stdio: "ignore" }); }
+  return binary;
+}
+function exe(path: string, cwd: string): Run {
+  const t = performance.now();
+  const out = execFileSync(path, [], { cwd, encoding: "utf8", maxBuffer: 1 << 28 });
+  const ms = performance.now() - t;
+  const csv = existsSync(join(cwd, "clinic.csv")) ? readFileSync(join(cwd, "clinic.csv"), "utf8") : null;
+  return { out: out.replace(/\n$/, "").split("\n"), csv, ms };
+}
 export const ways: Record<Name, (hours: number) => Run> = {
   evaluator: (hours) => node([lab, "run", folder], at(hours)),
   core: (hours) => node([compiledModule()], at(hours)),
+  native: (hours) => exe(nativeBinary(), at(hours)),
   ideal: (hours) => { const t = performance.now(); const out = clinic({ ...defaultConfig, hours }); return { out, csv: null, ms: performance.now() - t }; },
 };

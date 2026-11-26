@@ -588,7 +588,7 @@ export function endsAsBefore(before: Info, after: Info): Info {
 // `piece`: a part of another function's body, made for its search (the
 // rest of a search, a choice's arm), not a call of its definition, so it
 // takes no step of a page's budget (core-js.ts, I291).
-export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; piece?: true; partial?: boolean; multi?: true; answer?: LType; value?: true; binders?: Id[]; bail?: number; apart?: true }
+export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; piece?: true; sorts?: true; partial?: boolean; multi?: true; answer?: LType; value?: true; binders?: Id[]; bail?: number; apart?: true }
 // `code` and `info` are the program that was lowered: the one given, or
 // a copy with its derivatives generated, where funcs[i].def lives.
 // rounded: definitions with a call worked out when compiled (stage.ts) that
@@ -1761,6 +1761,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             k: "let", i: arr, value: args()[0],
             body: { k: "search", kind: "optional", body: { k: "make", t: pair as RType, args: [{ k: "rt", fn: `array.first.a${a.index}`, args: [at] }, { k: "rt", fn: `array.rest.a${a.index}`, args: [at] }] }, res: f.locals.push(pair) - 1, t, bt: pair },
           };
+        }
+        if (opts.data && target === ARRAY_OPS.sorted) {
+          const a = stype(zonk(n.args[0]));
+          if (!a || !isArray(a)) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(n.args[0]))}`);
+          return { k: "call", fn: arraySort(a), args: args(), tail };
         }
         if (opts.data && (ARRAY_RT[target] || target === ARRAY_OPS.replaceAt)) {
           // The array's type, from the argument or the answer that is one;
@@ -4064,6 +4069,49 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       h.body = { k: "if", cond: { k: "rt", fn: "int.equal", args: [k, rt("array.length", a)] }, then: done, else: { k: "let", i: d, value: compared(items(a), items(b), t.item, h, false), body: { k: "if", cond: { k: "op", op: "equal", args: [loc(d), { k: "num", v: 0 }] }, then: next, else: loc(d), t: "f64" } }, t: "f64" };
     }
     return index.get(key)!;
+  }
+  // An array sorted by compare (C355, `array of List`'s sort): runs of 1,
+  // 2, 4 … items merged side by side into a new array each pass, by
+  // positions, every loop a tail call. An item of the second run goes
+  // first only when it is before the first's, so equal items keep their
+  // order, as the library's merge sort keeps them: the same answer.
+  function arraySort(t: AType): number {
+    const key = `sort${t.key}`;
+    if (index.has(key)) return index.get(key)!;
+    if (opts.shader) throw new Refused("sorts an array (not in shaders)");
+    const fn = (name: string, params: LType[], result: LType): [SFunc, number] => { const g: SFunc = { def: ARRAY, name: `${t.name}.${name}`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true }; return [g, funcs.push(g) - 1]; };
+    const [sortF, sortI] = fn("sorted", [t], t);
+    // A target may sort numbers by its own sort instead (core-js.ts).
+    sortF.sorts = true;
+    index.set(key, sortI);
+    const [passesF, passesI] = fn("sorted.passes", [t, "int"], t);
+    const [passF, passI] = fn("sorted.pass", [t, "int", "int", t], t);
+    const [mergeF, mergeI] = fn("sorted.merge", [t, "int", "int", "int", "int", t], t);
+    const loc = (i: number): SExpr => ({ k: "local", i }), int = (v: bigint): SExpr => ({ k: "int", v });
+    const rt = (f: string, ...args: SExpr[]): SExpr => ({ k: "rt", fn: f, args }), art = (f: string, ...args: SExpr[]) => rt(`${f}.a${t.index}`, ...args);
+    const less = (x: SExpr, y: SExpr) => rt("int.less", x, y), add = (x: SExpr, y: SExpr) => rt("int.add", x, y), twice = (x: SExpr) => rt("int.mul", x, int(2n));
+    const call = (fi: number, args: SExpr[], tail: boolean): SExpr => ({ k: "call", fn: fi, args, tail });
+    const iff = (cond: SExpr, then: SExpr, els: SExpr): SExpr => ({ k: "if", cond, then, else: els, t });
+    const atMost = (g: SFunc, x: SExpr, y: () => SExpr, body: (i: SExpr) => SExpr): SExpr => { const i = g.locals.push("int") - 1; return { k: "let", i, value: x, body: { k: "let", i, value: iff2(less(loc(i), y()), loc(i), y()), body: body(loc(i)) } }; };
+    const iff2 = (cond: SExpr, then: SExpr, els: SExpr): SExpr => ({ k: "if", cond, then, else: els, t: "int" });
+    // sorted(a) = passes(a, 1)
+    sortF.body = call(passesI, [loc(0), int(1n)], true);
+    // passes(a, w) = a once w reaches its length, else passes(pass(a, w, 0, []), 2w)
+    passesF.body = iff(less(loc(1), art("array.length", loc(0))), call(passesI, [call(passI, [loc(0), loc(1), int(0n), art("array.empty")], false), twice(loc(1))], true), loc(0));
+    // pass(a, w, s, out): the runs from s and s + w merged onto out, then the next two.
+    passF.body = iff(less(loc(2), art("array.length", loc(0))),
+      atMost(passF, add(loc(2), loc(1)), () => art("array.length", loc(0)), (mid) => atMost(passF, add(loc(2), twice(loc(1))), () => art("array.length", loc(0)), (end) =>
+        call(passI, [loc(0), loc(1), add(loc(2), twice(loc(1))), call(mergeI, [loc(0), loc(2), mid, mid, end, loc(3)], false)], true))),
+      loc(3));
+    // merge(a, i, i end, j, j end, out)
+    const [a, i, ie, j, je, out] = [0, 1, 2, 3, 4, 5].map(loc);
+    const takeFirst = call(mergeI, [a, add(i, int(1n)), ie, j, je, art("array.push", out, art("array.get", a, i))], true);
+    const takeSecond = call(mergeI, [a, i, ie, add(j, int(1n)), je, art("array.push", out, art("array.get", a, j))], true);
+    const c = mergeF.locals.push("f64") - 1;
+    mergeF.body = iff(less(i, ie),
+      iff(less(j, je), { k: "let", i: c, value: compared(art("array.get", a, j), art("array.get", a, i), t.item, mergeF, false), body: iff({ k: "op", op: "less", args: [loc(c), { k: "num", v: 0 }] }, takeSecond, takeFirst) }, takeFirst),
+      iff(less(j, je), takeSecond, out));
+    return sortI;
   }
   // compared on a record or data type, a function of its own (recursive
   // for a type that contains itself): different cases by their places,

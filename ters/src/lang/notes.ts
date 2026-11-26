@@ -253,6 +253,7 @@ export const NOTES: Comments = {
   "builtin.hashset.size": "How many items the set has.",
   "builtin.hashset.items": "The set's items in compare's order: the set it stands for.",
   "builtin.array.rest": "The array without its first item; an empty array stays empty. It shares the items rather than copying them.",
+  "builtin.array.sorted": "The array's items in compare's order, equal ones in the order they were.",
   "builtin.array.slice": "Some of the array's items: from a position, so many of them, each clamped to the array. It shares the items rather than copying them, unless a few are taken from a big array.",
   "builtin.array.pushFront": "The array with one more item at the front. Compiled JS writes into free room before the items when nothing else has taken it.",
   "builtin.text.slice": "The characters from position from up to (not including) to, counting from 0.",
