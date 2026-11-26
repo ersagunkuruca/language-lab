@@ -30,6 +30,7 @@
 // Then each value is held in a record of only its masked parts (L43f2,
 // narrowing below): half the time of every part, all told.
 
+import { readValue, readsIn } from "./ir-again.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { algebrasOf, type Algebra } from "../../ters/src/lang/grades.ts";
 import { EMBEDDING } from "../../ters/src/lang/std.ts";
@@ -304,8 +305,10 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
     const funcs = fresh(putBack(was.funcs, was.slots, slots));
     return { ir: { ...ir0, funcs }, copies: was.copies, dropped: was.dropped };
   }
-  const r = zeroPartsIn(ir0, roots, algebras);
-  if (sameShapes(r.ir.shapes, ir0.shapes) && sameList(r.ir.records, ir0.records) && heldBy(r.ir.funcs, slots)) {
+  // (Not where a sum's terms were read for whether they cancel, which a
+  // number's value tells.)
+  const { out: r, reads } = readsIn(() => zeroPartsIn(ir0, roots, algebras));
+  if (!reads.size && sameShapes(r.ir.shapes, ir0.shapes) && sameList(r.ir.records, ir0.records) && heldBy(r.ir.funcs, slots)) {
     if (keptParts.size >= 4) keptParts.clear();
     keptParts.set(key, { funcs: fresh(r.ir.funcs), slots, copies: r.copies, dropped: r.dropped });
   }
@@ -457,7 +460,7 @@ function zeroPartsIn(ir0: CoreIR, roots: number[], algebras: Map<Id, Algebra>): 
     const poly0 = (e: SExpr): Poly | null => {
       if (last.get(e) === false) return new Map();
       switch (e.k) {
-        case "num": return Object.is(e.v, 0) || Object.is(e.v, -0) ? new Map() : new Map([["", e.v]]);
+        case "num": return Object.is(e.v, 0) || Object.is(e.v, -0) ? new Map() : (readValue(e), new Map([["", e.v]]));
         case "local": { const v = lets.get(e.i); return v ? poly(v) : atom(e); }
         // A part of a record made right here is what it was made of.
         case "get": { const m = madeOf(e.rec); return m ? poly(m.args[e.i]) : atom(e); }

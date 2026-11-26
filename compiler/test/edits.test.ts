@@ -12,6 +12,7 @@ import { forgetKept } from "../../ters/src/kept.ts";
 import { compile, edited, literalEdits } from "../../ters/bench/edits.ts";
 import { choicesAgain } from "../../ters/cli/represented.ts";
 import { stepsAgain } from "../../ters/src/lang/literals-again.ts";
+import { passesAgainCount } from "../src/ir-again.ts";
 
 const ROOT = join(import.meta.dirname, "../..");
 for (const [name, edits] of [["machine", 2], ["collatz", 2], ["bounce", 1], ["depot", 1]] as const) {
@@ -46,11 +47,13 @@ test("machine: an edit of a number takes the choice again, as a fresh compile pr
   const first = compile(p.code, p.pres.names, p.options, main, own);
   const lit = literalEdits(p.code, own).find((id) => (p.code.nodes[id] as { value: number }).value > 0)!;
   const next = edited(p.code, lit, 0);
-  const was = choicesAgain, steps = stepsAgain;
+  const was = choicesAgain, steps = stepsAgain, passes = passesAgainCount;
   const got = compile(next, p.pres.names, p.options, main, own, { code: p.code, info: first.info });
   assert.equal(choicesAgain, was + 1, "the choice was made again");
   // So are lowering's front steps, as many as it takes (literals-again.ts).
   assert.equal(stepsAgain, steps + 4, "lowering's front, its handlers, its prepared steps and the passes before lowering were made again");
+  // And the passes after the scalar lowering (ir-again.ts).
+  assert.equal(passesAgainCount, passes + 1, "the passes after lowering were taken again");
   forgetKept();
   const fresh = compile(next, p.pres.names, p.options, main, own);
   assert.equal(got.text, fresh.text);
