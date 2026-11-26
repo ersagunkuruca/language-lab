@@ -1372,6 +1372,9 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     fieldsOf.push(`case ${tnum.get(`table ${t.key}`)}: { ${T} *v = (${T} *)c; lab_Store_t${t.index} *b = v->cur; if (b) { for (uint32_t j = 0; j < b->cap; j++) if (b->st[j] == 1) { ${k} ${v("b->vs[j]")} } free(b->st); free(b->ks); free(b->vs); free(b); } else { ${k.replace("b->ks[j]", "v->key")} if (v->had) { ${v("v->old")} } lab_dec(v->next); } } break;`);
   }
 
+  // A page's events are logged with TERS_LOG set (L280d), as a browser
+  // page's are: its runtime (pageC) writes them.
+  if (opts.main !== undefined && opts.page) rts.add("world.log");
   const world = [...rts].some((x) => x.startsWith("world."));
   const entry = opts.main === undefined ? "" : opts.page ? pageC(opts.main, opts.page) : program(opts.main);
   const TL = threads ? "_Thread_local " : "";
@@ -1732,7 +1735,9 @@ static int (*ters_moving)(int);
 // written since, as html.ts's watchers do.
 typedef struct ters_rd { void **rd; int n, always; } ters_rd;
 typedef struct ters_attr { int kind; lab_cell *name, *f, *shown; int handler; ters_rd r; } ters_attr;
-typedef struct ters_m { int kind, svg; void *view; lab_cell *tag, *f, *shown; int na, nk; ters_attr *attrs; struct ters_m **kids, *part; ters_rd r; } ters_m;
+// up and at: the element it is drawn in and its place there, for an
+// event's path in the run's log (L280d).
+typedef struct ters_m { int kind, svg; void *view; lab_cell *tag, *f, *shown; int na, nk; ters_attr *attrs; struct ters_m **kids, *part, *up; int at; ters_rd r; } ters_m;
 // Whether a view's function read the clock (ters_no_clock: the program
 // never does), and whether what the page shows did; whether one asked the
 // person outside a handler, so it runs again to see the answer.
@@ -1769,7 +1774,9 @@ static int ters_same(lab_cell *a, lab_cell *b) { return a && b && LAB_TN(a) == L
 static lab_cell *ters_view(lab_cell *f, ters_rd *rd) {
   lab_dup(f);
   ters_rsave s; ters_rd_begin(&s);
+  lab_log_quiet++;
   lab_cell *r = ${call(VF, "f")};
+  lab_log_quiet--;
   ters_rd_end(&s, rd);
   if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; return 0; }
   return r;
@@ -2101,7 +2108,7 @@ static lab_cell *ters_snd_when(lab_cell *as) {
   }
   ${sound ? `if (!ters_parts) for (lab_cell *x = as; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}) { lab_cell *a = ${field(LA, la.c, la.head, "x")};${mono ? ` if (a->tag == ${li}) ters_snd_add(m, ${field(A, li, 0, "a")}, ${field(A, li, 1, "a")}, 0, ters_snd_when(as));` : ""}${stereo ? ` if (a->tag == ${ls}) ters_snd_add(m, ${field(A, ls, 0, "a")}, ${field(A, ls, 1, "a")}, 1, ters_snd_when(as));` : ""} }
   ` : ""}j = 0;
-  for (lab_cell *x = ks; x->tag == ${lh.c}; x = ${field(LH, lh.c, lh.rest, "x")}, j++) { m->kids[j] = ters_mount(${field(LH, lh.c, lh.head, "x")}); ters_h->append(ters_h->ctx, m->view, m->kids[j]->view); }
+  for (lab_cell *x = ks; x->tag == ${lh.c}; x = ${field(LH, lh.c, lh.rest, "x")}, j++) { m->kids[j] = ters_mount(${field(LH, lh.c, lh.head, "x")}); m->kids[j]->up = m; m->kids[j]->at = j; ters_h->append(ters_h->ctx, m->view, m->kids[j]->view); }
 }
 static ters_m *ters_mount(lab_cell *h) {
   ters_m *m = calloc(1, sizeof *m);
@@ -2197,7 +2204,7 @@ static void ters_part(ters_m *m) {
   ters_rd_end(&s, &m->r);
   if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; ters_forget(m->part); m->part = 0; ters_h->clear(ters_h->ctx, m->view); ters_parts--; return; }
   if (m->part && ters_fits(m->part, h)) { ters_lay(m->part, h); if (stale && ters_h->renew) ters_renew(m->part); }
-  else { ters_forget(m->part); ters_h->clear(ters_h->ctx, m->view); int was = ters_svg; ters_svg = m->svg; m->part = ters_mount(h); ters_svg = was; ters_h->append(ters_h->ctx, m->view, m->part->view); }
+  else { ters_forget(m->part); ters_h->clear(ters_h->ctx, m->view); int was = ters_svg; ters_svg = m->svg; m->part = ters_mount(h); m->part->up = m; m->part->at = 0; ters_svg = was; ters_h->append(ters_h->ctx, m->view, m->part->view); }
   lab_drop(h);
   ters_parts--;
 }
@@ -2247,10 +2254,31 @@ static int ters_held;
 // An event given to handler n: what was typed or chosen, the key, where
 // the pointer is, the seconds since the frame before and the keys held.
 // Then the page shows what changed. 0 when the handler stopped (an abort).
+// The element handler n is on, and the event it listens for (a DFS from
+// the root: only while a log is kept).
+static ters_m *ters_handler_at(ters_m *m, int n, lab_cell **name) {
+  if (!m) return 0;
+  for (int j = 0; j < m->na; j++) if (m->attrs[j].kind == ${on} && m->attrs[j].handler == n) { *name = m->attrs[j].name; return m; }
+  for (int j = 0; j < m->nk; j++) { ters_m *r = ters_handler_at(m->kids[j], n, name); if (r) return r; }
+  return ters_handler_at(m->part, n, name);
+}
+static void ters_log_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds) {
+  lab_cell *name = 0;
+  ters_m *m = ters_handler_at(ters_root, n, &name);
+  if (!m) return;
+  int np = 0;
+  for (ters_m *u = m; u->up; u = u->up) np++;
+  int *path = malloc(sizeof *path * (size_t)(np + 1)), k = np;
+  if (!path) lab_oom();
+  for (ters_m *u = m; u->up; u = u->up) path[--k] = u->at;
+  lab__log_event((const char *)LAB_TB(name), LAB_TN(name), value, vn, key, kn, x, y, seconds, path, np, ters_held);
+  free(path);
+}
 static int ters__page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds) {
   ${sound ? `if (n >= TERS_SOUND_H && n < TERS_SOUND_H + ters_nsnd) { ters_snd_toggle(n - TERS_SOUND_H); return ters_shown(1); }
   for (int k = 0; k < ters_nsnd; k++) if (ters_snds[k].handler == n && n >= 0) ters_snd_toggle(k);
   ` : ""}if (n < 0 || n >= ters_nh || !ters_handlers[n]) return 1;
+  if (lab__log_on()) ters_log_event(n, value, vn, key, kn, x, y, seconds);
   lab_cell *f = ters_handlers[n];
   lab_dup(f);
   ${ty(E)} e = { lab__text_of(value, vn), lab__text_of(key, kn), x, y, seconds, (ters_held & 1) != 0, (ters_held & 2) != 0, (ters_held & 4) != 0, (ters_held & 8) != 0 };

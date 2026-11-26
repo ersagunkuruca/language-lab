@@ -909,7 +909,14 @@ static int lab__kind(const char *p) { struct stat st; return stat(p, &st) ? 0 : 
     uses: ["world.os"],
     c: `static FILE *lab_log;
 static int lab_log_state, lab_log_n, lab_log_open;
-static void lab__log_end(void) { if (lab_log) { fputs("]\\n", lab_log); fclose(lab_log); lab_log = 0; } }
+// A page's views reading the clock outside a handler (lab_log_quiet): not
+// logged, as a browser page's aren't (worldlog.ts, I265). A run of frames
+// one element heard in a row, kept open to add each frame's seconds to
+// (lab_frames_at: its path and what it was given, I239a).
+static int lab_log_quiet, lab_frames_open;
+static char *lab_frames_at;
+static void lab__frames_end(void) { if (lab_frames_open) { fputs("]}", lab_log); lab_frames_open = 0; } }
+static void lab__log_end(void) { if (lab_log) { lab__frames_end(); fputs("]\\n", lab_log); fclose(lab_log); lab_log = 0; } }
 static int lab__log_on(void) {
   if (!lab_log_state) {
     lab_log_state = 1;
@@ -936,6 +943,7 @@ static void lab__log_text(lab_cell *t) { lab__log_str(LAB_TB(t), LAB_TN(t)); }
 // An entry's start, up to its arguments' opening bracket; 0 when no log is kept.
 static int lab__log_begin(const char *op) {
   if (!lab__log_on()) return 0;
+  lab__frames_end();
   fprintf(lab_log, "%s{\\"op\\":\\"%s\\",\\"args\\":[", lab_log_n++ ? "," : "", op);
   lab_log_open = 1;
   return 1;
@@ -943,7 +951,46 @@ static int lab__log_begin(const char *op) {
 // After the arguments: what came back is written next, then lab__log_close.
 static void lab__log_answer(void) { lab__log_raw("],\\"answer\\":"); }
 static void lab__log_close(void) { lab__log_raw("}"); lab_log_open = 0; }
-static void lab__log_write(void) { lab__log_raw("],\\"write\\":true}"); lab_log_open = 0; }`,
+static void lab__log_write(void) { lab__log_raw("],\\"write\\":true}"); lab_log_open = 0; }
+// A page's event (C172e, worldlog.ts heardInto): its handler's event's
+// name, what it was given, and where its element is under the page's root
+// (html.ts pathOf), so \`ters decisions --measure --replay\` can give the
+// evaluator an app's run (L280d). A frame after one the same element heard
+// with the same givens adds its seconds to that entry.
+static void lab__log_event(const char *name, size_t nn, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds, const int *path, int np, int held) {
+  if (!lab__log_on()) return;
+  size_t cap = 64 + 12 * (size_t)np + 2 * (vn + kn);
+  char *at = malloc(cap);
+  if (!at) lab_oom();
+  int w = 0;
+  at[w++] = '[';
+  for (int i = 0; i < np; i++) w += sprintf(at + w, "%s%d", i ? "," : "", path[i]);
+  at[w++] = ']';
+  int frame = nn == 5 && !memcmp(name, "frame", 5);
+  if (frame) {
+    // The givens after the path, to tell two runs of frames apart.
+    w += sprintf(at + w, "|%.17g|%.17g|", x, y);
+    memcpy(at + w, value, vn); w += (int)vn; at[w++] = '|'; memcpy(at + w, key, kn); w += (int)kn;
+    at[w] = 0;
+    if (lab_frames_open && lab_frames_at && !strcmp(lab_frames_at, at)) { fprintf(lab_log, ",%.17g", seconds); free(at); return; }
+    lab__frames_end();
+    free(lab_frames_at); lab_frames_at = at;
+    fprintf(lab_log, "%s{\\"op\\":\\"frames\\",\\"args\\":[[", lab_log_n++ ? "," : "");
+    for (int i = 0; i < np; i++) fprintf(lab_log, "%s%d", i ? "," : "", path[i]);
+    lab__log_raw("],"); lab__log_str((const uint8_t *)value, vn); lab__log_raw(","); lab__log_str((const uint8_t *)key, kn);
+    fprintf(lab_log, ",%.17g,%.17g],\\"seconds\\":[%.17g", x, y, seconds);
+    lab_frames_open = 1;
+    return;
+  }
+  free(at);
+  lab__log_begin("event");
+  lab__log_str((const uint8_t *)name, nn); lab__log_raw(","); lab__log_str((const uint8_t *)value, vn); lab__log_raw(","); lab__log_str((const uint8_t *)key, kn);
+  fprintf(lab_log, ",%.17g,%.17g,%.17g,[", x, y, seconds);
+  for (int i = 0; i < np; i++) fprintf(lab_log, "%s%d", i ? "," : "", path[i]);
+  lab__log_raw("]");
+  if (held) fprintf(lab_log, ",%d", held);
+  lab__log_raw("]}"); lab_log_open = 0;
+}`,
   },
   "world.fail": {
     uses: ["world.log"],
@@ -1047,7 +1094,7 @@ static double lab_world_now(void) {
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
   double ms = (double)ts.tv_sec * 1000.0 + (double)(ts.tv_nsec / 1000000);
-  if (lab__log_begin("now")) { lab__log_answer(); fprintf(lab_log, "%.17g", ms); lab__log_close(); }
+  if (!lab_log_quiet && lab__log_begin("now")) { lab__log_answer(); fprintf(lab_log, "%.17g", ms); lab__log_close(); }
   return ms;
 }` },
   // The platform's sound latency in seconds (`my sound latency`, C260b):
