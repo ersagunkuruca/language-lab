@@ -1,7 +1,7 @@
 // A program with each type it uses stored as the chooser picks (lab.ts's
 // `ters compile`, `ters run`, and a sound's `ters render`, C137 s1).
 
-import { changedOver, dependencies, idsSeeded, layerOf, litOrigin, nodesOfKind, onLayer, sameValue, steadied, subtree, withNodes, type Code, type Id, type Node } from "../src/model.ts";
+import { changedOwn, dependencies, idsSeeded, layerOf, litOrigin, nodesOfKind, onLayer, sameValue, nodesOver, steadied, subtree, type Code, type Id, type Node } from "../src/model.ts";
 import type { Pins } from "../src/lang/signatures.ts";
 import type { Names } from "../src/presentation.ts";
 import { checksKept, infer, type Info } from "../src/lang/infer.ts";
@@ -74,7 +74,7 @@ function butLiterals<P extends Program>(key: string, q: P): P | null {
   if (q.code === p.code && q.names === p.names && q.info === p.info) return out;
   if (q.info.errors.length !== p.info.errors.length || q.code.defs.length !== p.code.defs.length || q.code.defs.some((d, i) => d !== p.code.defs[i])) return null;
   if (q.names !== p.names && !sameNames(q.names, p.names)) return null;
-  const changed = changedOver(p.code.nodes, q.code.nodes);
+  const changed = changedOwn(p.code.nodes, q.code.nodes);
   if (!changed) return null;
   const made = (was.made ??= madeLiterals(p.code, out.code));
   const into: Record<Id, Node> = {};
@@ -90,7 +90,9 @@ function butLiterals<P extends Program>(key: string, q: P): P | null {
     }
   }
   if (!Object.keys(into).length) return null;
-  const code: Code = { ...out.code, nodes: withNodes(out.code.nodes, into) };
+  // Over the choice's nodes, which stay the ones kept (`was` isn't moved
+  // on): a copy of them all was 14 ms of machine's number edit.
+  const code: Code = { ...out.code, nodes: nodesOver(out.code.nodes, into) };
   const layer = layerOf(out.code);
   if (layer) onLayer(code, layer);
   // Its check is the last one's: each literal changed stays in its class,
