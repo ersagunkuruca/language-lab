@@ -196,7 +196,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L291 | `bytes of base64` rebuilds its 64-character alphabet for every character it reads: b64Value is `position of(characters("ABC…+/"), c)`, a fresh list each time, so digits' 99 KB of data costs about 130K × 64 cells, over half of the page's first draw (240 of 440 ms at 1x in the editor). Work the value out of `character code` with arithmetic (A–Z c−65, a–z c−71, 0–9 c+4, + 62, / 63, else the abort); `bytes of hex` (hexValue) the same. | I371 | high | S | |
 
 ### Ersagun's current asks
 
@@ -283,7 +282,6 @@ Ersagun 2026-11-17: a medium-sized original game to test Ters against current en
 | id | item | lane | source | pri | size | status |
 |---|---|---|---|---|---|---|
 | G1b | Columns with presence: an `Optional` field of a record kept as columns stored as a bit per slot and a column of values, read in place by a match on it (columns.ts, C and JS first) | C | [ENTITIES](docs/design/data/ENTITIES.md) | P2 | L | |
-| G1b1 | `keep` over a List kept as an array lowers as every `all` of a `choose`: the array's items as a list taken apart, answers consed in a box, reversed, an array made of them. The greenhouse's three keeps a tick (moths, plants, lamps) are the first thing keeping its Things as rows in JS (columns.ts: `array.of`). A loop over the positions pushing each kept item (kept-items.ts), on JS, C and WebAssembly. Done | C | G1b, 2026-11-20 | P2 | S | |
 | G4 | The archetype representation from G1, built: a Pool whose records leave components out stored as tables per set of components | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G5 | Systems with disjoint effect rows run on the thread pool and page workers at once (G1's scheduling) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G9 | Vertex functions and instanced draws (G9c, G9d): a Ters function of (instance, vertex) to a position and its varyings, printed as a WGSL vertex stage beside today's fragment | C | [FRAMES](docs/design/targets/FRAMES.md) | P2 | L | |
