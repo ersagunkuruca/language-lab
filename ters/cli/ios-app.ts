@@ -88,6 +88,14 @@ Xcode builds ${title}.app for the iPhone simulator; then
 \`xcrun simctl install booted "${title}.app"\` and
 \`xcrun simctl launch booted ${id}\`. For a phone, the app needs signing
 with your own team in Xcode.
+
+To log a run for \`ters decisions --measure --replay\` (L280d):
+\`SIMCTL_CHILD_TERS_LOG=log.json xcrun simctl launch booted ${id}\`, leave the
+app (go to the home screen), and the log is
+"$(xcrun simctl get_app_container booted ${id} data)/Library/Application Support/log.json".
+On a phone, \`xcrun devicectl device process launch --environment-variables
+'{"TERS_LOG":"log.json"}'\` and \`xcrun devicectl device copy from --domain-type
+appDataContainer --domain-identifier ${id}\` do the same.
 `,
   };
 }
@@ -284,6 +292,7 @@ int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t
 int ters_page_clock(void);
 int ters_page_frame(void);
 int ters_page_permission(int yes);
+void ters_page_log_mark(void);
 
 // The views of the platform's own hosts/ios.m draws (L235).
 ${foreign}
@@ -723,7 +732,9 @@ static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clea
   for (NSDictionary *m in [self.moments.allValues copy]) { NSNumber *h = m[name]; if (h) { fire(h.intValue, @"", @"", 0, 0, 0); heard = YES; } }
   return heard;
 }
-- (void)left { self.paused = YES; [self moment:@"pause"]; }
+// Left, the app may be stopped without exiting: a log kept (TERS_LOG,
+// L280d) is a whole file from here.
+- (void)left { self.paused = YES; [self moment:@"pause"]; ters_page_log_mark(); }
 - (void)back { if (self.paused) { self.paused = NO; [self moment:@"resume"]; } }
 // While what the page shows reads the clock, it runs again each frame.
 - (void)tick {

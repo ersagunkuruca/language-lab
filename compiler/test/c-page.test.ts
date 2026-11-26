@@ -929,6 +929,32 @@ test("a page in C logs its events with their elements' paths, and the evaluator 
   again.stop();
 });
 
+// A phone's app is stopped without exiting once left (L280d): from the
+// moment it's left its log is a whole file, and what it logs after that
+// is added in the same file, still whole when stopped again.
+test("a page in C left and then stopped keeps a whole log, with what came after the first leaving (L280d)", { skip }, async () => {
+  const { mkdtempSync, readFileSync } = await import("node:fs"), { tmpdir } = await import("node:os");
+  const { readLog } = await import("../../ters/src/lang/worldlog.ts");
+  const { k, main } = pageProgram({ fields: false });
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const exe = compile(emitC(l, { main, page: "headless" }).c), dir = mkdtempSync(join(tmpdir(), "c-page-left-"));
+  const run = (file: string, actions: string[]) => { const r = spawnSync(exe, actions, { env: { ...process.env, TERS_LOG: join(dir, file) } }); assert.equal(r.status, 0, r.stderr.toString()); return readLog(readFileSync(join(dir, file), "utf8")); };
+  const whole = run("whole.json", ["click:plus", "frames:2:16", "click:plus", "frames:1:16"]);
+  const left = run("left.json", ["click:plus", "frames:2:16", "left:", "click:plus", "frames:1:16", "left:stopped"]);
+  const ops = (xs: typeof whole) => xs.map((e) => e.op).filter((o) => o === "event" || o === "frames");
+  assert.deepEqual(ops(left), ops(whole));
+  // Left with nothing logged after, and stopped there.
+  assert.deepEqual(ops(run("twice.json", ["click:plus", "left:", "left:stopped"])), ["event"]);
+  // A run of frames ends where the app is left; the next is one of its own.
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/bounce"));
+  const bi = infer(p0.code, p0.pres.names, undefined, p0.options), bm = pageMain(p0.own.defs, bi, p0.pres.names)!;
+  const bl = lowerScalar(p0.code, bi, p0.pres.names, [bm], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const file = join(dir, "frames.json"), r = spawnSync(compile(emitC(bl, { main: bm, page: "headless" }).c), ["frames:2:16", "left:", "frames:1:16", "left:stopped"], { env: { ...process.env, TERS_LOG: file } });
+  assert.equal(r.status, 0, r.stderr.toString());
+  assert.deepEqual(readLog(readFileSync(file, "utf8")).map((e) => [e.op, e.seconds?.length]), [["frames", 2], ["frames", 1]]);
+});
+
 // bounce's frames, logged by C as a run of frames (L280d), given back to
 // the evaluator: it draws what C drew after the last.
 test("bounce's frames logged in C replay in the evaluator to where C ended (L280d)", { skip }, async () => {
