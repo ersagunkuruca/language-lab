@@ -146,17 +146,22 @@ export interface Sub { from: Row; to: Row; at?: Id }
 // A map or set read through to another that it leaves alone: what it adds
 // is its own. A trial (Subst.trial) starts with nothing of its own instead
 // of copying thousands of bindings. Nothing deletes from a substitution.
+// A key deleted is gone from what it reads through to as well (a check
+// over another of the definitions it checks again: what those said of a
+// node is said again, or isn't).
 export class OverMap<K, V> extends Map<K, V> {
   private under: ReadonlyMap<K, V>;
+  private gone: Set<K> | null = null;
   constructor(under: ReadonlyMap<K, V>) { super(); this.under = under; }
-  override get(k: K) { return super.has(k) ? super.get(k) : this.under.get(k); }
+  override get(k: K) { return super.has(k) ? super.get(k) : this.gone?.has(k) ? undefined : this.under.get(k); }
   // What this one added, without what it reads through to.
   own(): MapIterator<[K, V]> { return super.entries(); }
   // What it reads through to.
   get below(): ReadonlyMap<K, V> { return this.under; }
-  override has(k: K) { return super.has(k) || this.under.has(k); }
-  override get size() { let n = this.under.size; for (const k of super.keys()) if (!this.under.has(k)) n++; return n; }
-  override *entries(): MapIterator<[K, V]> { yield* super.entries(); for (const e of this.under) if (!super.has(e[0])) yield e; }
+  override has(k: K) { return super.has(k) || (!this.gone?.has(k) && this.under.has(k)); }
+  override delete(k: K) { const had = this.has(k); super.delete(k); if (this.under.has(k)) (this.gone ??= new Set()).add(k); return had; }
+  override get size() { let n = this.under.size; for (const k of super.keys()) if (!this.under.has(k)) n++; if (this.gone) for (const k of this.gone) if (!super.has(k)) n--; return n; }
+  override *entries(): MapIterator<[K, V]> { yield* super.entries(); for (const e of this.under) if (!super.has(e[0]) && !this.gone?.has(e[0])) yield e; }
   override *keys(): MapIterator<K> { for (const [k] of this.entries()) yield k; }
   override *values(): MapIterator<V> { for (const [, v] of this.entries()) yield v; }
   override [Symbol.iterator]() { return this.entries(); }
@@ -164,14 +169,16 @@ export class OverMap<K, V> extends Map<K, V> {
 }
 export class OverSet<K> extends Set<K> {
   private under: ReadonlySet<K>;
+  private gone: Set<K> | null = null;
   constructor(under: ReadonlySet<K>) { super(); this.under = under; }
   // What this one added, without what it reads through to.
   own(): SetIterator<K> { return super.values(); }
   // What it reads through to.
   get below(): ReadonlySet<K> { return this.under; }
-  override has(k: K) { return super.has(k) || this.under.has(k); }
-  override get size() { let n = this.under.size; for (const k of super.values()) if (!this.under.has(k)) n++; return n; }
-  override *values(): SetIterator<K> { yield* super.values(); for (const k of this.under) if (!super.has(k)) yield k; }
+  override has(k: K) { return super.has(k) || (!this.gone?.has(k) && this.under.has(k)); }
+  override delete(k: K) { const had = this.has(k); super.delete(k); if (this.under.has(k)) (this.gone ??= new Set()).add(k); return had; }
+  override get size() { let n = this.under.size; for (const k of super.values()) if (!this.under.has(k)) n++; if (this.gone) for (const k of this.gone) if (!super.has(k)) n--; return n; }
+  override *values(): SetIterator<K> { yield* super.values(); for (const k of this.under) if (!super.has(k) && !this.gone?.has(k)) yield k; }
   override keys() { return this.values(); }
   override *entries(): SetIterator<[K, K]> { for (const k of this.values()) yield [k, k]; }
   override [Symbol.iterator]() { return this.values(); }
