@@ -20,6 +20,23 @@
 
 import { mapIds, subtree, type Code, type Id, type Node, nodeIds, renamedOver } from "./model.ts";
 import { base32, sha256 } from "./sha256.ts";
+import { keptMap } from "./kept.ts";
+
+// Each text's name, kept across compiles: a definition an edit left alone
+// has the same text, and hashing every one again was most of naming
+// machine's choice (L266).
+// (Up to some 16 million characters of texts.)
+const named = keptMap<string, string>();
+let namedChars = 0;
+const nameOf = (text: string, n?: number): string => {
+  const key = n === undefined ? text : `${n}|${text}`;
+  let v = named.get(key);
+  if (v === undefined) {
+    if (!named.size || (namedChars += key.length) > 16_000_000) { named.clear(); namedChars = key.length; }
+    named.set(key, (v = base32(sha256(text), n)));
+  }
+  return v;
+};
 
 const DIGITS = "0123456789abcdefghijklmnopqrstuv";
 const place = (i: number) => { let s = ""; for (let k = 0; k < 10; k++) { s = DIGITS[i & 31] + s; i = Math.floor(i / 32); } return s; };
@@ -55,11 +72,11 @@ export function stableIds(code: Code, made: ReadonlySet<Id>, within: Iterable<Id
     const text = texts(d, ids, () => "^");
     const n = seen.get(text) ?? 0;
     seen.set(text, n + 1);
-    rename.set(d, base32(sha256(`def\n${n}\n${text}`)));
+    rename.set(d, nameOf(`def\n${n}\n${text}`));
   }
   for (const [d, ids] of holding) {
     const own = rename.get(d) ?? d;
-    const prefix = base32(sha256(`${own}\n${texts(d, ids, (x) => rename.get(x) ?? "^")}`), 16);
+    const prefix = nameOf(`${own}\n${texts(d, ids, (x) => rename.get(x) ?? "^")}`, 16);
     let i = 0;
     for (const id of ids) if (made.has(id) && id !== d) rename.set(id, prefix + place(i++));
   }
