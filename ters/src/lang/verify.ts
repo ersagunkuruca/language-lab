@@ -24,13 +24,13 @@
 // a problem (scalar.ts vouched, I207).
 
 import type { Code, Id, NodeOf } from "../model.ts";
-import { children, isUse, subtree, useTarget } from "../model.ts";
+import { children, isUse, subtree, subtreeKept, useTarget } from "../model.ts";
 import { sccs, terminates, type Info } from "./infer.ts";
 import { LIST, RELEASE_V, S, SIGS } from "./std.ts";
 import { laterOps } from "./later-ops.ts";
 import { CHOICE, DIVERGE, INT } from "./types.ts";
 import { keptMap } from "../kept.ts";
-import { Subst, type Type } from "./types.ts";
+import { OverMap, Subst, type Type } from "./types.ts";
 
 export interface Elaboration {
   // Each typed node's type: variables numbered from 0, every one either
@@ -350,6 +350,15 @@ function endsIn(code: Code, defs: Id[], ty: (id: Id) => Type | undefined, bad: (
 // only ask whether two variables are one, which that numbering keeps.
 // The recursive groups are measured over the whole program each time.
 const verdictsKept = keptMap<string, { checked: number; problems: number }>();
+// The last verdict's keys, each definition's with what it was made of: the
+// verdict after a pass that carried the types of the nodes it made
+// (scalar.ts's fused steps) reads the same substitution and schemes, and
+// the types of the rest through to the last's, so a definition whose
+// nodes, types and names are those it had keeps its key (machine: half of
+// 40 ms of keys a body edit).
+const sameItems = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+type DefKey = { ids: readonly Id[]; named: Id[]; at: unknown[]; walks: (readonly Id[])[]; key: string };
+const keysKept = keptMap<"last", { code: Code; info: Info; keys: Map<Id, DefKey> }>();
 const nodeText = new WeakMap<object, string>();
 const textOfNode = (n: object): string => { let t = nodeText.get(n); if (t === undefined) nodeText.set(n, (t = JSON.stringify(n))); return t; };
 export function verdict(code: Code, info: Info): { checked: number; problems: number } {
@@ -368,15 +377,38 @@ export function verdict(code: Code, info: Info): { checked: number; problems: nu
   let inside: Set<Id> | null = null;
   const inGiven = (id: Id) => (inside ??= new Set(code.defs.flatMap((d) => (code.nodes[d] ? subtree(code, d) : [])))).has(id);
   if (verdictsKept.size > 20000) verdictsKept.clear();
+  // The types set or taken away since the last verdict, if it read the same
+  // substitution, schemes and definitions.
+  const last = keysKept.get("last"), was = last?.info, typeOf = info.typeOf;
+  const since = was && last.code.defs === code.defs && was.subst === info.subst && was.schemes === info.schemes && was.letSchemes === info.letSchemes && was.embedded === info.embedded
+    ? typeOf === was.typeOf ? new Set<Id>() : typeOf instanceof OverMap && typeOf.below === was.typeOf ? new Set<Id>(typeOf.touched()) : null
+    : null;
+  const keys = new Map<Id, DefKey>();
   for (const d of code.defs) {
     if (!code.nodes[d]) continue;
-    const ids = subtree(code, d), mine = new Set(ids);
+    const ids = subtreeKept(code, d), mine = new Set(ids);
     // What it names outside it.
     const named: Id[] = [], seen = new Set<Id>();
     for (const id of ids) {
       const node = code.nodes[id];
       const x = node?.kind === "arm" && typeOfPart.has(node.variant) ? node.variant : node?.kind === "ref" && !mine.has(node.target) ? node.target : undefined;
       if (x !== undefined && !seen.has(x)) { seen.add(x); named.push(x); }
+    }
+    // What its key reads of what it names: their nodes, the types of their
+    // parts written out (a binder's type, or whether an operation is later,
+    // read afresh).
+    const at = named.map((x) => code.nodes[x]), walks: (readonly Id[])[] = [];
+    let again = since !== null;
+    for (const x of named) {
+      const t = code.nodes[x], of = typeOfPart.get(x);
+      if (t?.kind === "binder") again = false;
+      if (of !== undefined) { walks.push(subtreeKept(code, of)); if ((code.nodes[(code.nodes[of] as NodeOf<"def">).body!] as NodeOf<"typedef">).effect) again = false; }
+    }
+    const before = again ? last!.keys.get(d) : undefined;
+    if (before && before.ids === ids && sameItems(before.named, named) && sameItems(before.at, at) && sameItems(before.walks, walks) && !ids.some((id) => since!.has(id))) {
+      keys.set(d, before);
+      tally(d, ids, named, before.key);
+      continue;
     }
     // Its types written out, numbered on their own, beside its nodes.
     const vars = new Map<number, number>();
@@ -409,6 +441,11 @@ export function verdict(code: Code, info: Info): { checked: number; problems: nu
       if (of !== undefined && (code.nodes[(code.nodes[of] as NodeOf<"def">).body!] as NodeOf<"typedef">).effect) key.push(`!${(later ??= laterOps(code)).has(x)}`);
     }
     const k = key.join("\n");
+    keys.set(d, { ids, named, at, walks, key: k });
+    tally(d, ids, named, k);
+  }
+  keysKept.set("last", { code, info, keys });
+  function tally(d: Id, ids: readonly Id[], named: Id[], k: string): void {
     let v = verdictsKept.get(k);
     if (!v) {
       // Checked on what its rules read, numbered so.
