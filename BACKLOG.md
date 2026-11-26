@@ -95,7 +95,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | added |
 |---|---|---|---|
-| C303 | The rest of mnist's Adam pass in the core IR after C303c (5.9x the ideal over 10,000 digits): `dot` is 43% of it, most of that its weight gradient's dots down columns (strides 32 and 784, a cache miss a read), where the ideal's loops walk rows; the collector and `arrayOf` 17%. Float64Arrays for the arrays measured no faster (C303c) (DG4) | GAPS.md round 22 (mnist) | 2026-11-23 |
+| C303 | The rest of mnist's Adam pass in the core IR (3.1x the ideal over 10,000 digits after #3410 and the arrays filled with room for their count, 5.1 s → 3.15 s): the dots are now near the ideal's loops; left are the collector (8%), the small calls of `table of`'s maps and the arrays made each step. Float64Arrays for the arrays measured no faster end to end (C303c, and again 11-26) (DG4) | GAPS.md round 22 (mnist) | 2026-11-23 |
 | C304 | mnist's Newton mode after C304c is 2.9x the ideal in the core IR (Adam 6x): its Dual arrays are columns now; left is what the profile shows next (DG5) | GAPS.md round 22 (mnist) | 2026-11-23 |
 | C306 | Matrix products natively at NumPy's speed: blocked for the cache, vectorised, on the pool's threads. NumPy runs mnist's Adam pass over 60,000 digits in 0.69 s, `ters native` in 15.6 s, the ideal JS in 4.6 s. After C302 and C303 (DG8) | GAPS.md round 22 (mnist) | 2026-11-23 |
 | C307 | `contracted` and maps of Float32 on WebGPU in a page, raced against PyTorch on Apple's MPS with compiler/gaps/mnist-python/mnist_torch.py --device mps --float32. L286 is built (the numbers module's Float32, DG1) | GAPS.md round 22 (mnist) | 2026-11-23 |
