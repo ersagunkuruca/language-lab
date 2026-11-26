@@ -91,7 +91,7 @@ import { expandArrayGradients } from "../../ters/src/lang/pullback.ts";
 import { carriedDerivatives } from "./carried-derivatives.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { bakeCalls } from "./bake.ts";
-import { elaborate, verify } from "../../ters/src/lang/verify.ts";
+import { elaborate, verdict, verify } from "../../ters/src/lang/verify.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
 import { countsInto } from "./fold-chunks.ts";
 import { HeldMap, HeldSet, originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM, writtenAt } from "../../ters/src/lang/prelude-ids.ts";
@@ -723,10 +723,12 @@ const verdicts = keptMap<string, { code: Code; checked: number }>();
 function verdictOf(place: string, code: Code, info: Info): { checked: number; problems: number } {
   const was = verdicts.get(place);
   if (was && onlyLiteralValues(was.code, code)) { verdicts.set(place, { ...was, code }); return { checked: was.checked, problems: 0 }; }
-  const v = verify(code, elaborate(code, info));
-  if (v.problems.length) verdicts.delete(place);
+  const v = verdict(code, info);
+  // VERDICT_CHECK=1: each verdict against the whole verify's (a sweep).
+  if (process.env.VERDICT_CHECK) { const w = verify(code, elaborate(code, info)); if (w.checked !== v.checked || w.problems.length !== v.problems) throw new Error(`verdict ${place}: ${v.checked}/${v.problems} against ${w.checked}/${w.problems.length}`); }
+  if (v.problems) verdicts.delete(place);
   else verdicts.set(place, { code, checked: v.checked });
-  return { checked: v.checked, problems: v.problems.length };
+  return v;
 }
 
 // The program as every lowering of these roots starts from (I315): the
