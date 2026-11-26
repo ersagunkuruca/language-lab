@@ -45,6 +45,20 @@ const meet = (a: AV, b: AV): AV => {
 };
 const same = (a: AV, b: AV): boolean => (typeof a === "object" && typeof b === "object" ? a.f.length === b.f.length && a.f.every((x, i) => same(x, b.f[i])) : a === b);
 
+// Not an array, a table or a record: nothing writes one in place, and
+// what is read out of one (a case's field, a capture) may have more than
+// one holder, so it may be held anywhere (a number, a text, a list).
+const plain = (t: LType | undefined) => t !== undefined && t !== "host" && !(isArray(t) || isTable(t) || isRecord(t));
+
+const flat = (t: LType | undefined) => t !== undefined && isRecord(t) && t.fields.every((x) => plain(x.t));
+// The local a record is made from fields of, when every field of its type
+// it is given is that local's.
+const fieldOf = (a: SExpr, key: string, y?: number) => a.k === "get" && a.t.key === key && a.rec.k === "local" && (y === undefined || a.rec.i === y);
+const rebuilds = (e: SExpr & { k: "make" }): number | null => {
+  const ys = e.args.flatMap((a) => (a.k === "get" && a.t.key === e.t.key ? [a.rec.k === "local" ? a.rec.i : -1] : []));
+  return ys.length && ys.every((y) => y >= 0 && y === ys[0]) ? ys[0] : null;
+};
+
 const ARRAY_OP = /^array\.(\w+)\.a\d+$/;
 // Only reading the array given first.
 // A rest, a drop or a slice is another view on the buffer, which a replace
@@ -76,6 +90,10 @@ export interface Holders {
   owned: Set<SExpr>;
   // Whether what function i is given as input j always has one holder.
   one: (i: number, j: number) => boolean;
+  // The records made from fields of one local of their type that has one
+  // holder, none of those fields read again (owned-records.ts writes such
+  // a make into the local when it is last in its function).
+  into: Set<SExpr>;
 }
 
 // takes: functions whose first input is to be counted as given away, not
@@ -105,7 +123,9 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   const scan = (g: SFunc, e: SExpr) => {
     if (e.k === "call") called.add(e.fn);
     if (e.k === "closure") { codeOf.set(e.fn, e.t.key); if (e.d !== undefined) outside.add(e.d); }
-    if (e.k === "rt") for (const m of e.fn.matchAll(/:(\d+)/g)) outside.add(Number(m[1]));
+    // A function the runtime is handed by its number (a whole part of the
+    // name: not the digits an id starts with, as `handleK:8li2…`).
+    if (e.k === "rt") for (const m of e.fn.matchAll(/:(\d+)(?=:|$)/g)) outside.add(Number(m[1]));
     if (e.k === "rt" || e.k === "world") {
       for (const a of e.args) { if (a.k === "closure") loose.add(a.t.key); else if (a.k === "local") looseIn(g.locals[a.i]); else loose.add("*"); }
       if (e.k === "world") looseIn(e.t);
@@ -165,9 +185,10 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
     };
     const walk = (e: SExpr, s: St, read: boolean): void => {
       switch (e.k) {
-        case "local": return read ? borrow(e.i, s) : give(e.i, s);
+        case "local": return plain(g.locals[e.i]) ? undefined : read ? borrow(e.i, s) : give(e.i, s);
         case "get": {
-          if (e.rec.k === "local") { const k = `${e.rec.i}.${e.i}`; if (s.gone.has(e.rec.i) || s.took.has(k)) offF(k); s.took.add(k); return; }
+          // A field only read is borrowed, as a local is.
+          if (e.rec.k === "local") { const k = `${e.rec.i}.${e.i}`; if (plain(e.t.fields[e.i]?.t)) return; if (s.gone.has(e.rec.i) || s.took.has(k)) offF(k); if (!read) s.took.add(k); return; }
           return walk(e.rec, s, false);
         }
         case "if": case "case": {
@@ -178,28 +199,55 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
           return;
         }
         case "op": for (const a of e.args) walk(a, s, true); return;
+        // A closure capturing a record of plain fields captures a copy
+        // where the record is written in place (owned-records.ts).
+        case "closure": for (const c of e.caps) walk(c, s, c.k === "local" && flat(g.locals[c.i])); return;
         case "rt": { const o = op(e), r = (o !== null && READS.has(o)) || READS_RT.test(e.fn); twice(e.args); inputs(e.args.map((a) => [a, r]), s); return; }
         // An input the callee never looks at isn't a use (a local there
         // may be given away beside it).
         case "call": twice(e.args, e.fn); inputs(e.args.flatMap((a, j): [SExpr, boolean][] => (dead[e.fn]?.[j] && a.k === "local" ? [] : [[a, (reads[e.fn]?.[j] ?? false) || !!dead[e.fn]?.[j]]])), s); return;
         case "apply": twice([e.fn, ...e.args]); inputs(kids(e).map((k) => [k, false]), s); return;
+        // A record made from fields of one local of its type may be written
+        // into it (owned-records.ts): that gives the local, whole; its
+        // fields named there go with it.
+        case "make": {
+          const y = rebuilds(e);
+          if (y === null) { inputs(e.args.map((a) => [a, false]), s); return; }
+          inputs(e.args.flatMap((a): [SExpr, boolean][] => (fieldOf(a, e.t.key, y) ? [] : [[a, false]])), s);
+          for (const a of e.args) if (fieldOf(a, e.t.key, y)) walk(a, s, false);
+          if (s.gone.has(y)) off(y);
+          s.gone.add(y);
+          return;
+        }
         default: for (const k of kids(e)) walk(k, s, false);
       }
     };
     // A call's inputs, in order, but a local given whole is given when
     // the call runs, after every input is worked out: `replace(a, i,
     // item at(a, i))` reads a before giving it.
+    // So is a local's field: a record made of a machine's fields and one
+    // worked out from the machine reads them first.
+    const handed = (a: SExpr) => a.k === "local" || (a.k === "get" && a.rec.k === "local");
     const inputs = (xs: [SExpr, boolean][], s: St) => {
-      for (const [a, read] of xs) if (read || a.k !== "local") walk(a, s, read);
-      for (const [a, read] of xs) if (!read && a.k === "local") walk(a, s, false);
+      for (const [a, read] of xs) if (read || !handed(a)) walk(a, s, read);
+      for (const [a, read] of xs) if (!read && handed(a)) walk(a, s, false);
     };
     walk(g.body, { gone: new Set(), took: new Set() }, false);
     // A parameter only borrowed: never given away whole nor in part.
     const given = new Set<number>();
+    // A part read out of a value gives the value only where the part is
+    // given (a let's local, a match's), and a number, a Bool or a text
+    // never: `first` of a set of texts only reads the set.
     const gives = (e: SExpr, read: boolean): void => {
       switch (e.k) {
-        case "local": if (!read) given.add(e.i); return;
-        case "get": if (e.rec.k === "local") { given.add(e.rec.i); return; } return gives(e.rec, false);
+        case "local": if (!read && !plain(g.locals[e.i])) given.add(e.i); return;
+        case "get": case "field": {
+          const t = e.k === "get" ? e.t.fields[e.i]?.t : e.t.cases[e.c]?.fields[e.i]?.t;
+          return gives(e.rec, read || plain(t));
+        }
+        case "make": { const y = rebuilds(e); if (y !== null) given.add(y); for (const a of e.args) gives(a, false); return; }
+        case "let": gives(e.body, false); return gives(e.value, !given.has(e.i));
+        case "case": e.arms.forEach((a) => a && gives(a, false)); return gives(e.scrut, !given.has(e.s));
         case "if": gives(e.cond, true); gives(e.then, false); gives(e.else, false); return;
         case "op": for (const a of e.args) gives(a, true); return;
         case "rt": { const o = op(e), r = (o !== null && READS.has(o)) || READS_RT.test(e.fn); e.args.forEach((a) => gives(a, r)); return; }
@@ -212,7 +260,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   };
 
   // The holders of e's value, with env the locals'.
-  const av = (self: number, e: SExpr, env: AV[], at: (e: SExpr, v: AV) => void): AV => {
+  const av = (self: number, e: SExpr, env: AV[], at: (e: SExpr, v: AV, env: AV[]) => void): AV => {
     const whole = once[self], fields = fieldOnce[self];
     const v = ((): AV => {
       switch (e.k) {
@@ -260,10 +308,10 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
         default: kids(e).forEach((k) => av(self, k, env, at)); return "S";
       }
     })();
-    at(e, v);
+    at(e, v, env);
     return v;
   };
-  const body = (i: number, at: (e: SExpr, v: AV) => void) => {
+  const body = (i: number, at: (e: SExpr, v: AV, env: AV[]) => void) => {
     const g: SFunc = funcs[i];
     const env: AV[] = g.locals.map((_, j) => (j < g.params.length ? params[i][j] : "S"));
     return av(i, g.body, env, at);
@@ -276,7 +324,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
     changed = false;
     funcs.forEach((_, i) => linear(i));
   }
-  const none: Holders = { owned: new Set(), one: () => false };
+  const none: Holders = { owned: new Set(), one: () => false, into: new Set() };
   if (changed) return none;
   changed = true;
   for (let rounds = 0; changed && rounds < 100; rounds++) {
@@ -291,7 +339,15 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   const owned = new Set<SExpr>();
   if (changed) return none;
   const vals = new Map<SExpr, AV>();
-  funcs.forEach((_, i) => body(i, (e, v) => vals.set(e, v)));
+  const into = new Set<SExpr>();
+  funcs.forEach((_, i) => body(i, (e, v, env) => {
+    vals.set(e, v);
+    if (e.k !== "make") return;
+    const y = rebuilds(e);
+    if (y === null) return;
+    const ys = e.args.flatMap((a) => (a.k === "get" && fieldOf(a, e.t.key, y) ? [{ f: a.i }] : []));
+    if (once[i][y] && typeof env[y] === "object" && ys.every((x) => fieldOnce[i].get(`${y}.${x.f}`) !== false)) into.add(e);
+  }));
   funcs.forEach((g) => {
     const look = (e: SExpr) => {
       if ((op(e) === "replaceAt" || op(e) === "push" || op(e) === "t:put" || op(e) === "t:remove") && e.k === "rt" && vals.get(e.args[0]) === "U") owned.add(e);
@@ -299,7 +355,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
     };
     look(g.body);
   });
-  return { owned, one: (i, j) => params[i]?.[j] === "U" };
+  return { owned, one: (i, j) => params[i]?.[j] === "U", into };
 }
 
 // The replaces holders() finds, made `replaceOwned`, and the pushes it

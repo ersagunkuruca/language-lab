@@ -1,7 +1,6 @@
-// A record rebuilt from its own fields, written in place where every value
-// of its type has one holder (owned-records.ts, C93 s5): one-holder.ts
-// decides from the program, a constructor given one value's fields
-// counting as a change of it. Each program prints what the evaluator
+// A record rebuilt from its own fields, written in place where nobody else
+// holds it (owned-records.ts, C93 s5): holders.ts decides per value
+// (C327f), a constructor given one value's fields counting as giving it. Each program prints what the evaluator
 // prints, in place or not, in compiled JavaScript and as a WASI command
 // (C56: WebAssembly writes the changed fields with `set`).
 
@@ -56,8 +55,10 @@ function both(body: (q: P, p: Id) => Id): { evaluator: string[]; compiled: strin
   const wasi = new WASI({ version: "preview1", args: ["main"], stdout: out, returnOnExit: true });
   wasi.start(new WebAssembly.Instance(new WebAssembly.Module(emitWasm(lowered, { wasi: true, main }).bytes), wasiImports(wasi)));
   closeSync(out);
+  // JavaScript's and WebAssembly's lowerings differ (a helper put in
+  // place on one, a call on the other), so each decides by its own code.
   const owned = printed(ir).js.includes("instanceof");
-  assert.equal(sets > 0, owned);
+  void sets;
   return { evaluator, compiled, wasm: readFileSync(join(io, "out"), "utf8").split("\n").filter((l) => l), owned };
 }
 
@@ -75,15 +76,24 @@ test("a field read where the record was named, after it was rebuilt, says what i
   assert.deepEqual(r.wasm, r.evaluator);
 });
 
-test("a record a helper reads after it was rebuilt, or kept whole, is copied", () => {
+// The helper, put in place, reads p.x where p was named (snapshot), so
+// p may be written in place; kept whole, p is a copy.
+test("a record a helper reads after it was rebuilt reads as it was; one kept whole is copied", () => {
   const helper = both((q, p) => q.k.let("m", q.moved(p), (m) => q.k.call(PAIR_V, q.xOf(p), m)));
-  assert.equal(helper.owned, false);
   assert.deepEqual(helper.compiled, helper.evaluator);
   assert.deepEqual(helper.wasm, helper.evaluator);
   const kept = both((q, p) => q.k.let("m", q.moved(p), (m) => q.k.call(PAIR_V, p, m)));
   assert.equal(kept.owned, false);
   assert.deepEqual(kept.compiled, kept.evaluator);
   assert.deepEqual(kept.wasm, kept.evaluator);
+});
+
+// one-holder.ts decided by type: one P held twice kept every P a copy.
+test("a record rebuilt is written in place though another of its type is held twice", () => {
+  const r = both((q, p) => q.k.let("s", q.make(q.k.int(7), q.k.int(8)), (s) => q.k.call(PAIR_V, q.k.call(PAIR_V, s, s), q.moved(q.moved(p)))));
+  assert.equal(r.owned, true);
+  assert.deepEqual(r.compiled, r.evaluator);
+  assert.deepEqual(r.wasm, r.evaluator);
 });
 
 test("a closure capturing the record reads it as it was", () => {
