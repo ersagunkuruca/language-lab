@@ -1,7 +1,9 @@
-// C352: on core JavaScript a function that only computes, works through a
-// loop and is called again with the inputs it was last called with gives
-// its last answer again (memo-calls.ts): fit's `sums from`, worked out in
-// `damped` and again in the next `step` at the same parameters. The
+// C352, C353: on core JavaScript a function that only computes, works
+// through a loop and is called again with inputs it was lately called with
+// gives that answer again (memo-calls.ts): fit's `sums from`, worked out in
+// `damped` and again in the next `step` at the same parameters, and its
+// `tried(model, points)`, each model fitted to print it and again to find
+// the best, an Optional record kept for each of the four. The
 // answers are the evaluator's. An array replaced in place between two
 // calls (its type written by an owned replace) is never kept so: the second
 // call sees the new item.
@@ -49,7 +51,9 @@ test("fit's sums worked out once for the same parameters, as the evaluator answe
   const run = spawnSync(process.execPath, [out, data], { encoding: "utf8" });
   assert.equal(run.status, 0, run.stderr);
   assert.equal(run.stdout, ev.stdout);
-  assert.match(readFileSync(out, "utf8"), /if \(f\d+\$k && Object\.is\(f\d+\$k0, l0\)/, "a function's last answer kept");
+  const kept = readFileSync(out, "utf8").match(/Object\.is\(f\d+\$k0\[j\d*\], l0\)/g) ?? [];
+  // sse of, sums from, step, and tried with the fit it calls.
+  assert.ok(kept.length >= 5, `answers kept by ${kept.length} functions`);
 });
 
 test("an array replaced in place between two calls is read again", () => {
@@ -58,5 +62,5 @@ test("an array replaced in place between two calls is read again", () => {
     "print(show(sum of items(xs))); □",
     "ys = replace in array(xs, 3, 100.0); print(show(sum of items(ys)))",
   ], [["added", ["l"], "match l\n  nil → 0.0\n  cons(x, r) → x + added(r)"], ["sum of items", ["xs"], "added(items of array(xs))"]]);
-  assert.doesNotMatch(js, /\$k && Object\.is/, "nothing kept where an array is written in place");
+  assert.doesNotMatch(js, /Object\.is\(f\d+\$k0\[j\d*\]/, "nothing kept where an array is written in place");
 });
