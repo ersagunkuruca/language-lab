@@ -687,6 +687,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // says it does more than compute never tries, and one that keeps
   // stopping stops trying.
   const NEED = new Error("needs the machine");
+  // A direct run stopped after calls made last: the machine goes on from
+  // the last call (enter, I369).
+  class ResumeAt { c: LambdaMeta; args: Value[]; constructor(c: LambdaMeta, args: Value[]) { this.c = c; this.args = args; } }
   // A direct run that gives no value (a `fail`, a builtin with none): the
   // run has no choice points, so the call it is in has none either, and
   // where it began fails (the machine's choice point) or a search's branch
@@ -774,7 +777,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // constructor's part, so `map` over a list of any length runs as a loop
   // (L281b; tail recursion modulo cons, prior art: Friedman and Wise 1975,
   // OCaml's [@tail_mod_cons]).
-  const enter = (c0: LambdaMeta, args0: Value[]): Value => {
+  const enter = (c0: LambdaMeta, args0: Value[], resumable = false): Value => {
     let c = c0, args = args0;
     // What the call gives, and the part still to fill in it, if any.
     let result: Value = 0, hole: Data | null = null, at = 0, moved = false;
@@ -807,12 +810,12 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       // first call, agent's search ran its first 3,000 steps again on each
       // stop: 29,000 steps became over 86,000 (I368). Under fuel, from the
       // first, which spends as the machine does.
-      if (stops && moved && !directFuel) {
-        const v = single(run((m) => { rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda); m.eval(c.node.body, bind(c.scope, c.node.params, args)); }));
-        if (!hole) return v;
-        hole.fields[at] = v;
-        return result;
-      }
+      // The machine that called goes on from it (ResumeAt), with its
+      // handlers and its choices: a machine of its own here ran each
+      // nested stop again inside the last (json's parses never ended,
+      // I370). Not with a part still to fill, nor from inside another
+      // direct run, whose call wasn't made last: those start again.
+      if (stops && moved && resumable && !hole) throw new ResumeAt(c, args);
       throw e;
     }
     finally { directDepth--; }
@@ -1287,7 +1290,11 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         // Directly first (L118c), spending from its fuel (L281c).
         const fuel = this.fuel;
         if (runsDirect(c, fuel)) {
-          try { return this.ret(fuel ? underFuel(fuel, () => enter(c, args)) : enter(c, args)); } catch (e) { if (e === FAILED) return this.fail(); if (e !== NEED && !(e instanceof RangeError)) throw e; }
+          try { return this.ret(fuel ? underFuel(fuel, () => enter(c, args)) : enter(c, args, true)); } catch (e) {
+            if (e === FAILED) return this.fail();
+            if (e instanceof ResumeAt) { rt.entered?.(copyOf?.get(e.c.lambda) ?? e.c.lambda, e.args, e.c.lambda); return this.eval(e.c.node.body, bind(e.c.scope, e.c.node.params, e.args)); }
+            if (e !== NEED && !(e instanceof RangeError)) throw e;
+          }
         }
         rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
         return this.eval(c.node.body, bind(c.scope, c.node.params, args));
