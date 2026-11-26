@@ -27,29 +27,62 @@ export function neighbourLists(ps: readonly (readonly number[])[], reach: number
   if ((n && !dims) || dims > 3 || r2 === Infinity || (2 * rings + 1) ** dims > 15625 || ps.some((p) => p.length !== dims)) return null;
   // Cells a little wider than their side, so two places within reach are
   // that many rings apart at most however the division rounds.
-  const cell = side * (1 + 2 ** -20), keys: number[][] = [], grid = new Map<string, number[]>();
+  const cell = side * (1 + 2 ** -20), K = new Int32Array(n * dims), X = new Float64Array(n * dims);
   for (let i = 0; i < n; i++) {
-    const k = ps[i].map((x) => Math.floor(x / cell));
-    if (k.some((c) => !Number.isFinite(c) || Math.abs(c) > 2 ** 30)) return null;
-    keys.push(k);
-    const key = k.join(",");
-    const at = grid.get(key);
-    if (at) at.push(i); else grid.set(key, [i]);
+    const a = ps[i];
+    for (let p = 0; p < dims; p++) {
+      const x = a[p], c = Math.floor(x / cell);
+      X[i * dims + p] = x;
+      if (!Number.isFinite(c) || Math.abs(c) > 2 ** 30) return null;
+      K[i * dims + p] = c;
+    }
   }
+  // The places sorted by a hash of their cell (C348: a Map keyed by text
+  // was 62% of the flock compiled to JavaScript, as c.ts gridC and wasm.ts
+  // gridRt found): a bucket's places in order, so a cell's are found by
+  // its bucket and their own cell checked, as buckets are shared.
+  let size = 1;
+  while (size < 2 * n) size *= 2;
+  const mask = size - 1;
+  const hash = (a: number, b: number, c: number) => {
+    let h = (Math.imul(a, 0x9e3779b1) + Math.imul(b, 0x85ebca77) + Math.imul(c, 0xc2b2ae3d)) | 0;
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+    return (h ^ (h >>> 12)) & mask;
+  };
+  const at = (i: number, p: number) => (p < dims ? K[i * dims + p] : 0);
+  const bucket = new Int32Array(n), start = new Int32Array(size + 1), order = new Int32Array(n);
+  for (let i = 0; i < n; i++) { const b = hash(at(i, 0), at(i, 1), at(i, 2)); bucket[i] = b; start[b + 1]++; }
+  for (let b = 0; b < size; b++) start[b + 1] += start[b];
+  const fill = start.slice(0, size);
+  for (let i = 0; i < n; i++) order[fill[bucket[i]]++] = i;
   const near = (i: number, j: number) => {
-    const a = ps[i], b = ps[j];
-    let s = (a[0] - b[0]) * (a[0] - b[0]);
-    for (let p = 1; p < dims; p++) s = s + (a[p] - b[p]) * (a[p] - b[p]);
+    const a = i * dims, b = j * dims;
+    let s = (X[a] - X[b]) * (X[a] - X[b]);
+    for (let p = 1; p < dims; p++) s = s + (X[a + p] - X[b + p]) * (X[a + p] - X[b + p]);
     return !(r2 < s);
   };
-  let around: number[][] = [[]];
-  const ring = Array.from({ length: 2 * rings + 1 }, (_, i) => i - rings);
-  for (let p = 0; p < dims; p++) around = around.flatMap((o) => ring.map((c) => [...o, c]));
-  const lists: number[][] = [];
+  // The cells around, as offsets on each part.
+  const span = 2 * rings + 1, count = span ** dims, around = new Int32Array(count * 3);
+  for (let o = 0; o < count; o++) for (let p = 0, r = o; p < dims; p++, r = Math.floor(r / span)) around[o * 3 + p] = (r % span) - rings;
+  const lists: number[][] = [], found = new Int32Array(Math.max(1, n));
   for (let i = 0; i < n; i++) {
-    const found: number[] = [];
-    for (const o of around) for (const j of grid.get(keys[i].map((c, p) => c + o[p]).join(",")) ?? []) if (j !== i && near(i, j)) found.push(j);
-    lists.push(found.sort((x, y) => x - y));
+    const x = at(i, 0), y = at(i, 1), z = at(i, 2);
+    let m = 0;
+    for (let o = 0; o < count; o++) {
+      const qx = x + around[o * 3], qy = y + around[o * 3 + 1], qz = z + around[o * 3 + 2], b = hash(qx, qy, qz);
+      for (let k = start[b], end = start[b + 1]; k < end; k++) {
+        const j = order[k];
+        if (j === i || at(j, 0) !== qx || at(j, 1) !== qy || at(j, 2) !== qz) continue;
+        if (near(i, j)) found[m++] = j;
+      }
+    }
+    // Smallest first: by insertion where a place has a handful of
+    // neighbours, else the typed array's own numeric sort.
+    if (m > 16) found.subarray(0, m).sort();
+    else for (let a = 1; a < m; a++) { const v = found[a]; let b = a - 1; while (b >= 0 && found[b] > v) { found[b + 1] = found[b]; b--; } found[b + 1] = v; }
+    const list = new Array<number>(m);
+    for (let a = 0; a < m; a++) list[a] = found[a];
+    lists.push(list);
   }
   return lists;
 }
