@@ -30,7 +30,7 @@
 // Then each value is held in a record of only its masked parts (L43f2,
 // narrowing below): half the time of every part, all told.
 
-import { readValue, readsIn } from "./ir-again.ts";
+import { readValue, readsIn, typesOf } from "./ir-again.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { algebrasOf, type Algebra } from "../../ters/src/lang/grades.ts";
 import { EMBEDDING } from "../../ters/src/lang/std.ts";
@@ -48,6 +48,7 @@ const SELF = "self" as const;
 const DEPTH = 6;
 
 function join(a: Abs, b: Abs): Abs {
+  if (a === b) return a;
   if (a === null) return b;
   if (b === null) return a;
   if (a === true || b === true) return true;
@@ -131,7 +132,10 @@ function timesP(a: Poly, b: Poly): Poly | null {
 
 // `dirty`: to be read again (given more, or what it read grew); `readers`:
 // the copies that read its answer.
-interface Inst { fn: number; params: Abs[]; result: Abs; index: number; dirty: boolean; readers: Set<Inst> }
+// `name`: the copy's by where it is made (a root, the world, a closure's
+// code, a call's function and place), the same in the next compile where
+// the program is; `reads`: how many times it was read.
+interface Inst { fn: number; params: Abs[]; result: Abs; index: number; dirty: boolean; readers: Set<Inst>; name: string; reads: number }
 
 // A small function of arithmetic on records (the vectors module's plus,
 // minus and scale at a multivector type) put where it's called, so the
@@ -314,9 +318,81 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
   }
   return r;
 }
+// Each function's reads kept from the last compile (plan doc "Incremental
+// compile after edits"): a read of a copy is a function of the copy's
+// body, what it is given, and what it reads of the rest as it goes (the
+// answers of the copies it calls, captures, cells, what closure codes an
+// apply may call); what it does to the rest (a copy made or given more, a
+// capture or a cell given more, a number's value read) is in the same
+// order each time. So a read is kept as those steps, and taken again by
+// doing them, each value read checked against the one kept: where one
+// differs, the body is read (what was done again is done once more, to
+// no change: every step only joins). A function is the last compile's
+// where it is the same, numbers and all, its types by their place
+// (ir-again.ts typesOf), its expressions met in the same order: an edit
+// of one definition reads only what it changed, and what that changed.
+type Step =
+  | { k: "self"; args: Abs[]; v: Abs }
+  | { k: "call"; at: number; fn: number; name: string; args: Abs[]; v: Abs }
+  | { k: "grow"; shape: number; i: number; a: Abs }
+  | { k: "cap"; shape: number; i: number; v: Abs }
+  | { k: "apply"; at: number; codes: number[] | null; args: Abs[]; vs: Abs[] }
+  | { k: "hand"; at: number; t: string | null; a: Abs }
+  | { k: "cell"; t: string; lost: boolean; v: Abs }
+  | { k: "value"; at: number };
+interface Trace { params: Abs[]; steps: Step[]; result: Abs }
+interface Reads { funcs: SFunc[]; types: string; tokens: Map<object, string>; algebras: string; traces: Map<string, Trace[]> }
+const readsKept = keptMap<string, Reads>();
+// Reads taken again and made (the tests).
+export const ZP = { again: 0, read: 0 };
+// A function's expressions in the order a walk meets them, and each one's
+// first place.
+const walkOf = new WeakMap<SFunc, { at: SExpr[]; place: Map<SExpr, number> }>();
+function walked(f: SFunc) {
+  let w = walkOf.get(f);
+  if (!w) {
+    const at: SExpr[] = [], place = new Map<SExpr, number>();
+    const go = (e: SExpr) => { if (!place.has(e)) place.set(e, at.length); at.push(e); kids(e).forEach(go); };
+    go(f.body);
+    walkOf.set(f, (w = { at, place }));
+  }
+  return w;
+}
+// a (now) and b (the last compile's) the same, numbers and all, types by
+// their place, each object of one met where the other's is.
+function sameFn(a: unknown, b: unknown, ta: Map<object, string>, tb: Map<object, string>, ab: Map<object, object>, ba: Map<object, object>): boolean {
+  if (a === b) return true;
+  if (typeof a !== typeof b || a === null || b === null) return false;
+  if (typeof a !== "object") return Object.is(a, b);
+  const x = a as object, y = b as object;
+  if (ab.has(x) || ba.has(y)) return ab.get(x) === y && ba.get(y) === x;
+  if (ta.has(x) || tb.has(y)) return ta.get(x) !== undefined && ta.get(x) === tb.get(y);
+  if (Array.isArray(x) !== Array.isArray(y) || x instanceof Map || x instanceof Set || y instanceof Map || y instanceof Set) return false;
+  if (isType(x) || isType(y)) return false;
+  ab.set(x, y); ba.set(y, x);
+  if (Array.isArray(x)) return x.length === (y as unknown[]).length && x.every((v, i) => sameFn(v, (y as unknown[])[i], ta, tb, ab, ba));
+  const kx = Object.keys(x), ky = Object.keys(y);
+  return kx.length === ky.length && kx.every((k) => k in y && sameFn((x as Record<string, unknown>)[k], (y as Record<string, unknown>)[k], ta, tb, ab, ba));
+}
+
 function zeroPartsIn(ir0: CoreIR, roots: number[], algebras: Map<Id, Algebra>): { ir: CoreIR; copies: number; dropped: number } {
   const ir: CoreIR = { ...ir0, funcs: inlineLeaves(ir0.funcs.map(unshared(algebras))) };
   const funcs = ir.funcs;
+  // The last compile's reads, where its types and algebras are these.
+  const types = typesOf(ir), algebrasNow = [...algebras.keys()].sort().join(" ");
+  const was = readsKept.get("reads");
+  const before = was && was.types === types.text && was.algebras === algebrasNow ? was : null;
+  // Each copy's reads, by its name.
+  const traces = new Map<string, Trace[]>();
+  const tracesOf = (i: { name: string }) => traces.get(i.name) ?? traces.set(i.name, []).get(i.name)!;
+  const sameAsBefore = new Map<number, boolean>();
+  const none: Trace[] = [];
+  const keptFor = (i: Inst): Trace[] => {
+    if (!before || i.fn >= before.funcs.length) return none;
+    let ok = sameAsBefore.get(i.fn);
+    if (ok === undefined) sameAsBefore.set(i.fn, (ok = sameFn(funcs[i.fn], before.funcs[i.fn], types.tokens, before.tokens, new Map(), new Map())));
+    return ok ? before.traces.get(i.name) ?? none : none;
+  };
   // A closure's code, by its function type: what every apply of that type
   // may call.
   const codesOf = new Map<string, Set<number>>();
@@ -380,15 +456,15 @@ function zeroPartsIn(ir0: CoreIR, roots: number[], algebras: Map<Id, Algebra>): 
   const byKey = new Map<string, Inst>();
   const ofFn = new Map<number, Inst[]>();
   let changed = true;
-  const newInst = (fn: number, params: Abs[]): Inst => {
-    const i: Inst = { fn, params, result: null, index: -1, dirty: true, readers: new Set() };
+  const newInst = (fn: number, params: Abs[], name: string): Inst => {
+    const i: Inst = { fn, params, result: null, index: -1, dirty: true, readers: new Set(), name, reads: 0 };
     insts.push(i);
     (ofFn.get(fn) ?? ofFn.set(fn, []).get(fn)!).push(i);
     changed = true;
     return i;
   };
   const grow = (i: Inst, args: Abs[]) => {
-    args.forEach((a, j) => { const now = capped(join(i.params[j] ?? null, a)); if (!same(now, i.params[j] ?? null)) { i.params[j] = now; i.dirty = true; changed = true; } });
+    args.forEach((a, j) => { if (a === (i.params[j] ?? null)) return; const now = capped(join(i.params[j] ?? null, a)); if (!same(now, i.params[j] ?? null)) { i.params[j] = now; i.dirty = true; changed = true; } });
   };
   // One copy per place it's called from (and one for a closure's code,
   // one for a root), given what that place gives in every copy of its
@@ -397,12 +473,19 @@ function zeroPartsIn(ir0: CoreIR, roots: number[], algebras: Map<Id, Algebra>): 
   const sites = new WeakMap<SExpr, number>();
   const siteOf = (e: SExpr) => sites.get(e) ?? (sites.set(e, sites_n++), sites_n - 1);
   let sites_n = 0;
-  const instFor = (fn: number, args: Abs[], site: string): Inst => {
+  const instFor = (fn: number, args: Abs[], site: string, name = site): Inst => {
     const k = closureCode.has(fn) ? `c${fn}` : `${fn}@${site}`;
     let i = byKey.get(k);
-    if (!i) { i = newInst(fn, funcs[fn].params.map(() => null)); byKey.set(k, i); }
+    if (!i) { i = newInst(fn, funcs[fn].params.map(() => null), closureCode.has(fn) ? k : `${fn}@${name}`); byKey.set(k, i); }
     grow(i, args);
     return i;
+  };
+  // A call's copy, its key kept by the call.
+  const keyAt = new WeakMap<SExpr, string>();
+  const instAt = (e: SExpr, fn: number, args: Abs[], name: string): Inst => {
+    let k = keyAt.get(e);
+    if (k === undefined) keyAt.set(e, (k = String(siteOf(e))));
+    return instFor(fn, args, k, name);
   };
   for (const r of roots) instFor(r, funcs[r].params.map(() => true), "root");
   // Closure codes the runtime calls: every input anything.
@@ -432,8 +515,46 @@ function zeroPartsIn(ir0: CoreIR, roots: number[], algebras: Map<Id, Algebra>): 
   // A body read with its inputs: what each expression may be. `at`, when
   // given, is told each call's copy and each expression's value (the last
   // round, for the rewrite).
+  // A kept read taken again: its steps done, each value read checked.
+  const again = (me: Inst, t: Trace): boolean => {
+    const f = funcs[me.fn], at = walked(f).at;
+    for (const st of t.steps) {
+      switch (st.k) {
+        case "self": grow(me, st.args); me.readers.add(me); if (!same(me.result, st.v)) return false; break;
+        case "call": { const i = instAt(at[st.at], st.fn, st.args, st.name); i.readers.add(me); if (!same(i.result, st.v)) return false; break; }
+        case "grow": growCap(st.shape, st.i, st.a); break;
+        case "cap": capReaders[st.shape][st.i].add(me); if (!same(caps[st.shape][st.i], st.v)) return false; break;
+        case "apply": {
+          const e = at[st.at] as Extract<SExpr, { k: "apply" }>, cs = codesOf.get(fkey(e.t));
+          const now = cs ? [...cs] : null;
+          if ((now === null) !== (st.codes === null) || (now && (now.length !== st.codes!.length || now.some((c, j) => c !== st.codes![j])))) return false;
+          for (let j = 0; j < (now ?? []).length; j++) { const i = instFor(now![j], [true, ...st.args], "apply"); i.readers.add(me); if (!same(i.result, st.vs[j])) return false; }
+          break;
+        }
+        case "hand": { const ty = typeOf(f, at[st.at]); if ((ty ? tkey(ty) : null) !== st.t) return false; handed(ty, st.a); break; }
+        case "cell": if (lost !== st.lost) return false; if (!lost) { (givenReaders.get(st.t) ?? givenReaders.set(st.t, new Set()).get(st.t)!).add(me); if (!same(given.get(st.t) ?? null, st.v)) return false; } break;
+        case "value": readValue(at[st.at]); break;
+      }
+    }
+    return true;
+  };
   const read = (me: Inst, at?: { call: (e: SExpr, i: Inst) => void; value: (e: SExpr, a: Abs) => void }): Abs => {
+    if (!at) {
+      // As the last compile's read of this copy, the same time over.
+      const t = keptFor(me)[me.reads++];
+      if (t && t.params.length === me.params.length && t.params.every((p, j) => same(p, me.params[j])) && again(me, t)) { tracesOf(me).push(t); ZP.again++; return t.result; }
+    }
+    if (!at) ZP.read++;
+    const r = readIn(me, at);
+    return r;
+  };
+  const readIn = (me: Inst, at?: { call: (e: SExpr, i: Inst) => void; value: (e: SExpr, a: Abs) => void }): Abs => {
     const f = funcs[me.fn];
+    // The steps, kept for the next compile (not the last round's, which
+    // reads for the rewrite).
+    const steps: Step[] | null = at ? null : [], given0 = at ? null : [...me.params];
+    const place = steps ? walked(f).place : null;
+    const where = (e: SExpr) => place!.get(e)!;
     const env: Abs[] = f.locals.map((_, i) => (i < f.params.length ? me.params[i] ?? null : null));
     let grew = false;
     const set = (i: number, a: Abs) => { const now = capped(join(env[i], a)); if (!same(now, env[i])) { env[i] = now; grew = true; } };
@@ -460,7 +581,7 @@ function zeroPartsIn(ir0: CoreIR, roots: number[], algebras: Map<Id, Algebra>): 
     const poly0 = (e: SExpr): Poly | null => {
       if (last.get(e) === false) return new Map();
       switch (e.k) {
-        case "num": return Object.is(e.v, 0) || Object.is(e.v, -0) ? new Map() : (readValue(e), new Map([["", e.v]]));
+        case "num": return Object.is(e.v, 0) || Object.is(e.v, -0) ? new Map() : (readValue(e), steps?.push({ k: "value", at: where(e) }), new Map([["", e.v]]));
         case "local": { const v = lets.get(e.i); return v ? poly(v) : atom(e); }
         // A part of a record made right here is what it was made of.
         case "get": { const m = madeOf(e.rec); return m ? poly(m.args[e.i]) : atom(e); }
@@ -543,23 +664,27 @@ function zeroPartsIn(ir0: CoreIR, roots: number[], algebras: Map<Id, Algebra>): 
         case "call": {
           const args = e.args.map(ev);
           // Round a loop: the same copy, given more.
-          if (e.tail && e.fn === me.fn) { grow(me, args); at?.call(e, me); me.readers.add(me); return me.result; }
-          const i = instFor(e.fn, args, String(siteOf(e)));
+          if (e.tail && e.fn === me.fn) { grow(me, args); at?.call(e, me); me.readers.add(me); steps?.push({ k: "self", args, v: me.result }); return me.result; }
+          const name = `${me.fn}:${walked(f).place.get(e)}`;
+          const i = instAt(e, e.fn, args, name);
           at?.call(e, i);
           i.readers.add(me);
+          steps?.push({ k: "call", at: where(e), fn: e.fn, name, args, v: i.result });
           return i.result;
         }
         case "closure": {
-          e.caps.forEach((c, i) => growCap(e.shape, i, ev(c)));
+          e.caps.forEach((c, i) => { const a = ev(c); growCap(e.shape, i, a); steps?.push({ k: "grow", shape: e.shape, i, a }); });
           return true;
         }
-        case "cap": capReaders[e.shape][e.i].add(me); return caps[e.shape][e.i];
+        case "cap": capReaders[e.shape][e.i].add(me); steps?.push({ k: "cap", shape: e.shape, i: e.i, v: caps[e.shape][e.i] }); return caps[e.shape][e.i];
         case "apply": {
           ev(e.fn);
           const args = e.args.map(ev);
           set(e.tmp, true);
           let out: Abs = null;
-          for (const c of codesOf.get(fkey(e.t)) ?? []) { const i = instFor(c, [true, ...args], "apply"); i.readers.add(me); out = join(out, i.result); }
+          const cs = codesOf.get(fkey(e.t)), vs: Abs[] = [];
+          for (const c of cs ?? []) { const i = instFor(c, [true, ...args], "apply"); i.readers.add(me); vs.push(i.result); out = join(out, i.result); }
+          steps?.push({ k: "apply", at: where(e), codes: cs ? [...cs] : null, args, vs });
           // A closure no code here makes (from the runtime): anything.
           return codesOf.has(fkey(e.t)) ? out : true;
         }
@@ -573,9 +698,13 @@ function zeroPartsIn(ir0: CoreIR, roots: number[], algebras: Map<Id, Algebra>): 
         case "abort": ev(e.reason); return null;
         case "rt": case "world": {
           const into = e.k === "rt" && CELL_PUT.test(e.fn);
-          e.args.forEach((a) => { const v = ev(a); if (into) handed(typeOf(f, a), v); });
+          e.args.forEach((a) => { const v = ev(a); if (into) { const ty = typeOf(f, a); handed(ty, v); steps?.push({ k: "hand", at: where(a), t: ty ? tkey(ty) : null, a: v }); } });
           const t = e.k === "rt" ? e.host?.t : e.t;
-          if (e.k === "rt" && CELL_READ.test(e.fn) && t && !lost) { const k = tkey(t); (givenReaders.get(k) ?? givenReaders.set(k, new Set()).get(k)!).add(me); return given.get(k) ?? null; }
+          if (e.k === "rt" && CELL_READ.test(e.fn) && t) {
+            const k = tkey(t);
+            steps?.push({ k: "cell", t: k, lost, v: lost ? null : given.get(k) ?? null });
+            if (!lost) { (givenReaders.get(k) ?? givenReaders.set(k, new Set()).get(k)!).add(me); return given.get(k) ?? null; }
+          }
           return true;
         }
         default: kids(e).forEach(ev); return true;
@@ -590,6 +719,7 @@ function zeroPartsIn(ir0: CoreIR, roots: number[], algebras: Map<Id, Algebra>): 
       r = ev(f.body);
       if (!grew) break;
     }
+    if (steps) tracesOf(me).push({ params: given0!, steps, result: r });
     return r;
   };
 
@@ -627,6 +757,8 @@ function zeroPartsIn(ir0: CoreIR, roots: number[], algebras: Map<Id, Algebra>): 
       if (!same(r, i.result)) { i.result = r; changed = true; for (const x of i.readers) x.dirty = true; }
     }
   }
+  // (Kept as they are now: later passes may add locals to a function.)
+  readsKept.set("reads", { funcs: funcs.map((f) => ({ ...f, params: [...f.params], locals: [...f.locals] })), types: types.text, tokens: types.tokens, algebras: algebrasNow, traces });
   // Not settled: nothing is said.
   if (changed) return { ir: ir0, copies: 0, dropped: 0 };
 
