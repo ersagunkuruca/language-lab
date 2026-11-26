@@ -60,7 +60,7 @@ import { gpuDraws, packsOf } from "./gpu-draws.ts";
 import { rangeArrays, rangeChoices } from "./range-choices.ts";
 import { originalOf, PRELUDE_DEFS, typedOriginalOf } from "../../ters/src/lang/prelude-ids.ts";
 import { earlyAnd } from "./early-and.ts";
-import { ARRAY_RT, emptyArray, isArray, isTable, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, poolHeld, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, emptyArray, isArray, isDual, isTable, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, poolHeld, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import type { Type } from "../../ters/src/lang/types.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
@@ -958,6 +958,8 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
     // The pushes holders.ts found onto arrays nobody else holds, as columns
     // left them.
     ownPushes(ir);
+    // contracted's one pair of axes at Dual, its arrays columns (C351b).
+    if (!envSet("NO_PRODUCTS")) stridedProducts(ir, true);
     // Then calls put in place for the printed code: a function called from
     // one place, or a small one, whatever it does (inline-small.ts).
     if (!envSet("NO_INLINE_CALLS")) inlineCalls(ir, (i) => ir.info.divergent.has(ir.funcs[i].def));
@@ -1038,13 +1040,18 @@ function writtenArrays(ir: CoreIR): void {
 // `array.stridedProducts`, 2 rows by 4 columns of sums at once, each
 // added in the order the definition adds it, so the same bits (mnist's
 // weight gradient, 28% of Adam as the definition's map of sums).
-function stridedProducts(ir: CoreIR): void {
-  const f64s = (t: LType) => isArray(t) && t.item === "f64", ints = (t: LType) => isArray(t) && t.item === "int";
+// `dual` (C351b), after columns.ts: at the numbers module's Dual, the three
+// arrays each two Float64 columns (`{ n, c0, c1 }`, value and slope), the
+// runtime's `array.stridedProductsDual`, each sum's value and slope added
+// as its · and + add them (mnist's Newton, two thirds of it these sums).
+function stridedProducts(ir: CoreIR, dual = false): void {
+  const items = (t: LType) => (dual ? isArray(t) && isDual(t.item) && t.leaves?.length === 2 && t.leaves.every((x) => x === "f64") && !t.narrow?.some((x) => x) : isArray(t) && t.item === "f64");
+  const ints = (t: LType) => isArray(t) && t.item === "int";
   for (const f of ir.funcs) {
     const p = f.params, r = f.result;
     if (p.length !== 7 || typedOriginalOf(f.def) !== PRELUDE_DEFS["strided products"] || f.multi || f.budgeted) continue;
-    if (!f64s(p[0]) || !f64s(p[1]) || !ints(p[2]) || !ints(p[3]) || p.slice(4).some((t) => t !== "int") || !isArray(r) || r.item !== "f64") continue;
-    f.body = { k: "rt", fn: `array.stridedProducts.a${r.index}`, args: p.map((_, i): SExpr => ({ k: "local", i })) };
+    if (!items(p[0]) || !items(p[1]) || !ints(p[2]) || !ints(p[3]) || p.slice(4).some((t) => t !== "int") || !items(r) || !isArray(r)) continue;
+    f.body = { k: "rt", fn: `array.stridedProducts${dual ? "Dual" : ""}.a${r.index}`, args: p.map((_, i): SExpr => ({ k: "local", i })) };
   }
 }
 
