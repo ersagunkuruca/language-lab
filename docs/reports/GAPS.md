@@ -5148,6 +5148,39 @@ place's candidates a `keep`, a `sort by` on tuples (`merge by key` 4%)
 and a `map`, and the `set tree has` of the plan's off days (3.4%). No
 single piece of that is 10%.
 
+### rota again, 11-26 (Language lane)
+
+bench-rota core 6.5x to 8.8x the ideal (21 x 18: 1,069 ms against 128
+ms). A profile of `ters compile`'s rota at 21 x 18 on one thread
+(`TERS_WORKERS=0`, 1.13 s), by definition, time inside each:
+
+| | ms | share |
+|---|---|---|
+| `can work` (each place's test of each person) | 571 | 51% |
+| of it the tables' reads (`shift on`, `on slot`, `load of`: `value at` on the rota's three maps) | 267 | 24% |
+| of those, the key's spelling kept (`held`, `kept`: two Map reads by its parts) | 130 | 12% |
+| `sort by` (the candidates, keyed by (load, name)) | 190 | 17% |
+| `set tree has` (the plan's off days) | 88 | 8% |
+| the collector | 88 | 8% |
+
+Tried by hand on the compiled module, the same output:
+
+- `can work`'s `and`s worked out only while true. Its six tests are
+  pure and end, so skipping the rest is invisible, though `and` is
+  strict (L259). This took 1.12 to 1.05 s (6%).
+- `sort by` as one array sort with the compiled compare, stable as the
+  merge is. This took 1.05 to 1.03 s (5%).
+
+Neither reaches the 10% bar alone. The tables' reads are three Map reads
+each: a tuple key's spelling is found by its parts (two), then the
+table's own read by that spelling. A table of tables by the key's first
+part would read two, about a third of the 24%. What would close the gap
+is the ideal's representation: the people and the days are numbered, so
+each map is an array by position, with nothing hashed or spelled. That
+is the chooser's (a map whose keys come from a list the program never
+grows, kept by position). It was not built here, since the choice step
+is the Compiler lane's.
+
 ### strings again, after the sweep (C290, measured)
 
 A fresh profile of `ters compile`'s strings at 8 blocks, one thread (1.85
