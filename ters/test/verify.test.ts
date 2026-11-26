@@ -10,7 +10,7 @@ import { root } from "../src/io.ts";
 import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { checkOptions, loadProgram } from "../src/lang/load.ts";
-import { elaborate, verify, type Elaboration } from "../src/lang/verify.ts";
+import { elaborate, verdict, verify, type Elaboration } from "../src/lang/verify.ts";
 import { DIVERGE, STRING, type Type } from "../src/lang/types.ts";
 import { subtree, type Node, nodeValues, withNodes } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
@@ -55,6 +55,22 @@ test("a typing changed at a call, a use or a function is refused", () => {
     tried++;
   }
   assert.ok(tried >= 3, `${tried} kinds tried`);
+});
+
+test("the verdict kept per definition is the whole verify's, and a typing changed in one definition is found again", () => {
+  for (const ex of ["wc", "dice", "bounce", "effects"]) {
+    const p = loadProgram(join(root, "examples", ex));
+    const info = infer(p.code, p.pres.names, undefined, p.options ?? checkOptions);
+    const whole = verify(p.code, elaborate(p.code, info));
+    assert.deepEqual(verdict(p.code, info), { checked: whole.checked, problems: whole.problems.length }, ex);
+    assert.deepEqual(verdict(p.code, info), { checked: whole.checked, problems: whole.problems.length }, `${ex} kept`);
+  }
+  const p = loadProgram(join(root, "examples", "wc"));
+  const info = infer(p.code, p.pres.names, undefined, checkOptions);
+  const call = p.own.defs.flatMap((d) => subtree(p.code, d)).find((id) => p.code.nodes[id]?.kind === "call" && info.typeOf.has(id))!;
+  const changed = { ...info, typeOf: new Map(info.typeOf).set(call, { t: "fn", params: [], ret: text, eff: { effs: [], tail: null } } as Type) };
+  assert.ok(verdict(p.code, info).problems === 0);
+  assert.ok(verdict(p.code, changed).problems > 0, "a changed call was let through");
 });
 
 test("a function whose row leaves out what a call in it does is refused", () => {

@@ -29,6 +29,7 @@ import { sccs, terminates, type Info } from "./infer.ts";
 import { LIST, RELEASE_V, S, SIGS } from "./std.ts";
 import { laterOps } from "./later-ops.ts";
 import { CHOICE, DIVERGE, INT } from "./types.ts";
+import { keptMap } from "../kept.ts";
 import { Subst, type Type } from "./types.ts";
 
 export interface Elaboration {
@@ -100,7 +101,9 @@ export interface Verdict { problems: { id: Id; rule: string }[]; checked: number
 
 // `under`: the schemes of definitions the code uses but isn't given here
 // (the library's, checked already).
-export function verify(code: Code, e: Elaboration, defs: Id[] = code.defs, under?: Elaboration): Verdict {
+// `ends`: whether its recursions are measured (verdict measures them over
+// the whole program, apart: the measure reads what they call).
+export function verify(code: Code, e: Elaboration, defs: Id[] = code.defs, under?: Elaboration, ends = true): Verdict {
   const problems: { id: Id; rule: string }[] = [], unchecked = new Map<string, number>();
   const skip = (why: string) => unchecked.set(why, (unchecked.get(why) ?? 0) + 1);
   const bad = (id: Id, rule: string) => problems.push({ id, rule });
@@ -292,9 +295,14 @@ export function verify(code: Code, e: Elaboration, defs: Id[] = code.defs, under
       }
     }
   }
-  // Termination (L242): a recursion whose type leaves out Diverge ends.
-  // An Int input (counting.ts counts one towards a bound) is one whose
-  // type here is Int.
+  if (ends) endsIn(code, defs, ty, bad, skip);
+  return { problems, checked, unchecked };
+}
+
+// Termination (L242): a recursion whose type leaves out Diverge ends.
+// An Int input (counting.ts counts one towards a bound) is one whose
+// type here is Int. (Only what kind of type each is read: any numbering.)
+function endsIn(code: Code, defs: Id[], ty: (id: Id) => Type | undefined, bad: (id: Id, rule: string) => void, skip: (why: string) => void): void {
   const isInt = (param: Id) => { const t = ty(param); return t?.t === "con" && t.id === INT; };
   const diverges = (t: Type | undefined) => t?.t === "fn" && t.eff.effs.includes(DIVERGE);
   const own = new Set(defs.filter((d) => code.nodes[d]?.kind === "def" && code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""]?.kind !== "typedef"));
@@ -328,5 +336,100 @@ export function verify(code: Code, e: Elaboration, defs: Id[] = code.defs, under
       if (!diverges(t) && !terminates(code, [p], () => lam, isInt)) bad(a, "a recursion whose type leaves out Diverge ends");
     });
   }
-  return { problems, checked, unchecked };
+}
+
+// What the verifier finds in a program, as verify of its elaboration finds
+// it (scalar.ts vouched): each definition's own rules kept by what they
+// read, so a compile after an edit checks again only the definitions it
+// changed (plan doc "Incremental compile after edits"; machine's two
+// verdicts a body edit were about 100 ms). What a definition's rules read:
+// its nodes, their types, its scheme and its lets', the schemes of the
+// definitions it names, the binders it names outside it, and the types
+// whose cases and fields it names. Its types are numbered on their own
+// (variables in the order met, the schemes it names after): the rules
+// only ask whether two variables are one, which that numbering keeps.
+// The recursive groups are measured over the whole program each time.
+const verdictsKept = keptMap<string, { checked: number; problems: number }>();
+const nodeText = new WeakMap<object, string>();
+const textOfNode = (n: object): string => { let t = nodeText.get(n); if (t === undefined) nodeText.set(n, (t = JSON.stringify(n))); return t; };
+export function verdict(code: Code, info: Info): { checked: number; problems: number } {
+  // Each case and field to the definition of its type.
+  const typeOfPart = new Map<Id, Id>();
+  for (const d of code.defs) {
+    const b = (code.nodes[d] as NodeOf<"def"> | undefined)?.body, td = b ? code.nodes[b] : undefined;
+    if (td?.kind !== "typedef") continue;
+    for (const v of td.variants) { typeOfPart.set(v, d); for (const f of (code.nodes[v] as NodeOf<"variant">).fields) typeOfPart.set(f, d); }
+  }
+  let later: Set<Id> | null = null;
+  let checked = 0, problems = 0;
+  // Only what verify's elaboration of the whole has: the schemes of the
+  // definitions given, the types of nodes inside them.
+  const given = new Set(code.defs);
+  let inside: Set<Id> | null = null;
+  const inGiven = (id: Id) => (inside ??= new Set(code.defs.flatMap((d) => (code.nodes[d] ? subtree(code, d) : [])))).has(id);
+  if (verdictsKept.size > 20000) verdictsKept.clear();
+  for (const d of code.defs) {
+    if (!code.nodes[d]) continue;
+    const ids = subtree(code, d), mine = new Set(ids);
+    // What it names outside it.
+    const named: Id[] = [], seen = new Set<Id>();
+    for (const id of ids) {
+      const node = code.nodes[id];
+      const x = node?.kind === "arm" && typeOfPart.has(node.variant) ? node.variant : node?.kind === "ref" && !mine.has(node.target) ? node.target : undefined;
+      if (x !== undefined && !seen.has(x)) { seen.add(x); named.push(x); }
+    }
+    // Its types written out, numbered on their own, beside its nodes.
+    const vars = new Map<number, number>();
+    const num = (v: number) => { let m = vars.get(v); if (m === undefined) vars.set(v, (m = vars.size)); return m; };
+    const text = (t: Type): string => t.t === "var" ? `${num(t.v)}`
+      : t.t === "con" ? `${t.id.length}:${t.id}${t.args.length ? `(${t.args.map(text).join(",")})` : ""}`
+      : `(${t.params.map(text).join(",")}>${text(t.ret)}!${t.eff.effs.join(" ")}${t.eff.tail === null ? "" : "+"})`;
+    const typeText = (id: Id) => { const t = info.typeOf.get(id); return t ? text(info.subst.zonk(t)) : "-"; };
+    const schemeText = (sc: { vars: number[]; type: Type } | undefined) => (sc ? `[${sc.vars.map(num).join(",")}]${text(info.subst.zonk(sc.type))}` : "-");
+    const key: string[] = [d];
+    for (const id of ids) {
+      const node = code.nodes[id];
+      key.push(node ? textOfNode(node) : "-", typeText(id));
+      const em = info.embedded?.get(id);
+      if (em && !em.of) key.push(`~${text(info.subst.zonk(em.from))}~${text(info.subst.zonk(em.to))}`);
+    }
+    key.push(schemeText(info.schemes.get(d)));
+    for (const id of ids) { const ls = info.letSchemes?.get(id); if (ls) key.push(`${id}=${schemeText(ls)}`); }
+    const typesNamed = new Set<Id>();
+    for (const x of named) {
+      const t = code.nodes[x];
+      key.push(`@${x}:${t?.kind ?? "-"}`);
+      if (t?.kind === "def") key.push(schemeText(given.has(x) ? info.schemes.get(x) : undefined));
+      else if (t?.kind === "binder") key.push(...(inGiven(x) ? [typeText(x), schemeText(info.letSchemes?.get(x))] : []));
+      const of = typeOfPart.get(x);
+      if (of !== undefined && !typesNamed.has(of)) {
+        typesNamed.add(of);
+        key.push(`#${of}`, ...subtree(code, of).map((y) => textOfNode(code.nodes[y])));
+      }
+      if (of !== undefined && (code.nodes[(code.nodes[of] as NodeOf<"def">).body!] as NodeOf<"typedef">).effect) key.push(`!${(later ??= laterOps(code)).has(x)}`);
+    }
+    const k = key.join("\n");
+    let v = verdictsKept.get(k);
+    if (!v) {
+      // Checked on what its rules read, numbered so.
+      const n = new Numbering(), types = new Map<Id, Type>(), schemes = new Map<Id, { vars: number[]; type: Type }>(), embedded = new Map<Id, { from: Type; to: Type }>();
+      const typed = (id: Id) => { const t = info.typeOf.get(id); if (t) types.set(id, n.type(info.subst.zonk(t))); };
+      const schemed = (id: Id, sc: { vars: number[]; type: Type } | undefined) => { if (sc) schemes.set(id, { vars: sc.vars.map((x) => n.v(x)), type: n.type(info.subst.zonk(sc.type)) }); };
+      for (const id of ids) {
+        typed(id);
+        const em = info.embedded?.get(id);
+        if (em && !em.of) embedded.set(id, { from: n.type(info.subst.zonk(em.from)), to: n.type(info.subst.zonk(em.to)) });
+      }
+      schemed(d, info.schemes.get(d));
+      for (const id of ids) schemed(id, info.letSchemes?.get(id));
+      for (const x of named) { const t = code.nodes[x]; if (t?.kind === "def" && given.has(x)) schemed(x, info.schemes.get(x)); else if (t?.kind === "binder" && inGiven(x)) { typed(x); schemed(x, info.letSchemes?.get(x)); } }
+      const r = verify(code, { types, schemes, embedded, answered: new Set() }, [d], undefined, false);
+      v = { checked: r.checked, problems: r.problems.length };
+      verdictsKept.set(k, v);
+    }
+    checked += v.checked;
+    problems += v.problems;
+  }
+  endsIn(code, code.defs, (id) => { const t = info.typeOf.get(id); return t && info.subst.zonk(t); }, () => problems++, () => {});
+  return { checked, problems };
 }
