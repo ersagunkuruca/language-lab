@@ -49,6 +49,9 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "replace at": "@35sedp97bd5r0h3hrka4eg489k",
  // Neighbours on a grid's lists, which C and WebAssembly write by hand (compiler/src/c.ts gridC, wasm.ts gridWat, C293).
  "grid found": "@becuel3pf83eurot308g7d1sd8",
+ // A sorted list read only for its first item: the first by key, no sort (compiler/src/first-sorted.ts, C356).
+ "sort by": "@4l62j5aicjlm3r2cpt832t7v88",
+ "first by key": "@oo937jjod1tpn9v8v72s2nt1ve",
  // One pair of axes' products, every item's sum (contracted), which C works several sums at once (C306).
  "strided products": "@f997trq640jda04gv9sf8mte6k",
 };
