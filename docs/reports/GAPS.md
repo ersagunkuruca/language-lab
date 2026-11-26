@@ -5719,3 +5719,96 @@ could be one pass keeping the least.
 3. L2 (I374), which is what lets `ters wasi` and `ters native` build the
    program at all, then the bench again on every target.
 4. L5 (I377) for the MCP.
+
+## Game round 4: the flock drawn with data (2026-11-26, FRAMES.md stage 2)
+
+Stage 2's round (FRAMES.md): flock-frame-page, the flock of round 3 drawn
+with `render` (a frame of three passes and seven draws: the floor from
+floor.ppm, its grid, every bird's shadow and every bird from bird.obj into
+a texture, how far each point is into another, then the fog), against the
+same page written by hand for WebGPU, `compiler/gaps/flock.ideal-gpu.js`.
+The page by hand keeps the birds as Float64Array columns, copies them
+into one Float32Array a frame that its three draws of birds share, and
+sends the meshes, lines and image once.
+
+`node compiler/gaps/bench-frames.ts` builds both pages, runs each 6 s in
+headless Chromium with WebGPU on SwiftShader (no GPU here), and counts
+per frame: main-thread milliseconds from a CPU profile, the drawing's
+share (the frame's first GPU call to its submit), bytes written to the
+GPU, and draw calls. Both run the flock at 30 ticks a second, at most two
+a frame.
+
+| birds, way | main ms | draw ms | bytes sent | draw calls | frames a second |
+|---|---|---|---|---|---|
+| 2,000, by hand | 2.16 | 0.19 | 48,008 | 7 | 60 |
+| 2,000, Ters | 15.41 | 1.32 | 144,436 | 7 | 55 |
+| 20,000, by hand | 172 | 0.50 | 480,016 | 7 | 6.0 |
+| 20,000, Ters | 820 to 1,500 | 11.9 | 1,440,480 | 7 | 0.7 to 1.2 |
+
+At 20,000 birds a frame lasts a second or more, so 6 s hold a handful of
+frames and the figure moves between runs.
+
+The round found a bug first: #3417 (G11c) had made the page 100 times
+slower, 1,040 ms a frame at 2,000 birds. Its `Image` holds a List, and
+wasn't among the types only the runtime reads, so no list of the program
+became an array, and each bird read by position walked the list. I379
+(#3418) fixed it; the table is after it.
+
+Where the Ters page's main thread goes, per frame, from the profile of an
+unminified build (`PROFILE_OUT=… node compiler/gaps/bench-frames.ts`):
+
+| part | 2,000 birds | 20,000 birds |
+|---|---|---|
+| the flock's ticks (`ticked`) | 5.96 ms | 1,324 ms |
+| a cell's value turned for the runtime (`turned`) | 5.16 ms | 53 ms |
+| the collector | 1.38 ms | 74 ms |
+| the drawing (gpu-frame.ts) | 1.27 ms | 11.5 ms |
+| making the frame (`frame of`) | 0.03 ms | 0.16 ms |
+| the rest (the page's cells and events) | 1.61 ms | 36 ms |
+
+### The gaps, ranked
+
+**FR1. A cell holding the flock is walked whole on every write and read
+(C347).** `now` holds the sky, and `write(now, stepped(...))` and every
+`read(now)` go through a host function marked `deep`, which turns each
+value between compiled code's JavaScript Bools and the runtime's
+`{tag: true}` (core-rt.ts `turned`). The sky has one Bool, the grip's
+`held`, so 2,000 birds, 6,000 objects, are walked to find nothing to
+turn, and the records' `fields` getters make an array at each. A third of
+the page's main thread at 2,000 birds. The compiler knows the type: only
+the paths that can hold a Bool need walking, and a type with none needs
+no walk.
+
+**FR2. The flock's ticks, 3x to 6x the JavaScript by hand (FL3).**
+Measured in Node too, `ters compile` against flock.ideal.js, 20 ticks:
+27 ms against 8 ms a tick at 2,000 birds, 980 against 155 ms at 20,000.
+On the page the map runs on the main thread (its workers didn't pay at
+either size). This is round 3's FL3: birds as objects holding Vec3
+objects, columns for lists of records (G1b with G3d) the fix.
+
+**FR3. The drawing reads the birds as a list, three times a draw
+(I380).** gpu-frame.ts reads a draw's instances with `fromList` (items),
+which copies an array-held list (an ArrayView) into a new array, and
+calls it three times a draw: for the count, for packing and again. Half
+the drawing at 20,000 birds is these copies and the records' getters.
+
+**FR4. A list drawn three times is sent three times (I380).** The
+shadows, the birds and the birds' distances are three draws of the same
+list, and each draw's slot writes its own words: 144 KB a frame at 2,000
+birds where the page by hand sends 48 KB. Draws whose sites read the same
+leaves of the same list can share one buffer.
+
+**FR5. Packing reads records, not columns.** With FR3 and FR4 gone, the
+drawing still reads each bird's place and velocity through two objects
+(G8b's packing loop), where the page by hand copies six columns. Columns
+(G1b with G3d) serve this as they serve FR2.
+
+The frame itself costs nothing: `frame of` makes three passes and seven
+draws in under 0.2 ms, and the matching keeps the meshes, lines and image
+on the GPU (0 bytes for them after the first frame, as by hand).
+
+### Next
+
+1. I380 (FR3, FR4), the drawing: Editor lane, gpu-frame.ts.
+2. C347 (FR1), cells turned by their types: Compiler lane.
+3. FR2 and FR5 wait on columns for lists of records (G1b with G3d).

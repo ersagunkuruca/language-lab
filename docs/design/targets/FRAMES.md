@@ -285,8 +285,9 @@ uploaded, draw calls.
   its program reads by a name written in it) and G11b (`obj mesh`, and the
   flock's bird read from bird.obj), G11c (`Image` and the copy pass) and
   G11d (the flock's floor from floor.ppm).
-- **Round**: the stage's bigger-program round on the flock drawn with data,
-  measured against flock.ideal-gpu.js, with the gaps going into GAPS.md.
+- **Round** (done): the stage's bigger-program round on the flock drawn
+  with data, measured against flock.ideal-gpu.js (compiler/gaps/
+  bench-frames.ts), with the gaps going into GAPS.md (game round 4).
 
 The compiler-internal parts (G9c's WGSL vertex stage, G8's columns into
 buffers) can go to the Compiler lane now that G9b has landed.
