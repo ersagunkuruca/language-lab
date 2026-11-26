@@ -11,7 +11,8 @@ import { equal, fromList, makeRunner, runMain, toList, type Data, type Value } f
 import { CELL_OPS, CONS, HTML_V, MARK_V, S } from "../src/lang/std.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { Lang } from "../src/lang/dsl.ts";
-import { evaluatorCall, htmlText, mountHtml } from "../src/lang/html.ts";
+import { evaluatorCall, htmlText, mountHtml, STUCK } from "../src/lang/html.ts";
+import { spendStep } from "../src/lang/run-values.ts";
 import { merge } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
 import { fakeDoc, FakeEl } from "./fakedom.ts";
@@ -269,4 +270,19 @@ test("a key a page listens for on a game's element doesn't scroll the page; in a
   assert.equal(stopped(canvas, "a"), 0, "a letter isn't a scrolling key");
   const field = Object.assign(mount("input"), { tagName: "INPUT" });
   assert.equal(stopped(field, "ArrowLeft"), 0, "in a field the arrows move the caret");
+});
+
+test("a first draw past its time runs again once with more time, and one past that too stays stopped (I371)", async () => {
+  const call = (f: Value, ...a: Value[]) => (f as (...a: Value[]) => Value)(...a);
+  // A view that takes `ms` of steps: past a 20 ms limit, within 80 ms.
+  const slow = (ms: number) => () => { const end = performance.now() + ms; while (performance.now() < end) spendStep(); return "drawn"; };
+  const text = (ms: number) => ({ tag: HTML_V.text, fields: [slow(ms) as never] }) as Data;
+  const page = { tag: HTML_V.element, fields: ["div", toList([]), toList([text(40), text(400)])] } as Data;
+  const e = mountHtml(page, { cells: new Cells(), doc: fakeDoc(), call, within: 20 }) as FakeEl;
+  const shown = () => e.kids.map((c) => c.textContent);
+  assert.deepEqual(shown(), [STUCK, STUCK]);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(shown(), ["drawn", STUCK]);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(shown(), ["drawn", STUCK]);
 });
