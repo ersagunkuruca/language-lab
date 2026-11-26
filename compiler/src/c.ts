@@ -2366,7 +2366,7 @@ int main(int argc, char **argv) {
   // sorted. Same lists: two places within reach are at most a cell apart
   // on each part. Places of up to 3 Float64 parts, in an array, the
   // lists Ints in arrays; otherwise as compiled.
-  function gridC(f: SFunc): string[] | null {
+  function gridC(f: SFunc, fi: number): { pre: string[]; body: string[] } | null {
     const pa = f.params[0], r = f.result;
     if (f.params.length !== 5 || originalOf(f.def) !== GRID_FOUND || !isArray(pa) || f.params[4] !== "f64" || !isArray(r) || !isArray(r.item) || r.item.item !== "int") return null;
     const pt = pa.item, D = pt === "f64" ? 1 : isRecord(pt) && !pt.mutable && pt.fields.length <= 3 && pt.fields.every((x) => x.t === "f64") ? pt.fields.length : 0;
@@ -2375,7 +2375,7 @@ int main(int argc, char **argv) {
     arrayFns.add(`array.getb.a${P}`).add(`array.lengthb.a${P}`).add(`array.lengthb.a${O}`).add(`array.lengthb.a${I}`);
     const ds = [...Array(D).keys()], part = (k: number) => (pt === "f64" ? "it" : `it.f${k}`);
     const sum = ds.map((k) => `(lab_g_x[(size_t)i * ${D} + ${k}] - lab_g_x[(size_t)j * ${D} + ${k}]) * (lab_g_x[(size_t)i * ${D} + ${k}] - lab_g_x[(size_t)j * ${D} + ${k}])`);
-    return [
+    const lines = [
       "  uint32_t n = p0.n, *lab_g_near;",
       "  double r2 = p4 * p4, cell = p4 * (1 + 0x1p-20), *lab_g_x;",
       "  int64_t *lab_g_c;",
@@ -2411,36 +2411,67 @@ int main(int argc, char **argv) {
       "    lab_g_start[0] = 0;",
       "    for (uint32_t q = 0; q < n; q++) lab_g_by[q] = (lab_grid_entry){ 0, lab_g_near[q] };",
       "  } else qsort(lab_g_by, n, sizeof(lab_grid_entry), lab_grid_order);",
-      `  ${OB} *ob = lab__buf_a${O}(n, 0);`,
-      "  for (uint32_t i = 0; i < n; i++) {",
-      "    uint32_t m = 0;",
-      `    for (int o = 0; o < ${3 ** D}; o++) {`,
-      "      uint32_t lo, hi;",
-      "      if (lab_g_start) {",
-      "        int64_t at = 0;",
-      `        for (int k = 0, w = o; k < ${D}; k++, w /= 3) at += (lab_g_c[(size_t)i * ${D} + k] - lab_g_lo[k] + 1 + (w % 3 - 1)) * lab_g_st[k];`,
-      "        lo = lab_g_start[at]; hi = lab_g_start[at + 1];",
-      "      } else {",
-      "        int64_t key = 0;",
-      `        for (int k = 0, w = o; k < ${D}; k++, w /= 3) key = key * LAB_GRID_SIDE + lab_g_c[(size_t)i * ${D} + k] + (w % 3 - 1) + LAB_GRID_SIDE / 2;`,
-      "        lo = 0; hi = n;",
-      "        while (lo < hi) { uint32_t mid = lo + (hi - lo) / 2; if (lab_g_by[mid].key < key) lo = mid + 1; else hi = mid; }",
-      "        for (hi = lo; hi < n && lab_g_by[hi].key == key; hi++) {}",
-      "      }",
-      "      for (uint32_t q = lo; q < hi; q++) {",
-      "        uint32_t j = lab_g_by[q].i;",
-      "        if (j == i) continue;",
-      `        double s = ${sum[0]};`,
-      ...sum.slice(1).map((x) => `        s = s + ${x};`),
-      "        if (!(r2 < s)) { uint32_t z = m++; while (z > 0 && lab_g_near[z - 1] > j) { lab_g_near[z] = lab_g_near[z - 1]; z--; } lab_g_near[z] = j; }",
-      "      }",
-      "    }",
-      `    ${IB} *ib = lab__buf_a${I}(m, 0);`,
-      "    for (uint32_t q = 0; q < m; q++) ib->it[ib->lo + q] = LAB_SMALL((int64_t)lab_g_near[q]);",
-      `    ob->it[ob->lo + i] = lab__view_a${I}((lab_cell *)ib, ib->lo, m);`,
-      "  }",
-      "  free(lab_g_x); free(lab_g_c); free(lab_g_by); free(lab_g_near); free(lab_g_start);",
     ];
+    // The places are looked through in runs of 64 that any thread may
+    // take, on the pool's threads when the program has them and isn't on
+    // them already, each list made by the thread that found it.
+    const J = `lab_grid_job_${fi}`;
+    const pre = [
+      `typedef struct { const double *x; const int64_t *c; const lab_grid_entry *by; const uint32_t *start; int64_t lo[3], st[3]; uint32_t n; double r2; ${OB} *ob; int64_t next; } ${J};`,
+      `static void lab_grid_work_${fi}(void *arg) {`,
+      `  ${J} *job = arg;`,
+      "  uint32_t n = job->n, *lab_g_near = malloc(((size_t)n + 1) * sizeof(uint32_t));",
+      "  if (!lab_g_near) lab_oom();",
+      "  const double *lab_g_x = job->x, r2 = job->r2;",
+      "  const int64_t *lab_g_c = job->c, *lab_g_lo = job->lo, *lab_g_st = job->st;",
+      "  const lab_grid_entry *lab_g_by = job->by;",
+      "  const uint32_t *lab_g_start = job->start;",
+      `  ${OB} *ob = job->ob;`,
+      "  for (;;) {",
+      "    int64_t from = __atomic_fetch_add(&job->next, 64, __ATOMIC_RELAXED);",
+      "    if (from >= n) break;",
+      "    uint32_t to = from + 64 < n ? (uint32_t)from + 64 : n;",
+      "    for (uint32_t i = (uint32_t)from; i < to; i++) {",
+      "      uint32_t m = 0;",
+      `      for (int o = 0; o < ${3 ** D}; o++) {`,
+      "        uint32_t lo, hi;",
+      "        if (lab_g_start) {",
+      "          int64_t at = 0;",
+      `          for (int k = 0, w = o; k < ${D}; k++, w /= 3) at += (lab_g_c[(size_t)i * ${D} + k] - lab_g_lo[k] + 1 + (w % 3 - 1)) * lab_g_st[k];`,
+      "          lo = lab_g_start[at]; hi = lab_g_start[at + 1];",
+      "        } else {",
+      "          int64_t key = 0;",
+      `          for (int k = 0, w = o; k < ${D}; k++, w /= 3) key = key * LAB_GRID_SIDE + lab_g_c[(size_t)i * ${D} + k] + (w % 3 - 1) + LAB_GRID_SIDE / 2;`,
+      "          lo = 0; hi = n;",
+      "          while (lo < hi) { uint32_t mid = lo + (hi - lo) / 2; if (lab_g_by[mid].key < key) lo = mid + 1; else hi = mid; }",
+      "          for (hi = lo; hi < n && lab_g_by[hi].key == key; hi++) {}",
+      "        }",
+      "        for (uint32_t q = lo; q < hi; q++) {",
+      "          uint32_t j = lab_g_by[q].i;",
+      "          if (j == i) continue;",
+      `          double s = ${sum[0]};`,
+      ...sum.slice(1).map((x) => `          s = s + ${x};`),
+      "          if (!(r2 < s)) { uint32_t z = m++; while (z > 0 && lab_g_near[z - 1] > j) { lab_g_near[z] = lab_g_near[z - 1]; z--; } lab_g_near[z] = j; }",
+      "        }",
+      "      }",
+      `      ${IB} *ib = lab__buf_a${I}(m, 0);`,
+      "      for (uint32_t q = 0; q < m; q++) ib->it[ib->lo + q] = LAB_SMALL((int64_t)lab_g_near[q]);",
+      `      ob->it[ob->lo + i] = lab__view_a${I}((lab_cell *)ib, ib->lo, m);`,
+      "    }",
+      "  }",
+      "  free(lab_g_near);",
+      "}",
+    ];
+    return {
+      pre,
+      body: [
+        ...lines,
+        `  ${OB} *ob = lab__buf_a${O}(n, 0);`,
+        `  ${J} lab_g_job = { lab_g_x, lab_g_c, lab_g_by, lab_g_start, { lab_g_lo[0], lab_g_lo[1], lab_g_lo[2] }, { lab_g_st[0], lab_g_st[1], lab_g_st[2] }, n, r2, ob, 0 };`,
+        threads ? `  if (n >= 4096 && lab_pool_ready()) lab_pool_run(lab_grid_work_${fi}, &lab_g_job); else lab_grid_work_${fi}(&lab_g_job);` : `  lab_grid_work_${fi}(&lab_g_job);`,
+        "  free(lab_g_x); free(lab_g_c); free(lab_g_by); free(lab_g_near); free(lab_g_start);",
+      ],
+    };
   }
 
   function func(f: SFunc, i: number): string {
@@ -2456,10 +2487,10 @@ int main(int argc, char **argv) {
     // A lent input isn't this function's to give on or drop, nor is a
     // local that holds it or a part of it without a count (C241).
     const mine = lent.get(i);
-    const grid = gridC(f);
+    const grid = gridC(f, i);
     if (grid) {
-      const body = [...grid, ...f.params.flatMap((t, j) => (counted(t) && !mine?.has(j) ? [`  ${drop(t, `p${j}`)}`] : [])), `  return lab__view_a${(f.result as AType).index}((lab_cell *)ob, ob->lo, n);`];
-      const text = [GRID_C, `// ${f.name.replace(/\n/g, " ")}, on a grid`, `${header(i, !!mine)} {`, ...body, "}"].join("\n");
+      const body = [...grid.body, ...f.params.flatMap((t, j) => (counted(t) && !mine?.has(j) ? [`  ${drop(t, `p${j}`)}`] : [])), `  return lab__view_a${(f.result as AType).index}((lab_cell *)ob, ob->lo, n);`];
+      const text = [GRID_C, ...grid.pre, `// ${f.name.replace(/\n/g, " ")}, on a grid`, `${header(i, !!mine)} {`, ...body, "}"].join("\n");
       if (!mine) return text;
       const ps = f.params.map((_, j) => `p${j}`);
       return [text, `${header(i)} {`, `  ${ty(f.result)} r = ${bnames.get(i)}(${ps.join(", ")});`, ...[...mine].map((j) => `  ${drop(f.params[j], `p${j}`)}`), "  return r;", "}"].join("\n");
