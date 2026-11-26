@@ -14,6 +14,7 @@ import { choicesAgain } from "../../ters/cli/represented.ts";
 import { stepsAgain } from "../../ters/src/lang/literals-again.ts";
 import { passesAgainCount } from "../src/ir-again.ts";
 import { ZP } from "../src/zero-parts.ts";
+import { factsMade } from "../../ters/src/lang/represent.ts";
 import { copyNodes, onLayer, parentOf, type Code } from "../../ters/src/model.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 
@@ -66,25 +67,48 @@ test("machine: an edit of a number takes the choice again, as a fresh compile pr
 // parts of the functions it changed and what they reach: the rest are
 // taken from the last compile's reads (zero-parts.ts), and it prints what
 // a fresh compile does.
+// The program with the number literal `lit` written add(lit, 0): an edit
+// of the body it is in.
+function bodyEdited(code: Code, lit: string): Code {
+  const at = parentOf(code, lit)!;
+  const nodes = copyNodes(code.nodes);
+  nodes["zzf"] = { id: "zzf", kind: "ref", target: "builtin.arith.add" } as never;
+  nodes["zzz"] = { id: "zzz", kind: "lit", value: 0, of: (code.nodes[lit] as { of?: string }).of } as never;
+  nodes["zzc"] = { id: "zzc", kind: "call", fn: "zzf", args: [lit, "zzz"] } as never;
+  const par = { ...(nodes[at.parent] as unknown as Record<string, unknown>) };
+  if (at.slot === "args") { const a = [...(par.args as string[])]; a[at.index!] = "zzc"; par.args = a; } else par[at.slot] = "zzc";
+  nodes[at.parent] = par as never;
+  const next: Code = { nodes, defs: code.defs };
+  onLayer(next, LIBRARY.code);
+  return next;
+}
 test("bounce: an edit of a body takes the other functions' zero parts again, as a fresh compile prints", () => {
   const p = loadProgram(join(ROOT, "ters/examples/bounce"));
   const main = p.named("main"), own = p.own.defs;
   forgetKept();
   const first = compile(p.code, p.pres.names, p.options, main, own);
-  const lits = literalEdits(p.code, own), lit = lits[Math.floor(lits.length / 2)];
-  const at = parentOf(p.code, lit)!;
-  const nodes = copyNodes(p.code.nodes);
-  nodes["zzf"] = { id: "zzf", kind: "ref", target: "builtin.arith.add" } as never;
-  nodes["zzz"] = { id: "zzz", kind: "lit", value: 0, of: (p.code.nodes[lit] as { of?: string }).of } as never;
-  nodes["zzc"] = { id: "zzc", kind: "call", fn: "zzf", args: [lit, "zzz"] } as never;
-  const par = { ...(nodes[at.parent] as unknown as Record<string, unknown>) };
-  if (at.slot === "args") { const a = [...(par.args as string[])]; a[at.index!] = "zzc"; par.args = a; } else par[at.slot] = "zzc";
-  nodes[at.parent] = par as never;
-  const next: Code = { nodes, defs: p.code.defs };
-  onLayer(next, LIBRARY.code);
+  const lits = literalEdits(p.code, own);
+  const next = bodyEdited(p.code, lits[Math.floor(lits.length / 2)]);
   const again = ZP.again, read = ZP.read;
   const got = compile(next, p.pres.names, p.options, main, own, { code: p.code, info: first.info });
   assert.ok(ZP.again - again > 10 * (ZP.read - read), `${ZP.again - again} reads taken again, ${ZP.read - read} made`);
+  forgetKept();
+  const fresh = compile(next, p.pres.names, p.options, main, own);
+  assert.equal(got.text, fresh.text);
+});
+
+// And the chooser works out the jobs of only the definition edited
+// (represent.ts keptFact): machine's choice asks for some 3,800.
+test("machine: an edit of a body works out the chooser's jobs of that definition alone, as a fresh compile prints", () => {
+  const p = loadProgram(join(ROOT, "compiler/gaps/machine"));
+  const main = p.named("main"), own = p.own.defs;
+  forgetKept();
+  const first = compile(p.code, p.pres.names, p.options, main, own);
+  const lits = literalEdits(p.code, own);
+  const next = bodyEdited(p.code, lits[Math.floor(lits.length / 2)]);
+  const made = factsMade;
+  const got = compile(next, p.pres.names, p.options, main, own, { code: p.code, info: first.info });
+  assert.ok(factsMade - made <= 20, `${factsMade - made} definitions' jobs worked out`);
   forgetKept();
   const fresh = compile(next, p.pres.names, p.options, main, own);
   assert.equal(got.text, fresh.text);
