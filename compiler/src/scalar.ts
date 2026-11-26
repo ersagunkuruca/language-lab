@@ -294,11 +294,7 @@ export function fails(e: SExpr, funcs: SFunc[]): boolean {
     // answer: the ranges said so, and no runtime function stands for them.
     // core-js.ts's own array makers (writtenArrays), which C and
     // WebAssembly's runtime don't have: an array of the items, always.
-<<<<<<< HEAD
     case "rt": return !!(e.host ? e.host.partial : /^array\.(ofItems|concat|stridedProducts|stridedProductsDual)\.a\d+$/.test(e.fn) || e.fn === "map.worth" || e.fn === "both.on" || e.fn === "both.second" || /^int\.\w+Small(Up)?$/.test(e.fn) ? false : /\.(pure|search)$/.test(e.fn) || runtime(e.fn).partial) || e.args.some((a) => fails(a, funcs));
-=======
-    case "rt": return !!(e.host ? e.host.partial : /^array\.(ofItems|concat|stridedProducts)\.a\d+$/.test(e.fn) || e.fn === "map.worth" || e.fn === "both.on" || e.fn === "both.second" || /^int\.\w+Small(Up)?$/.test(e.fn) ? false : /\.(pure|search)$/.test(e.fn) || runtime(e.fn).partial) || e.args.some((a) => fails(a, funcs));
->>>>>>> 5573bc27365828e137347a2a6e8d8b70b76d1540
     case "apply": return !!e.t.partial || kids(e).some((a) => fails(a, funcs));
     // An abort goes on through first and budgets, so their bodies count.
     case "attempt": case "budget": return kids(e).some((a) => fails(a, funcs));

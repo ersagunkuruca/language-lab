@@ -38,7 +38,6 @@ test("contracted's products on core JavaScript, several sums at once, as the eva
   assert.equal(run.stdout, ev.stdout);
   assert.match(readFileSync(out, "utf8"), /R2\.rt\("array\.stridedProducts\.a\d+"\)/, "the products are the runtime's");
 });
-<<<<<<< HEAD
 
 // C351b: at the numbers module's Dual, the arrays columns (columns.ts),
 // `array.stridedProductsDual`: each sum's value and slope as the
@@ -69,5 +68,3 @@ test("contracted's products at Dual on core JavaScript, over columns, as the eva
   assert.equal(run.stdout, ev.stdout);
   assert.match(readFileSync(out, "utf8"), /R2\.rt\("array\.stridedProductsDual\.a\d+"\)/, "the products are the runtime's");
 });
-=======
->>>>>>> 5573bc27365828e137347a2a6e8d8b70b76d1540
