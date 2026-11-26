@@ -1,0 +1,52 @@
+# A small kitchen: its units, recipes, what is in the larder,
+# what the shop sells, and what to make this week.
+unit tsp
+unit tbsp 3 tsp
+unit cup 16 tbsp
+unit g
+unit kg 1000 g
+unit each
+
+recipe pancakes 4
+1 1/2 cup flour
+3 1/2 tsp baking-powder
+1 tbsp sugar
+1 1/4 cup milk
+1 each egg
+3 tbsp butter
+
+recipe scones 8
+2 cup flour
+1 tbsp baking-powder
+1/3 cup sugar
+1/2 cup butter
+3/4 cup milk
+1 each egg
+
+recipe omelette 1
+3 each egg
+1 tbsp butter
+25 g cheese
+
+have 2 1/2 cup flour
+have 1/4 cup sugar
+have 4 each egg
+have 1 cup milk
+have 1/2 cup butter
+have 100 g cheese
+have 2 tbsp baking-powder
+
+sell 4 cup flour
+sell 10 cup flour
+sell 6 each egg
+sell 12 each egg
+sell 4 cup milk
+sell 1 cup milk
+sell 1/4 kg cheese
+sell 1/2 cup butter
+sell 1 cup sugar
+sell 1/2 cup sugar
+
+make pancakes 6
+make scones 12
+make omelette 2

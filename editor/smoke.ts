@@ -39,7 +39,35 @@ let where = "loading";
 // smoke's few lines only coming at its end). Here it takes about 11.
 const began = Date.now(), SMOKE_LIMIT = Number(process.env.SMOKE_LIMIT ?? 32 * 60);
 const elapsed = () => Math.round((Date.now() - began) / 1000);
-setInterval(() => console.log(`${elapsed()} s: ${where}`), 60_000).unref();
+// Stuck at one place three minutes, it says what the page's thread is
+// doing (I367: on a runner it stopped at board's main for half an hour,
+// and here board passes, alone or with the CPU six times slower).
+// (The debugger is enabled when the page opens: enabled on a thread
+// already stuck, Chromium closes the page.)
+type Session = Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>>;
+let watched: Session | null = null, lastWhere = "", sameFor = 0;
+setInterval(() => {
+  console.log(`${elapsed()} s: ${where}`);
+  sameFor = where === lastWhere ? sameFor + 1 : 0;
+  lastWhere = where;
+  if (sameFor === 3 && watched) void stuckAt(watched);
+}, 60_000).unref();
+async function stuckAt(cdp: Session) {
+  try {
+    const paused = new Promise<{ callFrames: { functionName: string; url: string; location: { lineNumber: number } }[] }>((r) => cdp.once("Debugger.paused", r as never));
+    await cdp.send("Debugger.pause");
+    const got = await Promise.race([paused, new Promise<null>((r) => setTimeout(() => r(null), 10_000))]);
+    if (!got) {
+      const said = await cdp.send("Runtime.evaluate", { expression: `[...document.querySelectorAll(".status, .status-line, .run pre.out")].map((e) => e.textContent).join(" | ").slice(0, 600)`, returnByValue: true }).catch((e: Error) => ({ result: { value: e.message } }));
+      console.log(`stuck at ${where}: the page's thread is idle; it shows: ${JSON.stringify((said as { result: { value: unknown } }).result.value)}`);
+    } else {
+      console.log(`stuck at ${where}: the page's thread is in\n${got.callFrames.slice(0, 25).map((f) => `  ${f.functionName || "(anonymous)"} ${f.url.split("/").pop()}:${f.location.lineNumber + 1}`).join("\n")}`);
+      await cdp.send("Debugger.resume");
+    }
+  } catch (e) {
+    console.log(`stuck at ${where}: couldn't ask the page (${(e as Error).message})`);
+  }
+}
 for (const e of ["uncaughtException", "unhandledRejection"] as const) process.on(e, (err) => {
   console.error([`stopped at ${where} after ${elapsed()} s: ${err instanceof Error ? err.message : String(err)}`, ...errors].join("\n\n"));
   process.exit(1);
@@ -62,6 +90,8 @@ async function visit(saved: string | null, only?: string) {
   const context = await contextOf({ viewport: { width: 1400, height: 1000 } });
   if (saved) await context.addInitScript((s) => localStorage.setItem("projectional-editor-v5", s), saved);
   const p = await context.newPage();
+  watched = await context.newCDPSession(p);
+  await watched.send("Debugger.enable");
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   p.on("console", (m) => { if (m.type() === "error") errors.push(`${where}: ${m.text()}`); });
   const click = async (selector: string, i = 0) => {
