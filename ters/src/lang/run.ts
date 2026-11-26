@@ -777,7 +777,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const enter = (c0: LambdaMeta, args0: Value[]): Value => {
     let c = c0, args = args0;
     // What the call gives, and the part still to fill in it, if any.
-    let result: Value = 0, hole: Data | null = null, at = 0;
+    let result: Value = 0, hole: Data | null = null, at = 0, moved = false;
     directDepth++;
     try {
       while (true) {
@@ -794,12 +794,25 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           if (hole) hole.fields[at] = r.top; else result = r.top;
           hole = r.hole; at = r.at;
         }
-        c = r.c; args = r.args;
+        c = r.c; args = r.args; moved = true;
       }
     }
     catch (e) {
+      const stops = e === NEED || e instanceof RangeError;
       if (e instanceof Aborted && aborts(c0.node)) e = NEED;
       if (e === NEED || e instanceof RangeError) { stopped(c0); if (c !== c0) stopped(c); }
+      // Stopped after calls made last: those gave nothing anyone can see,
+      // so what is left is the call made last, run on a machine of its own
+      // (what it gives put where it goes, L281b). Starting again from the
+      // first call, agent's search ran its first 3,000 steps again on each
+      // stop: 29,000 steps became over 86,000 (I368). Under fuel, from the
+      // first, which spends as the machine does.
+      if (stops && moved && !directFuel) {
+        const v = single(run((m) => { rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda); m.eval(c.node.body, bind(c.scope, c.node.params, args)); }));
+        if (!hole) return v;
+        hole.fields[at] = v;
+        return result;
+      }
       throw e;
     }
     finally { directDepth--; }
