@@ -4,22 +4,12 @@
 // "files" gets them as its folder, folders by their paths' parts
 // ("notes/a.txt"), so a page such as a file browser runs on a sample
 // folder here, not on one picked from the disk.
-import { browserWorld, type PickedFolder, type Store } from "../ters/src/lang/browser.ts";
+import { browserWorld, withFiles, type PickedFolder, type Store } from "../ters/src/lang/browser.ts";
 
 // The store with the example's own files under the program's prefix,
 // where the store has none of that name: written to the store, as Run's
 // files are.
-export function pageStore(store: Store, title: string, shipped: Record<string, string>): Store {
-  const prefix = `lab:${title}:`;
-  const extra = () => Object.keys(shipped).map((n) => prefix + n).filter((k) => store.getItem(k) === null);
-  return {
-    getItem: (k) => store.getItem(k) ?? (k.startsWith(prefix) && Object.hasOwn(shipped, k.slice(prefix.length)) ? shipped[k.slice(prefix.length)] : null),
-    setItem: (k, v) => store.setItem(k, v),
-    removeItem: (k) => store.removeItem?.(k),
-    get length() { return store.length + extra().length; },
-    key: (i) => (i < store.length ? store.key(i) : extra()[i - store.length] ?? null),
-  };
-}
+export const pageStore = (store: Store, title: string, shipped: Record<string, string>): Store => withFiles(store, title, shipped);
 
 // Those files as the folder a page picks.
 export function storedFolder(store: Store, title: string): PickedFolder {

@@ -726,7 +726,7 @@ export function pagePanels(host: PageHost) {
     void savedFor(code, main).then(async (made) => {
       // The runtimes with the solver, read if the page or its sound solves (E280).
       if (scriptSolves(made.script) || (made.sound !== undefined && scriptSolves(made.sound))) await loadSolving(scriptSolves(made.script) ? "both" : "worklet");
-      const url = URL.createObjectURL(new Blob([savedPageFile(title, made, corePageRuntimes(), coreWorkletRuntimes())], { type: "text/html" }));
+      const url = URL.createObjectURL(new Blob([savedPageFile(title, made, corePageRuntimes(), coreWorkletRuntimes(), host.files())], { type: "text/html" }));
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       if (open) {
         if (tab && !tab.closed) tab.location.href = url; else window.open(url, "_blank");

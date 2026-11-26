@@ -81,7 +81,7 @@ const { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, 
 const { withInverses } = compiles ? await import("../../compiler/src/inverses.ts") : ({} as typeof import("../../compiler/src/inverses.ts"));
 const { withOperationLambdas } = compiles ? await import("../../compiler/src/operation-values.ts") : ({} as typeof import("../../compiler/src/operation-values.ts"));
 const { withCharacterMaps } = compiles ? await import("../../compiler/src/character-maps.ts") : ({} as typeof import("../../compiler/src/character-maps.ts"));
-const { recordings, webCorePage } = compiles ? await import("./web.ts") : ({} as typeof import("./web.ts"));
+const { recordings, webCorePage, folderFiles } = compiles ? await import("./web.ts") : ({} as typeof import("./web.ts"));
 const { androidHostsC, nativeAppFolder } = compiles ? await import("./native-app.ts") : ({} as typeof import("./native-app.ts"));
 const { iosAppFolder } = compiles ? await import("./ios-app.ts") : ({} as typeof import("./ios-app.ts"));
 const { macosAppFolder } = compiles ? await import("./macos-app.ts") : ({} as typeof import("./macos-app.ts"));
@@ -732,7 +732,9 @@ const pageHost = hostFile && existsSync(hostFile) ? resolve(hostFile) : undefine
 // The program's page, for `ters build-web` and `ters build-app`, printed
 // from the core IR (C137c9).
 async function pageFile(): Promise<string> {
-  try { return await webCorePage(p.title, p.code, p.info, p.names, main, pageHost); } catch (e) { fail((e as Error).message.replace(/^(ters|lab): /, "")); }
+  // The files beside its tables, carried (G11a).
+  const files = existsSync(path) && statSync(path).isDirectory() ? folderFiles(path, p.code) : undefined;
+  try { return await webCorePage(p.title, p.code, p.info, p.names, main, pageHost, undefined, files); } catch (e) { fail((e as Error).message.replace(/^(ters|lab): /, "")); }
 }
 
 // Where a page's handler's maps may run (L280a's placement entries):
