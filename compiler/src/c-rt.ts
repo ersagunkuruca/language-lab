@@ -579,8 +579,10 @@ static lab_cell *lab_text_concat(lab_cell *a, lab_cell *b) {
 }` },
   // Random under \`seeded\` (C106): ters/src/lang/random.ts's generator,
   // xoshiro128** (Blackman and Vigna, 2018, public domain) seeded by
-  // SplitMix32, so every target draws the same numbers.
-  "rand.seed": { uses: [], c: `static uint32_t lab__r[4];
+  // SplitMix32, so every target draws the same numbers. Each thread has
+  // its own (C357): a map's items seeded on the pool's threads drew from
+  // one state, and clinic's table changed from run to run.
+  "rand.seed": { uses: [], c: `static _Thread_local uint32_t lab__r[4];
 static uint32_t lab__rotl(uint32_t x, int k) { return (x << k) | (x >> (32 - k)); }
 static double lab_rand_seed(double seed) {
   /* JavaScript's ToUint32 of the floor, exact for every double (C109). */
