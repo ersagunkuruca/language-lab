@@ -3,12 +3,13 @@
 // `set register` and `stepped` make a Machine from the last one's fields
 // with one or two changed, every step.
 //
-// one-holder.ts, asked with `rebuilds`, says from the program whether every
-// value of a record type has one holder, a constructor given fields of one
-// value of its type counting as a change of that value. Then each such
-// `make` whose fields come from one local, last in its function, writes
-// the changed fields into that local's value (core-js.ts prints it,
-// keeping a value made outside, which isn't one of its classes, as it was).
+// holders.ts says, per value (C327f), which `make`s are given fields of
+// one local of their type whose record nobody else holds, the make
+// counting as giving the local away. Each such make last in its function
+// writes the changed fields into that local's value (core-js.ts prints it,
+// keeping a value made outside, which isn't one of its classes, as it
+// was). one-holder.ts decided by type: one Depot held twice kept every
+// Depot a copy.
 //
 // What is read of a value after it was changed elsewhere, as `stepped`
 // reads `machine.pc` after `executed` took `machine`, was read before: each
@@ -21,22 +22,26 @@
 import type { Code, Id } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { oneHolder } from "../../ters/src/lang/one-holder.ts";
+import { holders } from "./holders.ts";
 import { kids, mapKids, type CoreIR, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 const isD = (t: LType | undefined, d: RType) => typeof t === "object" && t !== null && "variant" in t && t.key === d.key;
 
 export function ownedRecords(ir: CoreIR, code: Code, info: Info, names: Record<Id, string>, main: Id): number {
   let n = 0;
+  const roots = ir.funcs.flatMap((g, i) => (g.def === main && !g.inner ? [i] : []));
+  const into = holders(ir, roots).into;
   for (const d of ir.records) {
     if (d.mutable || !d.fields.length) continue;
     if (!ir.funcs.some((f) => found(f.body, (e) => e.k === "make" && e.t.key === d.key && rootOf(e, d) !== null))) continue;
     if (!readable(ir, d)) continue;
+    // A record given to a map's function as an item of a list or an array
+    // holders.ts doesn't follow (it knows no holders of items yet): there
+    // one-holder.ts, by type, still decides.
     const rebuilt = new Set<Id>();
-    if (!oneHolder(code, info, main, new Set([d.def]), new Set(), new Map(), names, undefined, true, rebuilt).ok) continue;
+    const byType = oneHolder(code, info, main, new Set([d.def]), new Set(), new Map(), names, undefined, true, rebuilt).ok;
     let here = 0;
-    for (const f of ir.funcs) {
-      f.body = inPlace(f, f.body, d, rebuilt, () => here++);
-    }
+    for (const f of ir.funcs) f.body = inPlace(f, f.body, d, (m, y) => { const b = f.binders?.[y]; if (!into.has(m) && !(byType && b && rebuilt.has(b))) return false; here++; return true; });
     if (!here) continue;
     for (const f of ir.funcs) { copyCaptures(ir, f, d); snapshot(f, d); }
     d.owned = true;
@@ -92,18 +97,18 @@ function copyCaptures(ir: CoreIR, f: SFunc, d: RType): void {
   void ir;
 }
 
-// The `make`s of d last in f, made from fields of a local the program's
-// check saw changed, written into it.
-function inPlace(f: SFunc, e: SExpr, d: RType, rebuilt: Set<Id>, count: () => void): SExpr {
+// The `make`s of d last in f, made from fields of one local, that holders
+// says may be written into it.
+type Make = Extract<SExpr, { k: "make" }>;
+function inPlace(f: SFunc, e: SExpr, d: RType, may: (m: Make, y: number) => boolean): SExpr {
   switch (e.k) {
-    case "let": return { ...e, body: inPlace(f, e.body, d, rebuilt, count) };
-    case "if": return { ...e, then: inPlace(f, e.then, d, rebuilt, count), else: inPlace(f, e.else, d, rebuilt, count) };
-    case "case": return { ...e, arms: e.arms.map((a) => a && inPlace(f, a, d, rebuilt, count)) };
+    case "let": return { ...e, body: inPlace(f, e.body, d, may) };
+    case "if": return { ...e, then: inPlace(f, e.then, d, may), else: inPlace(f, e.else, d, may) };
+    case "case": return { ...e, arms: e.arms.map((a) => a && inPlace(f, a, d, may)) };
     case "make": {
       if (e.t.key !== d.key) return e;
-      const y = rootOf(e, d), b = y === null ? undefined : f.binders?.[y];
-      if (y === null || !b || !rebuilt.has(b)) return e;
-      count();
+      const y = rootOf(e, d);
+      if (y === null || !may(e, y)) return e;
       const same = e.args.flatMap((a, i) => (a.k === "get" && a.t.key === d.key && a.i === i ? [i] : []));
       return { ...e, into: y, same };
     }

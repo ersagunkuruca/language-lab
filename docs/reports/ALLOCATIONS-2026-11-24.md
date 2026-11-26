@@ -799,3 +799,37 @@ anything else or used any other way. `NO_CLOSURE_PARTS=1` turns it off.
 None of these programs makes a closure any more, and all eight print the
 same. mini 8,000 runs 0.39 to 0.45 s before and 0.36 to 0.39 s after,
 about 8% faster. The others take the same time, within the noise.
+
+## C327f part 4a, records written in place per value (2026-11-26)
+
+owned-records.ts writes a record made from fields of one local of its
+type into that local when holders.ts says nobody else holds it, instead
+of when one-holder.ts says no value of the type has two holders. The
+make counts as giving the local away, so a local read again after it,
+handed to a function that keeps it, or held twice, keeps its copy.
+
+To find what the by-type rule found, holders.ts reads more closely:
+
+- a field only read (an item at, a length) is borrowed, as a local is;
+- a number, a text, a list or a function may be held anywhere, as
+  nothing writes one in place and what comes out of one is shared;
+- a part read out of a value gives the value away only where the part is
+  given (`first` of a set of texts reads the set);
+- a make works out its inputs before its fields go, as a call does
+  (`set register` reads the machine's registers, then rebuilds it);
+- a closure capturing a record of such fields captures a copy, which
+  owned-records.ts makes;
+- `handleK:8li2…` no longer counts as handing function 8 to the runtime.
+
+In-place sites, by type before and per value now, on all 22 benchmarks
+on JavaScript and WebAssembly: the same in machine, crew, moths, scan and
+greenhouse; new in depot (11 on JavaScript), mnist (9) and clinic (1);
+lost in bazaar's `plan anti` on JavaScript (its input comes back from
+`both`, run on the threads), called once a query. trek's `walked` is no
+longer called after lowering. Structs made on WebAssembly are the same on
+the eight benchmarks but mnist (−3 k), and every output is the same.
+
+Left (part 4b): a record given to a map's function as an item of a list
+or an array (drift's `moved`). holders.ts gives what is read out of a
+list or an array more than one holder, so there owned-records.ts still
+asks one-holder.ts.
