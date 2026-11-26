@@ -45,6 +45,7 @@ const MATH_AT = 128;
 import { keysArrays, TABLE_RT, tableRt } from "./wasm-table.ts";
 import { FRAME_FN, frameSpares } from "./frame-spares.ts";
 import { reasonOf, siteOf } from "./stops.ts";
+import { originalOf, PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { answerByShapes, type Shape } from "../../ters/src/lang/hosts.ts";
 import { norm } from "../../ters/src/lang/int.ts";
@@ -571,6 +572,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     return { ...g, types: { ...g.types, ...colTypes(g.array) }, body: g.body.replace(/struct\.new \$buf/g, `${colArrays.get(g.array)!.map((_, f) => `ref.null $col${f}`).join("\n")}\nstruct.new $buf`) };
   };
   const rt0 = (name: string): RtFn => {
+    if (/^grid\.found\.\d+$/.test(name)) return gridRt(Number(name.slice(11)));
     if (STACK.test(name)) return stackRt(name);
     if (FSTACK.test(name)) return fstackRt(name);
     if (FRAME_FN.test(name)) return frameRt(name);
@@ -643,6 +645,120 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (e.k === "op" && e.op === "mod") need("number.mod");
     if (e.k === "op" && INT32_RT.includes(e.op)) need(`int32.${e.op}`);
     kids(e).forEach(rtCalls);
+  };
+  // neighbours on a grid's `grid found` (C293), as c.ts gridC writes it:
+  // each place's neighbours, the places j other than i whose squared
+  // differences, added part by part as the definition adds them, are no
+  // more than reach squared, in order. Each place's cell, a little wider
+  // than reach, is hashed to one of 2n or more buckets, the places sorted
+  // by bucket (counting), and each place looks through the buckets of the
+  // cells around its own for the places in those cells. Places of up to 3
+  // Float64 parts in an array, the lists Ints in arrays; otherwise as
+  // compiled. The function's body becomes a call to `grid.found.<i>`.
+  const gridded = new Map<number, { pa: AType; r: AType; inner: AType; rec?: RType; D: number }>();
+  if (!shader && !int32) funcs.forEach((f, i) => {
+    const pa = f.params[0], r = f.result;
+    if ((f as ViewFunc).viewSlots || f.partial || f.spends || f.params.length !== 5 || originalOf(f.def) !== GRID_FOUND || !isArray(pa) || f.params[4] !== "f64" || !isArray(r) || !isArray(r.item) || r.item.item !== "int") return;
+    const inner = r.item;
+    if ([pa, r, inner].some((a) => versioned.has(a.index) || colArrays.has(a.index))) return;
+    const pt = pa.item;
+    const rec = isRecord(pt) && !pt.mutable && pt.fields.length <= 3 && pt.fields.every((x) => x.t === "f64") ? pt : undefined;
+    const D = pt === "f64" ? 1 : rec ? rec.fields.length : 0;
+    if (!D) return;
+    gridded.set(i, { pa, r, inner, rec, D });
+    funcs[i] = { ...f, body: { k: "rt", fn: `grid.found.${i}`, args: [{ k: "local", i: 0 }, { k: "local", i: 4 }] } };
+  });
+  const gridRt = (i: number): RtFn => {
+    const { pa, r, inner, rec, D } = gridded.get(i)!;
+    const of = (a: AType, x: string) => ({ ...a, key: `${x}:${a.key}` });
+    const narrow = (k: number) => !!rec && k === 0 && isFloat32(rec);
+    const read = (k: number) => (rec ? [`struct.get $Prec ${k}`, ...(narrow(k) ? ["f64.promote_f32"] : [])] : []);
+    const loop = (v: string, to: string[], body: string[], from = ["i32.const 0"]) => [...from, `local.set $${v}`, "block void", "loop void", `local.get $${v}`, ...to, "i32.ge_u", "br_if 1", ...body, `local.get $${v}`, "i32.const 1", "i32.add", `local.set $${v}`, "br 0", "end", "end"];
+    const each = (f: (k: number) => string[]) => Array.from({ length: D }, (_, k) => f(k)).flat();
+    // A cell's bucket: its parts mixed (Fibonacci hashing), the top bits.
+    const bucket = (part: (k: number) => string[]) => ["i64.const 0", ...each((k) => [...part(k), "i64.xor", "i64.const -7046029254386353131", "i64.mul"]), "i64.const 64", "local.get $bits", "i64.extend_i32_u", "i64.sub", "i64.shr_u", "i32.wrap_i64"];
+    const at = (arr: string, j: string, k: number) => [`local.get $${arr}`, `local.get $${j}`, `i32.const ${D}`, "i32.mul", ...(k ? [`i32.const ${k}`, "i32.add"] : [])];
+    const sq = (k: number) => [...at("x", "i", k), "array.get $gF", ...at("x", "j", k), "array.get $gF", "f64.sub", "local.tee $d", "local.get $d", "f64.mul"];
+    const made = (I: string, n: string, bytes: boolean) => ["i32.const 0", `local.get $${n}`, "i32.const 0", ...(bytes ? ["ref.null $bytes"] : []), `struct.new $${I}buf`, "i32.const 0", `local.get $${n}`, `struct.new $${I}arr`];
+    const body = [
+      "local.get $a", "struct.get $Parr 2", "local.set $n",
+      "local.get $a", "struct.get $Parr 0", "struct.get $Pbuf 0", "local.set $its",
+      "local.get $a", "struct.get $Parr 1", "local.set $base",
+      "local.get $r", "local.get $r", "f64.mul", "local.set $r2",
+      "local.get $r", "f64.const 1.00000095367431640625", "f64.mul", "local.set $cell",
+      "i32.const 16", "local.set $nb", "i32.const 4", "local.set $bits",
+      "block void", "loop void", "local.get $nb", "local.get $n", "i32.const 1", "i32.shl", "i32.ge_u", "br_if 1",
+      "local.get $nb", "i32.const 1", "i32.shl", "local.set $nb", "local.get $bits", "i32.const 1", "i32.add", "local.set $bits", "br 0", "end", "end",
+      "local.get $n", `i32.const ${D}`, "i32.mul", "array.new_default $gF", "local.set $x",
+      "local.get $n", `i32.const ${D}`, "i32.mul", "array.new_default $gI", "local.set $c",
+      `i32.const ${D}`, "array.new_default $gI", "local.set $t",
+      "local.get $n", "array.new_default $gU", "local.set $h",
+      "local.get $nb", "i32.const 1", "i32.add", "array.new_default $gU", "local.set $st",
+      "local.get $n", "array.new_default $gU", "local.set $ord",
+      "local.get $n", "array.new_default $gU", "local.set $near",
+      // Each place's parts and cell, and its bucket counted.
+      ...loop("i", ["local.get $n"], [
+        "local.get $its", "local.get $base", "local.get $i", "i32.add", "array.get $Pitems", "local.set $it",
+        ...each((k) => [
+          ...at("x", "i", k), "local.get $it", ...read(k), "array.set $gF",
+          ...at("c", "i", k), "local.get $it", ...read(k), "local.get $cell", "f64.div", "f64.floor", "i64.trunc_sat_f64_s", "array.set $gI",
+        ]),
+        "local.get $h", "local.get $i", ...bucket((k) => [...at("c", "i", k), "array.get $gI"]), "local.tee $b", "array.set $gU",
+        "local.get $st", "local.get $b", "local.get $st", "local.get $b", "array.get $gU", "i32.const 1", "i32.add", "array.set $gU",
+      ]),
+      // Each bucket's end; then the places put in from the last, so that
+      // each bucket runs, in order, from its start to the next one's.
+      ...loop("q", ["local.get $nb"], ["local.get $st", "local.get $q", "local.get $st", "local.get $q", "i32.const 1", "i32.sub", "array.get $gU", "local.get $st", "local.get $q", "array.get $gU", "i32.add", "array.set $gU"], ["i32.const 1"]),
+      "local.get $st", "local.get $nb", "local.get $n", "array.set $gU",
+      "local.get $n", "local.set $i",
+      "block void", "loop void", "local.get $i", "i32.eqz", "br_if 1", "local.get $i", "i32.const 1", "i32.sub", "local.set $i",
+      "local.get $h", "local.get $i", "array.get $gU", "local.set $b",
+      "local.get $st", "local.get $b", "local.get $st", "local.get $b", "array.get $gU", "i32.const 1", "i32.sub", "local.tee $q", "array.set $gU",
+      "local.get $ord", "local.get $q", "local.get $i", "array.set $gU", "br 0", "end", "end",
+      "local.get $n", "array.new_default $Oitems", "local.set $ob",
+      ...loop("i", ["local.get $n"], [
+        "i32.const 0", "local.set $m",
+        ...loop("o", [`i32.const ${3 ** D}`], [
+          // The cell o steps away, and the places in its bucket that are in it.
+          "local.get $o", "local.set $w",
+          ...each((k) => ["local.get $t", `i32.const ${k}`, ...at("c", "i", k), "array.get $gI", "local.get $w", "i32.const 3", "i32.rem_u", "i64.extend_i32_u", "i64.add", "i64.const 1", "i64.sub", "array.set $gI", "local.get $w", "i32.const 3", "i32.div_u", "local.set $w"]),
+          ...bucket((k) => ["local.get $t", `i32.const ${k}`, "array.get $gI"]), "local.set $b",
+          "local.get $st", "local.get $b", "i32.const 1", "i32.add", "array.get $gU", "local.set $hi",
+          ...loop("q", ["local.get $hi"], [
+            "local.get $ord", "local.get $q", "array.get $gU", "local.tee $j", "local.get $i", "i32.ne",
+            ...each((k) => [...at("c", "j", k), "array.get $gI", "local.get $t", `i32.const ${k}`, "array.get $gI", "i64.eq", "i32.and"]),
+            "if void",
+            ...sq(0), ...Array.from({ length: D - 1 }, (_, k) => [...sq(k + 1), "f64.add"]).flat(),
+            "local.set $s",
+            "local.get $r2", "local.get $s", "f64.lt", "i32.eqz",
+            "if void",
+            // Kept, in order: the ones past it moved up one.
+            "local.get $m", "local.set $z", "local.get $m", "i32.const 1", "i32.add", "local.set $m",
+            "block void", "loop void", "local.get $z", "i32.eqz", "br_if 1", "local.get $near", "local.get $z", "i32.const 1", "i32.sub", "array.get $gU", "local.get $j", "i32.le_u", "br_if 1",
+            "local.get $near", "local.get $z", "local.get $near", "local.get $z", "i32.const 1", "i32.sub", "array.get $gU", "array.set $gU",
+            "local.get $z", "i32.const 1", "i32.sub", "local.set $z", "br 0", "end", "end",
+            "local.get $near", "local.get $z", "local.get $j", "array.set $gU",
+            "end", "end",
+          ], ["local.get $st", "local.get $b", "array.get $gU"]),
+        ]),
+        "local.get $m", "array.new_default $Iitems", "local.set $ib",
+        ...loop("q", ["local.get $m"], ["local.get $ib", "local.get $q", "local.get $near", "local.get $q", "array.get $gU", "ref.i31", "array.set $Iitems"]),
+        "local.get $ob", "local.get $i", "local.get $ib", ...made("I", "m", byteArray(inner)), "array.set $Oitems",
+      ]),
+      "local.get $ob", ...made("O", "n", byteArray(r)),
+    ];
+    const scratch = (key: string) => ({ key, name: key, fields: [] }) as unknown as RType;
+    const types: Record<string, unknown> = {
+      Parr: pa, Pbuf: of(pa, "buf"), Pitems: of(pa, "items"), Oarr: r, Obuf: of(r, "buf"), Oitems: of(r, "items"), Iarr: inner, Ibuf: of(inner, "buf"), Iitems: of(inner, "items"),
+      gF: scratch("grid.f64s"), gI: scratch("grid.i64s"), gU: scratch("grid.i32s"), ...(rec ? { Prec: rec } : {}),
+    };
+    const i32s = ["n", "base", "nb", "bits", "i", "j", "q", "o", "w", "m", "z", "b", "hi"].map((n) => [n, "i32"] as [string, VT]);
+    const refs = [["its", "Pitems"], ["x", "gF"], ["c", "gI"], ["t", "gI"], ["h", "gU"], ["st", "gU"], ["ord", "gU"], ["near", "gU"], ["ob", "Oitems"], ["ib", "Iitems"]] as unknown as [string, VT][];
+    return {
+      name: `grid.found.${i}`, params: [["a", "Parr" as VT], ["r", "f64"]], result: "Oarr" as VT, uses: [], types,
+      locals: [...i32s, ...(["r2", "cell", "s", "d"].map((n) => [n, "f64"] as [string, VT])), ["it", (rec ? "Prec" : "f64") as VT], ...refs],
+      body: body.join("\n"),
+    };
   };
   // An array's views held by value in a loop (C327c2, wasm-views.ts):
   // not where the view is the version (C285) or the buffer is columns.
@@ -754,6 +870,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const hstackIndex = structs.length;
   if (stack) structs.push({ name: "hstack", fields: [], final: true, refs: true });
   const recIndex = new Map<string, number>(), baseIndex = new Map<string, number>();
+  // neighbours on a grid's scratch arrays (gridRt).
+  if (gridded.size) for (const [key, items] of [["grid.f64s", "f64"], ["grid.i64s", "i64"], ["grid.i32s", "i32"]] as const) { recIndex.set(key, structs.length); structs.push({ name: key, fields: [], final: true, items }); }
   const ident = (x: string) => x.replace(/[^\w]+/g, "_");
   // A Float32's value is held as an f32 (C309): a binary32 already, so
   // demoted where it is made and promoted where it is read, exactly.
@@ -817,6 +935,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     arrIndex.set(a.key, k + 2);
     // Its buffer, where a loop holds a view by value (C327c2).
     arrIndex.set(`buf:${a.key}`, k + 1);
+    arrIndex.set(`items:${a.key}`, k);
   }
   // A table (C63j, wasm-table.ts): each slot's state, its keys and its
   // values, the store holding them, a version (the newest holds the store,
@@ -1093,7 +1212,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // places is one node), so walking it as a tree went over the ray
   // marcher's motor exponentially often, minutes in the editor.
   // (A view held by value's read is the array's, written again here, C327c2.)
-  const rtPartial = (n: string) => !!(VIEW_FN.test(n) || FRAME_FN.test(n) ? rt(n) : runtime(n)).partial;
+  const rtPartial = (n: string) => !!(VIEW_FN.test(n) || FRAME_FN.test(n) || n.startsWith("grid.found.") ? rt(n) : runtime(n)).partial;
   const fails = new WeakMap<SExpr, boolean>();
   const failing = (e: SExpr): boolean => {
     let r = fails.get(e);
@@ -1556,6 +1675,9 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const floats = shader ? [] : entries.filter(([f]) => f.result === "f64").map(([f]) => ({ name: exportName(f), partial: !!f.partial }));
   return { bytes, wat: text + "\n", ...(counting ? { made } : {}), exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name), ...rtExports.map((f) => RT_EXPORTS[f.name])], floats, ...(lowered.stops?.length ? { stops: lowered.stops } : {}), ...(opts.hosts && worldOps.some((x) => x.op.startsWith("host:")) ? { hosts: opts.hosts } : {}) };
 }
+
+// The library's `grid found` (neighbours on a grid), which gridRt writes.
+const GRID_FOUND = PRELUDE_DEFS["grid found"];
 
 // A loop's value stepped (C207k, untagged-ints.ts valueLoop): i64's least
 // when it went past an i64.

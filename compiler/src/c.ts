@@ -20,8 +20,7 @@
 // then the fields, one C struct per case. A case with no fields is one
 // static cell whose count is 0, which means it is never counted or freed.
 import { TICKET_V } from "../../ters/src/lang/std.ts";
-import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { originalOf } from "../../ters/src/lang/prelude-ids.ts";
+import { originalOf, PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
 // Values are owned: whoever holds one gives it on (to a call, a field, a
 // let) or drops it, so a function owns its inputs. Each use of a local is
 // the last one or a `dup`, and a local that one branch doesn't use is
@@ -112,7 +111,7 @@ const PRINTED = new Set<SExpr["k"]>([
 // std's Array's runtime functions, one copy per item type (scalar.ts).
 const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
 // The library's `grid found` (neighbours on a grid), which gridC writes.
-const GRID_FOUND = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "grid found");
+const GRID_FOUND = PRELUDE_DEFS["grid found"];
 // A place by its cell's key, and its number; sorted by key, then number.
 const GRID_C = `#ifndef LAB_GRID_SIDE
 #define LAB_GRID_SIDE ((int64_t)1 << 18)

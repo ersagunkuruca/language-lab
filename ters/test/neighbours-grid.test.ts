@@ -91,10 +91,10 @@ test("C and a WASI command find a program's neighbours on the grid and print wha
   assert.equal(readFileSync(out, "utf8"), want);
 });
 
-// C's own grid (c.ts gridC, C293) on places of one part and of two, and
-// on places spread too far apart for a cell table, where it sorts them
-// by cell: the lists the evaluator gives.
-test("C's own grid gives the evaluator's lists on a line, in the plane, and spread far apart", { skip }, () => {
+// C's own grid (c.ts gridC, C293) and WebAssembly's (wasm.ts gridRt) on
+// places of one part and of two, and on places spread too far apart for
+// a cell table, where C sorts them by cell: the lists the evaluator gives.
+test("C's and WebAssembly's own grids give the evaluator's lists on a line, in the plane, and spread far apart", { skip }, () => {
   const dir = join(mkdtempSync(join(tmpdir(), "ters-near-grid-c-")), "near");
   mkdirSync(dir);
   writeFileSync(join(dir, "code.json"), JSON.stringify({ nodes: {}, defs: [] }) + "\n");
@@ -122,4 +122,10 @@ test("C's own grid gives the evaluator's lists on a line, in the plane, and spre
   run(ters, "native", dir, "-o", join(dir, "near"));
   assert.match(readFileSync(join(dir, "near.c"), "utf8"), /grid found, on a grid/);
   assert.equal(spawnSync(join(dir, "near"), ["300"], { encoding: "utf8" }).stdout, want);
+  run(ters, "wasi", dir, "-o", join(dir, "near.wasm"));
+  const out = join(dir, "out.txt"), fd = openSync(out, "w");
+  const w = new WASI({ version: "preview1", args: ["near", "300"], stdout: fd, returnOnExit: true });
+  assert.equal(w.start(new WebAssembly.Instance(new WebAssembly.Module(readFileSync(join(dir, "near.wasm"))), wasiImports(w))), 0);
+  closeSync(fd);
+  assert.equal(readFileSync(out, "utf8"), want);
 });
