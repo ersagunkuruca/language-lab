@@ -2006,7 +2006,13 @@ export function buildPrelude(): Module {
   // JSON (L190, RFC 8259): a Json value as its text. Text is quoted with
   // ", \\ and the control characters escaped; a Float64 is written as show
   // writes it, which JSON reads (finite, with e for large and small).
-  const hexAt = (n: Id) => k.call(itemAt, k.call(TEXT_OPS.characters, k.lit("0123456789abcdef")), n, k.lit("0"));
+  // Digits from character codes (I371): a list of the digits made for
+  // every character cost most of reading Base64 or hex.
+  const ofCode = (n: Id, or: string) => k.call(S.first, k.thunk(() => k.call(TEXT_OPS.fromCode, n)), k.thunk(() => k.lit(or)));
+  const codeOf = (c: Id) => k.call(S.first, k.thunk(() => k.call(TEXT_OPS.code, c)), k.thunk(() => k.int(-1)));
+  const hexDigit = k.def("hex digit");
+  k.define(hexDigit, k.fn(["value"], (n) => ofCode(k.if(iLess(n, k.int(10)), iAdd(n, k.int(48)), iAdd(n, k.int(87))), "0")));
+  const hexAt = (n: Id) => k.call(hexDigit, n);
   const jsonChar = def("json character", ["character"], (ch) => k.let("code", k.call(S.first, k.thunk(() => k.call(TEXT_OPS.code, ch)), k.thunk(() => k.int(0))), (c) =>
     k.if(iSame(c, k.int(34)), k.lit("\\\""), k.if(iSame(c, k.int(92)), k.lit("\\\\"), k.if(iSame(c, k.int(10)), k.lit("\\n"),
     k.if(iLess(c, k.int(32)), texts(k.lit("\\u00"), hexAt(k.call(INT_OPS.shiftDown, c, k.int(4))), hexAt(k.call(INT_OPS.bitAnd, c, k.int(15)))), ch))))));
@@ -2241,8 +2247,11 @@ export function buildPrelude(): Module {
   laws.push(splitUndoes);
   // Bytes as text (L189d): hex, two digits a byte, and Base64 (RFC 4648 §4),
   // three bytes as four characters, = filling the last group.
-  const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  const b64At = (i: Id) => k.call(itemAt, jChars(B64), i, k.lit("="));
+  
+  const b64Digit = k.def("base64 digit");
+  k.define(b64Digit, k.fn(["value"], (i) => k.if(iLess(i, k.int(26)), ofCode(iAdd(i, k.int(65)), "="), k.if(iLess(i, k.int(52)), ofCode(iAdd(i, k.int(71)), "="),
+    k.if(iLess(i, k.int(62)), ofCode(iAdd(i, k.int(-4)), "="), k.if(k.equal(i, k.int(62)), k.lit("+"), k.lit("/")))))));
+  const b64At = (i: Id) => k.call(b64Digit, i);
   const sh = (a: Id, n: number) => k.call(INT_OPS.shiftDown, a, k.int(n)), band = (a: Id, m: number) => k.call(INT_OPS.bitAnd, a, k.int(m));
   const b64Groups = k.def("base64 groups");
   k.define(b64Groups, k.fn(["bytes"], (xs) => k.match(xs, [
@@ -2258,10 +2267,11 @@ export function buildPrelude(): Module {
   ])));
   const base64Of = def("base64 of", ["bytes"], (b) => bytesIn(b, (xs) => k.call(TEXT_OPS.joinAll, k.call(b64Groups, xs), k.lit(""))));
   const b64Bad = () => k.call(ABORT_OP, k.lit("bytes of base64: only A to Z, a to z, 0 to 9, + and /, with = at the end"));
-  const b64Value = (c: Id) => k.match(k.call(positionOf, jChars(B64), c), [
-    { variant: NONE, names: [], body: () => b64Bad() },
-    { variant: SOME, names: ["value"], body: ([i]) => i },
-  ]);
+  const b64Read = k.def("base64 value");
+  k.define(b64Read, k.fn(["character"], (c) => k.let("code", codeOf(c), (n) => k.if(codeIn(n, 65, 90), iAdd(n, k.int(-65)),
+    k.if(codeIn(n, 97, 122), iAdd(n, k.int(-71)), k.if(codeIn(n, 48, 57), iAdd(n, k.int(4)),
+    k.if(k.equal(n, k.int(43)), k.int(62), k.if(k.equal(n, k.int(47)), k.int(63), b64Bad()))))))));
+  const b64Value = (c: Id) => k.call(b64Read, c);
   const b64Bytes = k.def("base64 bytes");
   // Four values make three bytes; two or three at the end, one or two.
   k.define(b64Bytes, k.fn(["values"], (vs) => k.match(vs, [
@@ -2279,10 +2289,10 @@ export function buildPrelude(): Module {
   const bytesOfBase64 = def("bytes of base64", ["text"], (t) => Bt(k.call(b64Bytes, k.call(map, k.call(keep, k.call(TEXT_OPS.characters, t), k.fn(["character"], (c) => k.call(S.not, jIs(c, "=")))), k.fn(["character"], (c) => b64Value(c))))));
   const hexOf = def("hex of", ["bytes"], (b) => bytesIn(b, (xs) => k.call(TEXT_OPS.joinAll, k.call(map, xs, k.fn(["byte"], (x) => texts(hexAt(sh(x, 4)), hexAt(band(x, 15))))), k.lit(""))));
   const hexBad = () => k.call(ABORT_OP, k.lit("bytes of hex: two hex digits a byte, 0 to 9 and a to f"));
-  const hexValue = (c: Id) => k.match(k.call(positionOf, jChars("0123456789abcdef"), k.call(lowercase, c)), [
-    { variant: NONE, names: [], body: () => hexBad() },
-    { variant: SOME, names: ["value"], body: ([i]) => i },
-  ]);
+  const hexRead = k.def("hex value");
+  k.define(hexRead, k.fn(["character"], (c) => k.let("code", codeOf(c), (n) => k.if(codeIn(n, 48, 57), iAdd(n, k.int(-48)),
+    k.if(codeIn(n, 97, 102), iAdd(n, k.int(-87)), k.if(codeIn(n, 65, 70), iAdd(n, k.int(-55)), hexBad()))))));
+  const hexValue = (c: Id) => k.call(hexRead, c);
   const hexBytes = k.def("hex bytes");
   k.define(hexBytes, k.fn(["digits"], (ds) => k.match(ds, [
     { variant: NIL, names: [], body: () => k.x(NIL) },
