@@ -54,7 +54,7 @@ export type RunAsk = { shipped?: Record<string, unknown>; code: SentCode; names:
 // Run's worker is kept between runs and started before the first (I177):
 // `warm` checks the program, so the library's check is kept by the time
 // Run main is pressed.
-export type WarmAsk = { shipped?: Record<string, unknown>; warm: true; code: SentCode; names: Names; pins: Pins; held?: [Id, string][]; def: Id };
+export type WarmAsk = { shipped?: Record<string, unknown>; warm: true; code: SentCode; names: Names; pins: Pins; held?: [Id, string][]; def: Id; args?: boolean };
 // args: main takes the command line's words, as `ters run` gives them (E212).
 // A page compiled the way "Open in a tab" does (page.ts corePageFile), off the
 // page's thread: the preview swaps it in when it's ready (main.ts startPage).
@@ -119,7 +119,7 @@ function withInput(world: World, stdin: string | undefined): World {
 // for running and its arithmetic resolved (run.ts resolvedFor, kept by
 // the code) are kept too: calc's run was 0.14 s of checking and 0.6 s of
 // resolving each time, then printing `→ 0` at once.
-let lastAsk: { key: string; code: Code; def?: Id; lib?: ReturnType<typeof checkedForRun> } | null = null;
+let lastAsk: { key: string; code: Code; def?: Id; lib?: ReturnType<typeof checkedForRun>; main?: { args: boolean; printed: CoreMain | null } } | null = null;
 const askKey = (given: SentCode, names: Names, pins: Pins, held: [Id, string][]) => JSON.stringify([given, names, pins, held]);
 function checked(given: SentCode, names: Names, pins: Pins, def: Id, held: [Id, string][] = [], key = askKey(given, names, pins, held)): ReturnType<typeof checkedForRun> {
   if (lastAsk?.key !== key) lastAsk = { key, code: receivedCode(given) };
@@ -188,8 +188,21 @@ function answer(e: MessageEvent<Ask>) {
   if ("held" in e.data && !("choices" in e.data)) e.data.held = placed(e.data.held);
   else placed([]);
   if ("warm" in e.data) {
-    const { code, names, pins, def, held } = e.data;
-    try { const lib = checked(code, names, pins, def, held); resolvedFor(lib.code, lib.info, lib.names); } catch { /* the run says what's wrong */ }
+    const { code, names, pins, def, held, args = false } = e.data;
+    let lib: ReturnType<typeof checked>;
+    try { lib = checked(code, names, pins, def, held); } catch { return post({ checking: false }); /* the run says what's wrong */ }
+    // Then what its run needs (I372): main printed from the core IR, or,
+    // where it doesn't lower, the arithmetic resolved for the evaluator,
+    // which machine's main never uses (3.5 s of its first Run's Checking…).
+    // After an ask already waiting, as a Run pressed now.
+    setTimeout(() => {
+      if (lastAsk?.lib !== lib || lastAsk.main?.args === args) return;
+      try {
+        const printed = coreMain(lib.code, lib.info, lib.names, def, args);
+        lastAsk.main = { args, printed };
+        if (!printed) resolvedFor(lib.code, lib.info, lib.names);
+      } catch { /* the run says what's wrong */ }
+    }, 0);
     return post({ checking: false });
   }
   if ("choices" in e.data) {
@@ -361,7 +374,8 @@ function answer(e: MessageEvent<Ask>) {
     // main printed from the core IR, as ters compile does (E244): machine's
     // run takes 12 s in the evaluator, a fraction of a second printed. The
     // evaluator where main doesn't lower there.
-    const printed = coreMain(lib.code, info, lib.names, def, !!args);
+    const kept = lastAsk?.lib === lib && lastAsk.main?.args === !!args ? lastAsk.main : undefined;
+    const printed = kept ? kept.printed : coreMain(lib.code, info, lib.names, def, !!args);
     if (printed && runPrinted(printed, info, args, rt.world, rt.print, flush, () => [...wrote])) return;
     // With its arguments main gives an exit code, which shows when it isn't 0.
     const exit = (c: number) => (c ? `exit ${c}` : "unit");

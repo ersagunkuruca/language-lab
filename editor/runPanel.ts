@@ -60,7 +60,7 @@ export function runPanel(host: RunHost) {
     if (running || (warmed?.code === code && warmed.def === def)) return;
     idle ??= newWorker();
     warmed = { code, def };
-    const warm: WarmAsk = { ...shipped(), warm: true, code: sendCode(code), names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), def };
+    const warm: WarmAsk = { ...shipped(), warm: true, code: sendCode(code), names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), def, args: !!runGiven()?.args };
     // Run pressed before it's done says it's checking (I320).
     warming = true;
     idle.onmessage = (e: MessageEvent<RunSays>) => { if ("checking" in e.data) warming = false; };
