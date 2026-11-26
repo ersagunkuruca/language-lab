@@ -62,7 +62,10 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
   // Each new node's type, from the nodes it was made of (I203: no check
   // again). A call's facts keyed by its id go with its contents.
   const typeOf = new OverMap(info.typeOf), answered = new OverSet(info.answered ?? new Set<Id>()), spread = new OverSet(info.spread ?? new Set<Id>());
-  const parent = parentLookup(code);
+  // Looked up only where a call is hoisted (each node's parent found was
+  // most of this pass where none is).
+  let parents: ((id: Id) => Id | undefined) | null = null;
+  const parent = (id: Id) => (parents ??= parentLookup(code))(id);
   const rowAt = (id: Id): Row => {
     for (let at = parent(id); at !== undefined; at = parent(at)) {
       if (code.nodes[at]?.kind !== "lambda") continue;
