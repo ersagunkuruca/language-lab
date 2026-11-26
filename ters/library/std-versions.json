@@ -35,7 +35,8 @@
 "02fj0jdgh65pn83emc33sleo60",
 "8bv8skottoutbisc31cdp7g9cu",
 "9h68msoaek42ckvlukj2hrdpq2",
-"0d3farc05hh2unnt4jjhhl7ehh"
+"0d3farc05hh2unnt4jjhhl7ehh",
+"bdcfc28bbek93prarq2sts7daq"
 ],
 "std.await": [
 "0aqlsnjom5acg5ccjq99h8vmhu"
@@ -87,7 +88,8 @@
 "7q49r1d62hqdkjstn1kt1g2l2q"
 ],
 "std.frame": [
-"4ppe1pf95fhprlsqprpqc55e8p"
+"4ppe1pf95fhprlsqprpqc55e8p",
+"99v9nmspj519j3mca11mfqgb9j"
 ],
 "std.html": [
 "iam6vso97un2hp94dotbmgna08",
@@ -102,7 +104,11 @@
 "blor512d1ph8f0kdie1joi2dvc",
 "vnbjtiv47e811fq77dm46mlkou",
 "9nm41079fdhvcqc3fno5dtpsjt",
-"2tssh0f1hdvj04uht9bap5v8a6"
+"2tssh0f1hdvj04uht9bap5v8a6",
+"j5akih5l4mfhho55qkbsq0fsu5"
+],
+"std.image": [
+"ah5vbv8b0r2ggucn0dgmegsn37"
 ],
 "std.input": [
 "ht1k8cnv511l1unh0vife736t5",
@@ -155,7 +161,8 @@
 "lmi44oakeqlfmpprr2vvpgh9un"
 ],
 "std.pass": [
-"9pri43i9dqakvv83c6mpdao904"
+"9pri43i9dqakvv83c6mpdao904",
+"hgprfmrkao028l6leqdbno3u8c"
 ],
 "std.permissions": [
 "gtdudc7ammi5tmdb3eua88i74s"

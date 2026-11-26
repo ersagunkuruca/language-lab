@@ -40,6 +40,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| G11d | The flock's floor from a file (examples/flock-frame-page): floor.ppm, four tiles a side, read by `ppm image` (written in Ters: a P3 file's width, height, largest value and texels, its comments cut off) and copied into the texture "ground" by the frame's first pass; the floor's corners carry where they are on it, and its fragment samples it | #3417 |
+| G11c | An image as a texture: std `Image` (width, height, texels row by row from the top left) and a frame's `copy(image, into)` pass, which puts the image into the texture its target names at the image's own size, for later passes to sample as they sample a pass's target. raster.ts fills the texture; gpu-frame.ts writes it only when it isn't the image the texture last held (frames-browser checks the same pixels and 0 bytes the second time); no compiler change | #3417 |
 | G11b | A mesh from a file (examples/flock-frame-page): `obj mesh`, written in Ters, reads an OBJ subset (`v` positions, `f` faces of any size fanned into triangles, `v/t/n` corners read by their position) from text, and the flock's bird is bird.obj beside the program, read by `read file` in main and carried by its page | #3415 |
 | G11a | A page carries the files its program reads by a name written in it (`read file("bird.obj")`, `read bytes`): `ters build-web` and the editor's apps put them in the page as JSON (text as text, other bytes as the page's store keeps them), and the page's store answers reads from them before its own keys (browser.ts withFiles) | #3415 |
 | G9 | Closed: vertex functions and instanced draws were built as G9c (#3115, #3116) and G9d (#3117) | #3117 |
