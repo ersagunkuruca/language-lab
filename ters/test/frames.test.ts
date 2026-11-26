@@ -193,3 +193,19 @@ test("the flock page's first frame: sky, floor and birds", async () => {
   // Birds: something pale (red above 150) in the picture.
   assert.ok([...colours].some((c) => Number(c.split(",")[0]) > 150), "birds");
 });
+
+// The flock page's lists are arrays, its frame's image too (G11, the
+// stage 2 round): an Image holds a List the runtime reads, and before it
+// was read as the runtime's (library-reps.ts RUNTIME_READ) the whole
+// program's lists stayed List, the birds read by position a walk each
+// (1.3 s a frame, not 12 ms).
+test("the flock page's lists are arrays, with an image in its frame", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { withLibraryRepresentations } = await import("../src/lang/library-reps.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/flock-frame-page"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const main = p.own.defs.find((d) => p.pres.names[d] === "main")!;
+  const c = withLibraryRepresentations(p.code, info, p.pres.names, main, p.own.defs);
+  assert.ok(c.chosen.some((x) => x.startsWith("List as array of List")), c.chosen.join(", "));
+});
