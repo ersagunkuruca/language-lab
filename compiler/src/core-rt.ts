@@ -97,6 +97,8 @@ export const rangeCount = (x: number): number => {
   if (n >= 2 ** 26) throw new RangeError("out of memory");
   return n;
 };
+// An array of records as columns (columns.ts), two Float64 ones here.
+type Cols = { n: number; c0: Float64Array; c1: Float64Array };
 const OWN: Record<string, (...xs: never[]) => unknown> = {
   "int.equal": (a: I.Int, b: I.Int) => a === b,
   "int.less": (a: I.Int, b: I.Int) => a < b,
@@ -181,6 +183,50 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
       }
     }
     return arrayOf(out);
+  },
+  // The same at Dual over columns (C351b): c0 the values, c1 the slopes;
+  // a product's slope by the product rule, its two terms added first, as
+  // the numbers module's · does, then added to the sum's.
+  "array.stridedProductsDual": (x: Cols, y: Cols, a0: Parameters<typeof arrayView>[0], b0: Parameters<typeof arrayView>[0], sa0: I.Int, sb0: I.Int, n0: I.Int) => {
+    const av = arrayView(a0), bv = arrayView(b0), X = x.c0, DX = x.c1, Y = y.c0, DY = y.c1;
+    const sa = Number(sa0), sb = Number(sb0), count = Number(n0), na = av.n, nb = bv.n;
+    const inX = (p: number) => count <= 0 || (p >= 0 && p < x.n && p + (count - 1) * sa >= 0 && p + (count - 1) * sa < x.n);
+    const inY = (p: number) => count <= 0 || (p >= 0 && p < y.n && p + (count - 1) * sb >= 0 && p + (count - 1) * sb < y.n);
+    const A = av.buf.items, B = bv.buf.items, as = new Array<number>(na), bs = new Array<number>(nb + 4).fill(0), aok = new Array<boolean>(na), bok = new Array<boolean>(nb + 4).fill(false);
+    for (let i = 0; i < na; i++) { as[i] = Number(A[av.start + i]); aok[i] = inX(as[i]); }
+    for (let j = 0; j < nb; j++) { bs[j] = Number(B[bv.start + j]); bok[j] = inY(bs[j]); }
+    const n = na * nb, o = new Float64Array(Math.max(8, n)), d = new Float64Array(Math.max(8, n));
+    const one = (a: number, b: number, at: number) => {
+      let s = 0, t = 0;
+      for (let k = 0; k < count; k++, a += sa, b += sb) { const u = X[a], du = DX[a], v = Y[b], dv = DY[b]; s = s + u * v; t = t + (u * dv + du * v); }
+      o[at] = s; d[at] = t;
+    };
+    for (let i = 0; i < na; i += 2) {
+      const two = i + 1 < na, ok0 = aok[i], ok1 = two && aok[i + 1], o0 = i * nb, o1 = o0 + nb;
+      let j = 0;
+      if (ok0 && ok1) for (; j + 4 <= nb && bok[j] && bok[j + 1] && bok[j + 2] && bok[j + 3]; j += 4) {
+        let s00 = 0, s01 = 0, s02 = 0, s03 = 0, s10 = 0, s11 = 0, s12 = 0, s13 = 0;
+        let t00 = 0, t01 = 0, t02 = 0, t03 = 0, t10 = 0, t11 = 0, t12 = 0, t13 = 0;
+        let p = as[i], q = as[i + 1], c0 = bs[j], c1 = bs[j + 1], c2 = bs[j + 2], c3 = bs[j + 3];
+        for (let k = 0; k < count; k++, p += sa, q += sa, c0 += sb, c1 += sb, c2 += sb, c3 += sb) {
+          const u = X[p], du = DX[p], v = X[q], dv = DX[q];
+          const e0 = Y[c0], f0 = DY[c0], e1 = Y[c1], f1 = DY[c1], e2 = Y[c2], f2 = DY[c2], e3 = Y[c3], f3 = DY[c3];
+          s00 = s00 + u * e0; t00 = t00 + (u * f0 + du * e0); s01 = s01 + u * e1; t01 = t01 + (u * f1 + du * e1);
+          s02 = s02 + u * e2; t02 = t02 + (u * f2 + du * e2); s03 = s03 + u * e3; t03 = t03 + (u * f3 + du * e3);
+          s10 = s10 + v * e0; t10 = t10 + (v * f0 + dv * e0); s11 = s11 + v * e1; t11 = t11 + (v * f1 + dv * e1);
+          s12 = s12 + v * e2; t12 = t12 + (v * f2 + dv * e2); s13 = s13 + v * e3; t13 = t13 + (v * f3 + dv * e3);
+        }
+        o[o0 + j] = s00; o[o0 + j + 1] = s01; o[o0 + j + 2] = s02; o[o0 + j + 3] = s03;
+        d[o0 + j] = t00; d[o0 + j + 1] = t01; d[o0 + j + 2] = t02; d[o0 + j + 3] = t03;
+        o[o1 + j] = s10; o[o1 + j + 1] = s11; o[o1 + j + 2] = s12; o[o1 + j + 3] = s13;
+        d[o1 + j] = t10; d[o1 + j + 1] = t11; d[o1 + j + 2] = t12; d[o1 + j + 3] = t13;
+      }
+      for (; j < nb; j++) {
+        if (ok0 && bok[j]) one(as[i], bs[j], o0 + j);
+        if (two && ok1 && bok[j]) one(as[i + 1], bs[j], o1 + j);
+      }
+    }
+    return { n, c0: o, c1: d };
   },
   "array.get": (a: Parameters<typeof arrayView>[0], k: number) => { const v = arrayView(a), i = Number(k); if (!(i >= 0 && i < v.n)) throw FAIL; return v.buf.items[v.start + i]; },
   // The array's items from place k on, a view of the same buffer (C30 s2b:
