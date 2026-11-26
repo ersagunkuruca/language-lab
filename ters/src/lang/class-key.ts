@@ -55,3 +55,13 @@ function classKeyIn(code: Code, also: unknown): string {
 
 // The check's options as a key reads them: its cache left out, sets in order.
 export const optionsText = (o: unknown) => JSON.stringify(o ?? {}, (k, v) => (k === "cache" ? undefined : v instanceof Set ? [...v].sort() : v));
+// Two checks' options the same as optionsText reads them, an option held
+// by both not written out (the library's pins, a few hundred kilobytes).
+export function sameOptions(a: object | undefined, b: object | undefined): boolean {
+  const x = (a ?? {}) as Record<string, unknown>, y = (b ?? {}) as Record<string, unknown>;
+  for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) {
+    if (k === "cache" || x[k] === y[k]) continue;
+    if (optionsText({ [k]: x[k] }) !== optionsText({ [k]: y[k] })) return false;
+  }
+  return true;
+}

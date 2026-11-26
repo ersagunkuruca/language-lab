@@ -16,7 +16,7 @@
 import { dependenciesOfAll, subtree, subtreeKept, idsPlace, layerOf, moveIdsTo, nodeIds, nodesUnder, ownNodeIds, litOrigin, nodesOfKind, onLayer, sameValue, withNodes, type Code, type Id, type Node } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
-import { optionsText } from "./class-key.ts";
+import { sameOptions } from "./class-key.ts";
 import { keptMap } from "../kept.ts";
 import { sameValueReads, valueRead } from "./value-reads.ts";
 
@@ -79,16 +79,18 @@ function madeAgain(was: Kept, q: Stage): Stage | null {
   const p = was.given, out = was.out;
   if (q.code === p.code && q.info === p.info && q.names === p.names) return out;
   if (q.info.errors.length !== p.info.errors.length || q.code.defs.length !== p.code.defs.length || q.code.defs.some((d, i) => d !== p.code.defs[i])) return null;
-  if (q.names !== p.names && !sameNames(q.names, p.names)) return null;
-  if (q.info.options !== p.info.options && optionsText(q.info.options) !== optionsText(p.info.options)) return null;
+  // (The nodes first: an edit of a body differs there, and is told so
+  // before the names and options are read through.)
   const changed = differing(p.code.nodes, q.code.nodes);
   if (!changed?.length) return null;
-  const made = (was.made ??= madeLiterals(p.code, out.code));
-  const into: Record<Id, Node> = {};
   for (const id of changed) {
     const a = p.code.nodes[id], b = q.code.nodes[id];
     if (a?.kind !== "lit" || b?.kind !== "lit" || !numeric(a.value) || !numeric(b.value) || classOf(a.value) !== classOf(b.value) || !sameValue({ ...a, value: b.value }, b)) return null;
   }
+  if (q.names !== p.names && !sameNames(q.names, p.names)) return null;
+  if (q.info.options !== p.info.options && !sameOptions(q.info.options, p.info.options)) return null;
+  const made = (was.made ??= madeLiterals(p.code, out.code));
+  const into: Record<Id, Node> = {};
   // (Not a literal some pass reads the value of: value-reads.ts. The two
   // differ only in literals' values, so they read the same ones.)
   const readP = valueRead(p.code);
