@@ -1046,6 +1046,26 @@ export function buildPrelude(): Module {
       ]) },
     ]), k.fn(["keyed"], (p) => keyOf(p, (_, item) => item)))));
 
+  // The first item with the least key, as a list of it (none for an empty
+  // list): what `sort by` puts first, each key worked out once, in order,
+  // as sort by does, and n − 1 compares instead of n log n. The compiler
+  // asks it where a sorted list is read only for its first item
+  // (compiler/src/first-sorted.ts, larder's `nicest of(sort by(…))`). A
+  // later item takes the place only with a key before the one kept, so of
+  // equal keys the first stays, as the stable sort keeps them.
+  const leastKeyed = k.def("least keyed");
+  k.define(leastKeyed, k.fn(["best", "pairs"], (best, ps) => k.match(ps, [
+    { variant: NIL, names: [], body: () => k.call(CONS, best, k.x(NIL)) },
+    { variant: CONS, names: ["pair", "rest"], body: ([p, r]) => k.match(keyOf(p, (kp) => keyOf(best, (kb) => k.call(COMPARE, kp, kb))), [
+      { variant: ORDER_V.before, names: [], body: () => k.call(leastKeyed, p, r) },
+    ], k.call(leastKeyed, best, r)) },
+  ])));
+  const firstByKey = k.def("first by key");
+  k.define(firstByKey, k.fn(["list", "key"], (xs, key) => k.match(k.call(map, xs, k.fn(["item"], (x) => k.call(PAIR_V, k.call(key, x), x))), [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["first", "rest"], body: ([p, r]) => k.call(map, k.call(leastKeyed, p, r), k.fn(["keyed"], (q) => keyOf(q, (_, item) => item))) },
+  ])));
+
   // Sorting by an order the program gives (L214d): a collation for
   // people's names, or any (a, b) → Order. The same stable merge sort as
   // sort by, asking order(y, x) where it asked compare(key(y), key(x)).
@@ -2563,6 +2583,8 @@ export function buildPrelude(): Module {
     [sortBy]: "The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps; key is called once for each item, in order.",
     [mergeByKey]: "Two lists sorted by key as one. A helper of sort by, not offered.",
     [mergeKeyed]: "Two lists of (key, item) pairs sorted by key as one. A helper of sort by, not offered.",
+    [leastKeyed]: "The pair with the least key of best and pairs, the first of equal ones, as a list of it. A helper of first by key, not offered.",
+    [firstByKey]: "The first item of sort by(list, key), as a list of it, without sorting: what the compiler reads a sorted list as when only its first item is read. Not offered.",
     [addRunKeyed]: "A helper of sort by, as add run is of sort. Not offered.",
     [addRunByKey]: "A helper of sort by, as add run is of sort. Not offered.",
     [attempt]: "The action's answer as done(answer), or refused(reason) when it aborts: an Abort kept as data, so it can go in a list (Rust's Result is the influence).",
@@ -2760,9 +2782,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, addedAtEnd, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, addedAtEnd, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, leastKeyed, firstByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addedAtEnd, ...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addedAtEnd, ...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, leastKeyed, firstByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
 }

@@ -14,6 +14,7 @@ import { nearByPlaces, nearOnGrid } from "../src/lang/near-grid.ts";
 import { shareFoldItems } from "../../compiler/src/fold-items.ts";
 import { fuseWalks } from "../../compiler/src/fuse-walks.ts";
 import { replaceReads } from "../../compiler/src/replace-reads.ts";
+import { firstSorted } from "../../compiler/src/first-sorted.ts";
 import { intCases, usesIntCases } from "../src/lang/int-cases.ts";
 import { expandArrayGradients } from "../src/lang/pullback.ts";
 import { TREES } from "../src/lang/library.ts";
@@ -144,7 +145,11 @@ function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, t
   // A map over a list numbered that replaces one item, `replace at`
   // (replace-reads.ts, C330).
   const replaced = (typeof process !== "undefined" && process.env.NO_REPLACE_READS) ? null : replaceReads(p11.code, p11.info, p11.names, p11.own, { ...(p11.options as Parameters<typeof infer>[3]), units: false });
-  const p1 = replaced ? { ...p11, code: replaced.code, info: replaced.info } : p11;
+  const p12 = replaced ? { ...p11, code: replaced.code, info: replaced.info } : p11;
+  // A sorted list read only for its first item, the first by key
+  // (first-sorted.ts, C356).
+  const firsts = (typeof process !== "undefined" && process.env.NO_FIRST_SORTED) ? null : firstSorted(p12.code, p12.info, p12.names, p12.own, { ...(p12.options as Parameters<typeof infer>[3]), units: false });
+  const p1 = firsts ? { ...p12, code: firsts.code, info: firsts.info } : p12;
   // A walk over a list made by map or flat map, a walk over what they were
   // given, so no list is made (fuse-walks.ts, G3b); its walks are the
   // program's own, stored as the rest.
@@ -183,7 +188,7 @@ function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, t
     chosen.push(`${p.names[of] ?? of} as ${rep.name}`);
     picks.push({ of, rep: rep.name });
   }
-  if (!chosen.length) return shared.shared ? { ...p, code: shared.code, info: pinfo } : held || replaced || walks?.made.length ? p : p0;
+  if (!chosen.length) return shared.shared ? { ...p, code: shared.code, info: pinfo } : held || replaced || firsts || walks?.made.length ? p : p0;
   // So does a library row's (std's Nat as an Int): written on the type's
   // own definitions, which a rewrite onto another row changes.
   const rowDefs = new Set(rows.flatMap((r) => (r.def ? [r.def] : [])));
