@@ -9,6 +9,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { loadProgram } from "../../ters/src/lang/load.ts";
 import { forgetKept } from "../../ters/src/kept.ts";
+import { choicesReplayed } from "../../ters/src/lang/library-reps.ts";
 import { compile, edited, literalEdits } from "../../ters/bench/edits.ts";
 import { choicesAgain } from "../../ters/cli/represented.ts";
 import { stepsAgain } from "../../ters/src/lang/literals-again.ts";
@@ -109,6 +110,25 @@ test("machine: an edit of a body works out the chooser's jobs of that definition
   const made = factsMade;
   const got = compile(next, p.pres.names, p.options, main, own, { code: p.code, info: first.info });
   assert.ok(factsMade - made <= 20, `${factsMade - made} definitions' jobs worked out`);
+  forgetKept();
+  const fresh = compile(next, p.pres.names, p.options, main, own);
+  assert.equal(got.text, fresh.text);
+});
+
+// An edit of a body that leaves alone all the chooser reads (a number n
+// written add(n, 0): no node of it holds a list) takes the last choice
+// again with the edit put in (library-reps.ts replayed), and prints what
+// a fresh compile does.
+test("machine: an edit of a body that no list is in takes the last choice again, as a fresh compile prints", () => {
+  const p = loadProgram(join(ROOT, "compiler/gaps/machine"));
+  const main = p.named("main"), own = p.own.defs;
+  forgetKept();
+  const first = compile(p.code, p.pres.names, p.options, main, own);
+  const lits = literalEdits(p.code, own);
+  const next = bodyEdited(p.code, lits[Math.floor(lits.length / 3)]);
+  const was = choicesReplayed;
+  const got = compile(next, p.pres.names, p.options, main, own, { code: p.code, info: first.info });
+  assert.ok(choicesReplayed > was, "the choice taken again");
   forgetKept();
   const fresh = compile(next, p.pres.names, p.options, main, own);
   assert.equal(got.text, fresh.text);
