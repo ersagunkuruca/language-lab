@@ -156,6 +156,8 @@ export class OverMap<K, V> extends Map<K, V> {
   override get(k: K) { return super.has(k) ? super.get(k) : this.gone?.has(k) ? undefined : this.under.get(k); }
   // What this one added, without what it reads through to.
   own(): MapIterator<[K, V]> { return super.entries(); }
+  // Every key set or deleted here, without what it reads through to.
+  *touched(): IterableIterator<K> { yield* super.keys(); if (this.gone) yield* this.gone; }
   // What it reads through to.
   get below(): ReadonlyMap<K, V> { return this.under; }
   override has(k: K) { return super.has(k) || (!this.gone?.has(k) && this.under.has(k)); }
