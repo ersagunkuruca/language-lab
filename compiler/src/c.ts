@@ -62,11 +62,11 @@ import { BASE, C_TAKEN, cName, POSIX, reservedNames, RT_C, runtimeC, WORLD_H, ty
 // The `lab_` names c.ts's own runtime text defines (the thread pool, the
 // shared counts, stops, fdlibm's maths), kept from a program's definitions
 // (I214). c-rt.ts's are found in its text (reservedNames).
-export const C_RUNTIME = ["grid_entry", "sp_in", "sp_one", "sp_eight", "spd_one", "spd_eight", "grid_order", "g_x", "g_near", "g_c", "g_by", "g_lo", "g_hi", "g_st", "g_start", "g_job", "_hd", "_hd_cap", "_hd_n", "_held", "_hold", "_holds", "_hs", "_hs_cap", "_hs_n", "_hseen", "_int_hold", "mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "dclosure", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "framed", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_always", "par_items", "par_runs", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stack", "stack_below", "stack_copy", "stack_done", "stack_new", "stack_push", "stack_spare", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
+export const C_RUNTIME = ["grid_entry", "bytes", "sp_in", "sp_one", "sp_eight", "spd_one", "spd_eight", "grid_order", "g_x", "g_near", "g_c", "g_by", "g_lo", "g_hi", "g_st", "g_start", "g_job", "_hd", "_hd_cap", "_hd_n", "_held", "_hold", "_holds", "_hs", "_hs_cap", "_hs_n", "_hseen", "_int_hold", "mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "dclosure", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "framed", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_always", "par_items", "par_runs", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stack", "stack_below", "stack_copy", "stack_done", "stack_new", "stack_push", "stack_spare", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
 // The prefixes this file puts a number after (lab_m3), or with true any
 // name (lab_print_ and a type's), which a program's own names must not
 // start with either (c-names.test.ts checks both lists against this file).
-export const C_OWN_PREFIXES: [string, boolean][] = [["grid_job_", false], ["grid_work_", false], ["Store_t", false], ["Table_t", false], ["array_at_a", false], ["array_atb_a", false], ["array_c", true], ["array_clength_a", false], ["array_cnew_a", false], ["array_empty_a", false], ["array_first_a", false], ["array_get_a", false], ["array_getb_a", false], ["array_has_a", false], ["array_items_a", false], ["array_length_a", false], ["array_lengthb_a", false], ["array_of_a", false], ["array_peek_a", false], ["array_pushFront_a", false], ["array_push_a", false], ["array_rangeF_a", false], ["array_range_a", false], ["array_replaceAt_a", false], ["array_rest_a", false], ["array_slice_a", false], ["b", false], ["both_", true], ["both_alone_", true], ["both_job_", true], ["both_one_", true], ["both_quick_", true], ["both_r_", true], ["both_top_", true], ["chunks_job_", true], ["chunks_work_", true], ["host_", true], ["m", false], ["merge_t", false], ["par_", true], ["print_", true], ["range_", true], ["range_work_", true], ["read_", true], ["s", false], ["split_", true], ["table_at_t", false], ["table_atb_t", false], ["table_empty_t", false], ["table_entries_t", false], ["table_has_t", false], ["table_put_t", false], ["table_remove_t", false], ["table_size_t", false], ["together_job_", true], ["together_one_", true], ["together_quick_", true], ["together_work_", true]];
+export const C_OWN_PREFIXES: [string, boolean][] = [["grid_job_", false], ["grid_work_", false], ["Store_t", false], ["Table_t", false], ["array_at_a", false], ["array_atb_a", false], ["array_c", true], ["array_clength_a", false], ["array_cnew_a", false], ["array_empty_a", false], ["array_first_a", false], ["array_get_a", false], ["array_getb_a", false], ["array_has_a", false], ["array_items_a", false], ["array_length_a", false], ["array_lengthb_a", false], ["array_of_a", false], ["array_ofBytes_a", false], ["array_peek_a", false], ["array_pushFront_a", false], ["array_push_a", false], ["array_rangeF_a", false], ["array_range_a", false], ["array_replaceAt_a", false], ["array_rest_a", false], ["array_slice_a", false], ["b", false], ["both_", true], ["both_alone_", true], ["both_job_", true], ["both_one_", true], ["both_quick_", true], ["both_r_", true], ["both_top_", true], ["chunks_job_", true], ["chunks_work_", true], ["host_", true], ["m", false], ["merge_t", false], ["par_", true], ["print_", true], ["range_", true], ["range_work_", true], ["read_", true], ["s", false], ["split_", true], ["table_at_t", false], ["table_atb_t", false], ["table_empty_t", false], ["table_entries_t", false], ["table_has_t", false], ["table_put_t", false], ["table_remove_t", false], ["table_size_t", false], ["together_job_", true], ["together_one_", true], ["together_quick_", true], ["together_work_", true]];
 import { runtime } from "./wasm-rt.ts";
 import type { HostOps } from "./core-rt.ts";
 import { hostCName as hostName, type Shape } from "../../ters/src/lang/hosts.ts";
@@ -892,11 +892,27 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     return j >= 0 && strict.slice(0, j).every(pure) ? strict[j] : m;
   };
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: settle(f.body) }));
+  // A file's Bytes kept as the bytes they are (C350, c-rt.ts world.rawBytes):
+  // a Bytes's list read through lab__bytes_list, and `array of` its items
+  // (the library's `byte array of bytes`) a byte a slot straight from them.
+  const rawBytes = lowered.records.some((r) => r.key === BYTES_T) && funcs.some((f) => walk(f.body).some((e) => e.k === "world" && (e.op === "readBytes" || e.op === "askForFile")));
+  // The functions that give a Bytes's items: one Bytes in, its list out.
+  const byteItems = new Set(rawBytes ? funcs.flatMap((f, i) => { const g = f.body.k === "let" && f.body.body.k === "local" && f.body.body.i === f.body.i ? f.body.value : f.body; return f.params.length === 1 && g.k === "get" && g.t.key === BYTES_T && g.i === 0 && g.rec.k === "local" && g.rec.i === 0 ? [i] : []; }) : []);
+  // `array of` those items (the library's `byte array of bytes`): a byte a
+  // slot straight from the bytes (array.ofBytes), no list made to be
+  // copied in and freed.
+  const bytesOf = (v: SExpr) => (v.k === "call" && byteItems.has(v.fn) && v.args.length === 1 ? v.args[0] : v.k === "get" && v.t.key === BYTES_T && v.i === 0 ? v.rec : null);
+  const ofItems = (e: SExpr): SExpr => {
+    const m = e.k === "rt" && e.args.length === 1 ? /^array\.of\.a(\d+)$/.exec(e.fn) : null, b = m && lowered.arrays[Number(m[1])].item === "int" ? bytesOf((e as SExpr & { k: "rt" }).args[0]) : null;
+    if (m && b) return { ...(e as SExpr & { k: "rt" }), fn: `array.ofBytes.a${m[1]}`, args: [ofItems(b)] };
+    return mapKids(e, ofItems);
+  };
+  if (byteItems.size) for (const f of funcs) f.body = ofItems(f.body);
   // The Int-in-32-bits helpers the code calls (INT32_C).
   const int32Used = new Set<Op>();
   let i64Used = false; let i64vUsed = false; let i64RangeUsed = false;
   // And the names this file's own runtime parts define (I214).
-  const used = new Set<string>([...C_RUNTIME, "iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...reservedNames(), ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "atb", "has", "peek", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at", "atb"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot", "room", "gone"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
+  const used = new Set<string>([...C_RUNTIME, "iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...reservedNames(), ...lowered.arrays.flatMap((_, i) => ["empty", "of", "ofBytes", "range", "rangeF", "getb", "atb", "has", "peek", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at", "atb"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot", "room", "gone"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
   // A type's name is printed bare, so it must not be one of C's either.
   const ident = (hint: string, bare = false) => {
     let base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
@@ -1087,11 +1103,11 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     }
     // A Locale's struct (C315).
     if (fn === "world.myLocale") return { cons: "", nil: "", type: 0, tag: 0, head: 0, record: sname.get(LOCALE_T)! };
-    const bytes = fn === "world.keptBytes" || fn === "world.keptAddBytes" || fn === "world.readBytes" || fn === "world.writeBytes" || fn === "world.putBytes" || fn === "world.offerFile" || fn === "world.askForFile";
+    const bytes = fn === "world.keptBytes" || fn === "world.keptAddBytes" || fn === "world.readBytes" || fn === "world.writeBytes" || fn === "world.putBytes" || fn === "world.offerFile" || fn === "world.askForFile" || fn === "world.rawBytes";
     const d = data.get(fn === "world.readLine" || fn === "world.keptLine" || fn === "world.environmentVariable" ? OPTION_TEXT : fn === "world.keptOpen" ? OPTION_INT : bytes ? LIST_INT : fn.startsWith("world.") ? LIST_TEXT : runtime(fn).list ?? LIST_TEXT)!;
     if (bytes) {
       const tag = d.cases.findIndex((c) => c.fields.length > 0);
-      return { cons: cname(d, tag), nil: cname(d, 1 - tag), type: tnum.get(d.key)!, tag, head: d.cases[tag].fields.findIndex((x) => x.t !== d), record: sname.get(BYTES_T) };
+      return { cons: cname(d, tag), nil: cname(d, 1 - tag), type: tnum.get(d.key)!, tag, head: d.cases[tag].fields.findIndex((x) => x.t !== d), record: sname.get(BYTES_T), raw: rawBytes };
     }
     const tag = d.cases.findIndex((c) => c.fields.length > 0);
     return { cons: cname(d, tag), nil: cname(d, 1 - tag), type: tnum.get(d.key)!, tag, head: d.cases[tag].fields.findIndex((x) => x.t !== d) };
@@ -1326,6 +1342,9 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // start and length, put in a record's or a cell's field as it is. Before
   // the records and cells that may hold one.
   const types: string[] = [...arrays.values()].map((a) => `typedef struct { lab_cell *b; uint32_t s, n; } ${aname.get(a.key)!.view}; // an array: n items of buffer b from s`);
+  // A file's bytes as they are (C350): a Bytes's list cell then, its list
+  // made when first read.
+  if (rawBytes) types.push("#define LAB_BYTES_T 65533", "typedef struct { lab_cell h; lab_cell *list; uint32_t n; uint8_t b[]; } lab_bytes; // a file's bytes, and their list once read", "static lab_cell *lab__bytes_list(lab_cell *c);");
   for (const r of inOrder) {
     const n = sname.get(r.key)!;
     types.push(r.mutable
@@ -1419,6 +1438,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     // while they run; an older one is rerooted when read, so it stays here.
     for (const t of tables.values()) sharesOf.push(`case ${tnum.get(`table ${t.key}`)}: ${tableUsed(t) ? `lab__share_t${t.index}(c);` : "lab_share_no = 1;"} break;`);
   }
+  // A file's bytes give up their list (C350); shared, it is made first.
+  if (rawBytes) { fieldsOf.push("case LAB_BYTES_T: lab_dec(((lab_bytes *)c)->list); break;"); if (threads) { sharesOf.push("case LAB_BYTES_T: lab_share(lab__bytes_list(c)); break;"); holdsOf.push("case LAB_BYTES_T: lab__hold(((lab_bytes *)c)->list); break;"); } }
   // A text's view gives up its base (I222).
   if (ints) { fieldsOf.push("case LAB_TEXT_T: lab_dec(((lab_text *)c)->base); break;"); if (threads) { sharesOf.push("case LAB_TEXT_T: lab_share(((lab_text *)c)->base); break;"); holdsOf.push("case LAB_TEXT_T: lab__hold(((lab_text *)c)->base); break;"); } }
   for (const b of boxes) fieldsOf.push(counted(b.fields[0].t) ? `case ${tnum.get(b.key)}: ${dec(b.fields[0].t, `((${sname.get(b.key)} *)c)->f0`)} break;` : "");
@@ -2647,7 +2668,7 @@ int main(int argc, char **argv) {
         throw new Error(`C: a lent fold's stack read below its top into a local (${f.name})`);
       }
       if (v.k === "field" && v.rec.k === "local" && !isCounted(v.rec.i)) return `((${cname(v.t, v.c)} *)${local(v.rec.i)})->f${v.i}`;
-      if (v.k === "get" && !v.t.mutable && v.rec.k === "local" && !isCounted(v.rec.i)) return `${local(v.rec.i)}.f${v.i}`;
+      if (v.k === "get" && !v.t.mutable && v.rec.k === "local" && !isCounted(v.rec.i)) return rawBytes && v.t.key === BYTES_T ? `lab__bytes_list(${local(v.rec.i)}.f${v.i})` : `${local(v.rec.i)}.f${v.i}`;
       return null;
     };
     // The counted locals e reads before setting them. `cap` reads the
@@ -2803,7 +2824,8 @@ int main(int argc, char **argv) {
     function moved(e: SExpr & { k: "let" }, pre: string[], d: string, after: Set<number>): SExpr | null {
       if (e.value.k !== "get" || e.value.rec.k !== "local" || e.value.t.mutable) return null;
       const r = e.value.rec.i, t = e.value.t;
-      if (!isCounted(r) || after.has(r)) return null;
+      // (A file's Bytes holds its bytes, not its list: C350.)
+      if (!isCounted(r) || after.has(r) || (rawBytes && t.key === BYTES_T)) return null;
       const reads: { i: number; f: number }[] = [];
       let body: SExpr = e;
       while (body.k === "let" && body.value.k === "get" && body.value.rec.k === "local" && body.value.rec.i === r && body.i !== r && !reads.some((x) => x.i === (body as { i: number }).i || x.f === ((body as { value: { i: number } }).value.i))) {
@@ -2831,7 +2853,7 @@ int main(int argc, char **argv) {
       let out = es;
       for (const r of rs) {
         const t = f.locals[r];
-        if (!isRecord(t) || t.mutable || !isCounted(r) || after.has(r)) continue;
+        if (!isRecord(t) || t.mutable || !isCounted(r) || after.has(r) || (rawBytes && t.key === BYTES_T)) continue;
         if (out.some((e) => uses(e, r) !== reads(e, r) || binds(e, r))) continue;
         const into = new Map<number, number>();
         for (const e of out) for (const x of walk(e)) if (x.k === "get" && x.rec.k === "local" && x.rec.i === r && !into.has(x.i)) {
@@ -3228,6 +3250,8 @@ int main(int argc, char **argv) {
         case "get": {
           // A page's cell read is noted, for the part reading it (READS_C).
           const touch = opts.page && e.t.mutable && e.t.key.startsWith("cell:");
+          // A file's Bytes's list (C350): made from its bytes when first read.
+          if (rawBytes && e.t.key === BYTES_T) return borrow(e.rec, e.t.fields[e.i].t, (r) => `lab__bytes_list(${r}.f${e.i})`, pre, d, after);
           return borrow(e.rec, e.t.fields[e.i].t, (r) => (e.t.mutable ? `((${sname.get(e.t.key)} *)${touch ? `lab_touch(${r})` : r})->f${e.i}` : `${r}.f${e.i}`), pre, d, after);
         }
         case "new": {
@@ -4964,7 +4988,7 @@ static ${V} lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
       }
     }
     if (has("empty")) out.push(`static ${V} lab_array_empty_a${i}(void) { return lab__view_a${i}((lab_cell *)lab__buf_a${i}(0, 0), 4, 0); }`);
-    if (has("of")) out.push(`static ${V} lab_array_of_a${i}(lab_cell *l) {
+    if (has("of") || has("ofBytes")) out.push(`static ${V} lab_array_of_a${i}(lab_cell *l) {
   uint32_t n = 0;
   int small = 1;
   for (lab_cell *p = l; p->tag == ${l!.tag}; p = ((${l!.cons} *)p)->f${1 - l!.head}) { n++;${bytes ? ` if (!LAB_IS_BYTE(((${l!.cons} *)p)->f${l!.head})) small = 0;` : ""} }
@@ -4973,6 +4997,17 @@ static ${V} lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
   uint32_t k = b->lo;
   for (lab_cell *p = l; p->tag == ${l!.tag}; p = ((${l!.cons} *)p)->f${1 - l!.head}) { ${wr("b", "k", cp(`((${l!.cons} *)p)->f${l!.head}`))} k++; }
   lab_drop(l);
+  return lab__view_a${i}((lab_cell *)b, b->lo, n);
+}`);
+    // A file's bytes (C350), as they are, a byte a slot: given the Bytes's
+    // cell, which it takes; a list (Bytes made in the code) as \`of\` does.
+    if (has("ofBytes")) out.push(`static ${V} lab_array_ofBytes_a${i}(${sname.get(BYTES_T)} bs) {
+  lab_cell *c = bs.f0;
+  if (c->type != LAB_BYTES_T || ((lab_bytes *)c)->n < 16) { lab_cell *l = lab_dup(lab__bytes_list(c)); lab_drop(c); return lab_array_of_a${i}(l); }
+  uint32_t n = ((lab_bytes *)c)->n;
+  ${B} *b = lab__buf_a${i}(n, 1);
+  memcpy((uint8_t *)b->it + b->lo, ((lab_bytes *)c)->b, n);
+  lab_drop(c);
   return lab__view_a${i}((lab_cell *)b, b->lo, n);
 }`);
     // 0 to n − 1 (C207b), as `array of` makes it from range(n)'s list.
