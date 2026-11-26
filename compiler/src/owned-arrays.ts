@@ -19,7 +19,7 @@
 
 import type { Id } from "../../ters/src/model.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
-import { holders, type Holders } from "./holders.ts";
+import { holders, type SharedHolders } from "./holders.ts";
 import { isArray, kids, type CoreIR, type SExpr } from "./scalar.ts";
 
 // The program's functions called from outside: main's own.
@@ -27,9 +27,9 @@ const rootsOf = (ir: CoreIR, main: Id) => ir.funcs.flatMap((g, i) => (g.def === 
 
 // shared: holders() of main's functions, worked out once (after the maps)
 // for the passes that read it (holders.ts sharedHolders).
-export function ownedArrays(ir: CoreIR, main: Id, maps = false, shared?: () => Holders): number {
+export function ownedArrays(ir: CoreIR, main: Id, maps = false, shared?: SharedHolders): number {
   const roots = rootsOf(ir, main);
-  let n = maps ? mapsInPlace(ir, roots) : 0;
+  let n = maps ? mapsInPlace(ir, roots, shared) : 0;
   for (const e of (shared ?? (() => holders(ir, roots)))().owned) if (e.k === "rt" && REPLACE.test(e.fn)) { e.fn = e.fn.replace(REPLACE, "array.replaceOwned.a$1"); n++; }
   return n;
 }
@@ -44,7 +44,7 @@ const REPLACE = /^array\.replaceAt\.a(\d+)$/;
 // last to use it (holders.ts, the map counted as giving it away), the
 // map gives the fold its own array to make, and each push front becomes
 // the replace of slot j: the fold reads slot j before it writes it.
-function mapsInPlace(ir: CoreIR, roots: number[]): number {
+function mapsInPlace(ir: CoreIR, roots: number[], shared?: SharedHolders): number {
   const found = mapFolds(ir);
   if (!found.length) return 0;
   const maps = new Set(found.map((m) => m.map));
@@ -56,6 +56,7 @@ function mapsInPlace(ir: CoreIR, roots: number[]): number {
     Object.assign(m.push, { fn: `array.replaceOwned.a${m.a}`, args: [m.push.args[0], { k: "local", i: m.j }, m.push.args[1]] });
     n++;
   }
+  if (n === found.length) shared?.keep(h);
   return n;
 }
 
