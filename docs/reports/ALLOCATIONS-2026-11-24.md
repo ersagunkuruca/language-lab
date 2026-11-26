@@ -857,3 +857,24 @@ holds it), a record captured by a closure given to a map (housefit's
 `weather of`), an item read out of a set before the set is changed
 (crew's `give`), and a result `both` ran on the threads (bazaar's
 `plan anti`).
+
+## C327f part 4c, captures, lending, `both` (2026-11-26)
+
+Three more readings in holders.ts, each one site the by-type rule found:
+
+- A closure given to a function that only calls it (an `apply` only
+  reads the closure), whose code only reads what it captured, borrows
+  its captures: housefit's `weather of` hands its record to the maps that
+  fill its arrays, then rebuilds it. A capture also given to the same
+  call (a map's function reading the array it maps) is two inputs.
+- A function that gives back part of what it was given (`first` of a set
+  of records) lends it to its answer rather than taking it: the caller
+  still holds the input, now shared with the answer, so it is known as
+  shared after the call (crew's `give`).
+- `both`'s answers are what its function gives, run here or as a copy
+  from a worker (bazaar's `plan anti`).
+
+On every example and benchmark, every record written in place by the
+by-type rule is now found per value too, but for drift with its list as
+an array (`ters compile`, `ters wasi`): an array's items have no holders
+in holders.ts yet (part 4d).

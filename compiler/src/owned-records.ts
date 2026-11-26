@@ -35,9 +35,9 @@ export function ownedRecords(ir: CoreIR, code: Code, info: Info, names: Record<I
     if (d.mutable || !d.fields.length) continue;
     if (!ir.funcs.some((f) => found(f.body, (e) => e.k === "make" && e.t.key === d.key && rootOf(e, d) !== null))) continue;
     if (!readable(ir, d)) continue;
-    // A record given to a map's function as an item of a list or an array
-    // holders.ts doesn't follow (it knows no holders of items yet): there
-    // one-holder.ts, by type, still decides.
+    // A record given to a map's function as an item of an array: holders.ts
+    // knows no holders of an array's items yet, so there one-holder.ts, by
+    // type, still decides (drift with its list as an array).
     const rebuilt = new Set<Id>();
     const byType = oneHolder(code, info, main, new Set([d.def]), new Set(), new Map(), names, undefined, true, rebuilt).ok;
     let here = 0;
