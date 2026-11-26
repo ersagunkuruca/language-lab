@@ -912,7 +912,7 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   writtenArrays(ir);
   // A replace in an array of a type whose every value has one holder,
   // written in place (owned-arrays.ts, C93 s4).
-  // The three after it read one holders() (sharedHolders).
+  // The passes after it read one holders() (sharedHolders).
   const shared = sharedHolders(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
   if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, roots[0], true, shared);
   // And each other replace whose array has one holder, decided per value

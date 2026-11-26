@@ -460,13 +460,14 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   // for good (moths' `filed`, given a new grid each tick).
   const none: Holders = { owned: new Set(), one: () => false, into: new Set() };
   const budget = () => 100 * funcs.length + 100;
-  funcs.forEach((_, i) => wake(i));
+  const reached = (i: number) => !unreached.has(i);
+  funcs.forEach((_, i) => { if (reached(i)) wake(i); });
   for (let n = 0; head < queue.length; n++) {
     if (n > budget()) return none;
     const i = next();
     spread = false;
     linear(i);
-    if (spread) callers[i].forEach(wake);
+    if (spread) callers[i].forEach((c) => { if (reached(c)) wake(c); });
   }
   funcs.forEach((_, i) => { if (!unreached.has(i)) wake(i); });
   for (let n = 0; head < queue.length; n++) {
@@ -511,11 +512,15 @@ export function ownedPerValue(ir: CoreIR, roots: number[], shared?: () => Holder
 // passes after mapsInPlace read one answer (owned-arrays.ts, ownedPerValue,
 // owned-tables.ts, and on WebAssembly owned-records.ts), as what they
 // change between them (a replace made replaceOwned, a push marked own)
-// changes nothing holders() reads. owned-pushes.ts does (it puts calls in
-// place), so a pass after it asks again.
-export function sharedHolders(ir: CoreIR, roots: number[]): () => Holders {
+// changes nothing holders() reads. owned-pushes.ts puts calls in place,
+// after which holders() knows more, so a pass after it asks again.
+// `keep` gives it an answer already worked out: mapsInPlace's, where it
+// wrote every map it found in place, the map then giving its array away
+// as it was counted to.
+export type SharedHolders = (() => Holders) & { keep: (h: Holders) => void };
+export function sharedHolders(ir: CoreIR, roots: number[]): SharedHolders {
   let h: Holders | undefined;
-  return () => (h ??= holders(ir, roots));
+  return Object.assign(() => (h ??= holders(ir, roots)), { keep: (x: Holders) => { h ??= x; } });
 }
 
 // Those pushes, where they are still pushes onto an array (not made
