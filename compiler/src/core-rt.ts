@@ -90,8 +90,17 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   "text.quoted": (t: string) => JSON.stringify(t),
   // Rounded down, no answer thrown for infinity or NaN (C270).
   "int.wholePart": (x: number) => { if (!Number.isFinite(x)) throw FAIL; return I.floorOf(x); },
-  "int.exact": (a: I.Int, b: I.Int) => I.norm(big(a) / big(b)),
-  "int.gcd": (a: I.Int, b: I.Int) => { let x = big(a) < 0n ? -big(a) : big(a), y = big(b) < 0n ? -big(b) : big(b); while (y) [x, y] = [y, x % y]; return I.norm(x); },
+  // Small Ints as numbers, exactly (I375: larder's fractions went through
+  // BigInt for every size, 3x): a remainder of two safe integers is exact,
+  // and so is a difference that divides, and so the quotient; past them,
+  // or by 0, BigInt as before.
+  "int.exact": (a: I.Int, b: I.Int) => (typeof a === "number" && typeof b === "number" && b !== 0 ? (a - (a % b)) / b + 0 : I.norm(big(a) / big(b))),
+  "int.gcd": (a: I.Int, b: I.Int) => {
+    if (typeof a === "number" && typeof b === "number") { let x = Math.abs(a), y = Math.abs(b); while (y) { const t = x % y; x = y; y = t; } return x; }
+    let x = big(a) < 0n ? -big(a) : big(a), y = big(b) < 0n ? -big(b) : big(b);
+    while (y) [x, y] = [y, x % y];
+    return I.norm(x);
+  },
   // run.ts's, which the evaluator has outside std.ts.
   "number.range": (n: number) => toList(Array.from({ length: Math.max(0, n) }, (_, i) => (madeItem(i), i))),
   // A choice over number.range's items as one Float64 (range-choices.ts).
