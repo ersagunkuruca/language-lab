@@ -34,6 +34,8 @@ test("flock: 200 ticks of 2000 birds, compiled, native and the C by hand", () =>
   if (skip) return;
   ran(process.execPath, [lab, "native", folder, "-o", join(dir, "f")]);
   assert.equal(ran(join(dir, "f"), ["200", "2000"]), want);
+  // Enough birds that C's grid looks through them on the pool's threads (C293).
+  assert.equal(ran(join(dir, "f"), ["10", "6000"]), ran(process.execPath, [js, "10", "6000"]));
   ran("cc", ["-O2", "-ffp-contract=off", join(gaps, "flock.ideal.c"), "-o", join(dir, "c"), "-lm"]);
   assert.equal(ran(join(dir, "c"), ["200", "2000"]), want);
 });
