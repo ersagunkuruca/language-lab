@@ -10,7 +10,7 @@ import type { PlainRequest, PlainResponse } from "./network.ts";
 import type { Code, Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
-import { browserWorld, type PickedFolder, type Store } from "./browser.ts";
+import { browserWorld, CARRIED_ID, type PickedFolder, type Store } from "./browser.ts";
 import { carried, Cells, handOver, nodeOf } from "./cells.ts";
 const cellGone = (c: Value): boolean => nodeOf(c)?.disposed ?? true;
 import { evaluatorCall, mountHtml, replayEvent, useRender, type Doc, type Node_ } from "./html.ts";
@@ -334,6 +334,13 @@ export function replayEvents(root: Node_, log: LogEntry[]): void {
 export function pageShell(title: string, ...scripts: string[]): string {
   return pageDocument(title, "", ...scripts);
 }
+// A page that carries files (G11a): name to text, or bytes as the store
+// keeps them (browser.ts keptBytes), read before what the page writes.
+export function carrying(page: string, files: Record<string, string> | undefined): string {
+  if (!files || !Object.keys(files).length) return page;
+  const json = JSON.stringify(files).replace(/<\//g, "<\\/");
+  return page.replace("<body>\n", () => `<body>\n<script type="application/json" id="${CARRIED_ID}">${json}</script>\n`);
+}
 
 // What a page looks like before its own style (page-base.ts).
 export { PAGE_BASE } from "./page-base.ts";
@@ -404,10 +411,10 @@ const unindented = (js: string) => js.replace(/^[ \t]+/gm, "");
 // A slot filled in, as printed or as a minifier writes it ("\0" for
 // "\u0000", editor/prebuild.ts).
 const filled = (js: string, slot: string, by: () => string) => js.replace(JSON.stringify(slot), by).replace(JSON.stringify(slot).replaceAll("\\u0000", "\\0"), by);
-export function savedPageFile(title: string, s: SavedScripts, runtime: Runtime, worklet?: Runtime): string {
+export function savedPageFile(title: string, s: SavedScripts, runtime: Runtime, worklet?: Runtime, files?: Record<string, string>): string {
   const sound = s.sound !== undefined && worklet ? `${pageRuntime(worklet, s.sound)}\n${s.sound}` : undefined;
   const script = filled(filled(s.script, TITLE_SLOT, () => JSON.stringify(title)), WORKLET_SLOT, () => (sound === undefined ? "undefined" : JSON.stringify(sound)));
-  return pageShell(title, pageRuntime(runtime, s.script), script);
+  return carrying(pageShell(title, pageRuntime(runtime, s.script), script), files);
 }
 // The audio thread's script for it: `runtime` is coreWorkletRuntime.
 export const coreWorkletFile = (runtime: Runtime, ir: CoreIR, name: string): string => {

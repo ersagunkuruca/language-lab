@@ -1,13 +1,14 @@
 // A page as one HTML file (WEB.md): `ters build-web` and editor/build.ts.
 
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import type { Code, Id } from "../src/model.ts";
 import { isCall, nodeValues, nodesOfKindIn } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import type { Info } from "../src/lang/infer.ts";
-import { pageShell, type SavedScripts } from "../src/lang/page.ts";
-import { HTML_V } from "../src/lang/std.ts";
+import { carrying, pageShell, type SavedScripts } from "../src/lang/page.ts";
+import { keptBytes } from "../src/lang/browser.ts";
+import { HTML_V, IO, WORLD_OPS } from "../src/lang/std.ts";
 import { corePageScript, coreSoundScript, hostOpsOf, lowerCore, scriptSolves } from "../../compiler/src/core-js.ts";
 
 const here = import.meta.dirname;
@@ -36,7 +37,7 @@ export function recordings(code: Code): string[] {
 // `hosts`: the program's hosts/js.js, bundled in and asked (C137d5).
 // `modules`: given, told the files the page's script holds code of (a
 // test that the editor's model and the evaluator stay out).
-export async function webCorePage(title: string, code: Code, info: Info, names: Names, main: Id, hosts?: string, modules?: string[]): Promise<string> {
+export async function webCorePage(title: string, code: Code, info: Info, names: Names, main: Id, hosts?: string, modules?: string[], files?: Record<string, string>): Promise<string> {
   // Only what main reaches (C168).
   const lowered = lowerCore(code, info, names, [main]);
   const why = lowered.refused.get(main);
@@ -51,7 +52,28 @@ export async function webCorePage(title: string, code: Code, info: Info, names: 
     plugins: carriesProgram(script) ? [] : [withoutSolver], metafile: !!modules,
   });
   if (modules) for (const o of Object.values(out.metafile!.outputs)) for (const [f, i] of Object.entries(o.inputs)) if (i.bytesInOutput) modules.push(f);
-  return pageShell(title, out.outputFiles[0].text);
+  return carrying(pageShell(title, out.outputFiles[0].text), files);
+}
+
+// The files a program reads by a name written in it, read file("bird.obj")
+// (G11a): those in its folder are carried by its page, as the recordings
+// it plays go beside it. Text as text, other bytes as the page's store
+// keeps them.
+const READS = new Set<Id>([IO.readFile, IO.readBytes, WORLD_OPS[IO.readFile], WORLD_OPS[IO.readFile].replace(/read file$/, "read bytes")]);
+export function folderFiles(dir: string, code: Code): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const n of nodeValues(code.nodes)) {
+    if (!isCall(n)) continue;
+    const f = code.nodes[n.fn], a = code.nodes[n.args[0]];
+    if (f?.kind !== "ref" || !READS.has(f.target) || a?.kind !== "lit" || typeof a.value !== "string" || /^[a-z]+:|^\/|\.\./i.test(a.value)) continue;
+    const path = join(dir, a.value);
+    if (!existsSync(path) || !statSync(path).isFile()) continue;
+    const bytes = readFileSync(path);
+    let text: string | null = null;
+    try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch { /* not text */ }
+    out[a.value] = text !== null && !text.startsWith("\u0000") ? text : keptBytes(new Uint8Array(bytes));
+  }
+  return out;
 }
 
 // A page with sound's audio thread script from the core IR (C137d4),

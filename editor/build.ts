@@ -32,7 +32,7 @@ import { spawnSync } from "node:child_process";
 import { statSync } from "node:fs";
 import { markdown } from "./markdown.ts";
 import { mkdirSync } from "node:fs";
-import { corePageRuntime, coreWorkletRuntime, recordings, webCorePage } from "../ters/cli/web.ts";
+import { corePageRuntime, coreWorkletRuntime, folderFiles, recordings, webCorePage } from "../ters/cli/web.ts";
 import { infer } from "../ters/src/lang/infer.ts";
 import { loadProgram } from "../ters/src/lang/load.ts";
 import { represented } from "../ters/cli/represented.ts";
@@ -300,7 +300,7 @@ for (const name of manifest.programs.flatMap((p) => (p.page ? p.folders ?? [] : 
   // read by position as an array, maps and sets as hash tables. As written,
   // the greenhouse walks its moths as a list and runs a frame a second.
   const r = represented({ title: name, code: p.code, own: p.own.defs, names: p.pres.names, info, reps: representationsIn(p.code, info, p.pres.names, p.own.defs), options: p.options }, p.named("main"), true);
-  writeFileSync(site + `apps/${name}.html`, await webCorePage(name[0].toUpperCase() + name.slice(1), r.code, r.info, r.names, p.named("main")));
+  writeFileSync(site + `apps/${name}.html`, await webCorePage(name[0].toUpperCase() + name.slice(1), r.code, r.info, r.names, p.named("main"), undefined, undefined, folderFiles(here + "../ters/examples/" + name, p.code)));
   console.log(`apps/${name}.html`);
   // The recordings a page with sound plays (AUDIO.md), beside it.
   for (const f of recordings(p.code)) copyFileSync(here + `../ters/examples/${name}/${f}`, site + `apps/${f}`);
