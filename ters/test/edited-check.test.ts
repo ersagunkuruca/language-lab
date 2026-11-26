@@ -10,7 +10,7 @@ import { infer, inferEdited, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { checkOptions, loadProgram } from "../src/lang/load.ts";
 import { showIn } from "../src/lang/types.ts";
-import { subtree, type Code, type Id, type Node, withNodes } from "../src/model.ts";
+import { parentOf, subtree, type Code, type Id, type Node, withNodes } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 
 const libDefs = new Set(LIBRARY.code.defs);
@@ -24,6 +24,11 @@ const seen = (code: Code, info: Info, names: Names) => {
     types: ids.flatMap((id) => { const x = info.typeOf.get(id); return x ? [`${id} ${t(x)}`] : []; }),
     holes: ids.flatMap((id) => { const h = info.holes.get(id); return h ? [`${id} ${t(h.expected)}`] : []; }),
     divergent: mine.filter((d) => info.divergent.has(d)),
+    // What the check says of a node besides its type: a call its inputs
+    // answer (x / 2), a spread, an operation's type there.
+    answered: ids.filter((id) => info.answered?.has(id)),
+    spread: ids.filter((id) => info.spread?.has(id)),
+    ops: ids.flatMap((id) => { const x = info.opAt?.get(id); return x ? [`${id} ${t(x)}`] : []; }),
   };
 };
 
@@ -73,4 +78,31 @@ for (const [example, seed] of RUNS) test(`${example}: random edits checked over 
   }
   // (A program that declares units is always checked whole.)
   if (!process.env.EDITED_RUNS) assert.ok(quick > 0, "some edits were checked over the check before");
+});
+
+test("what the check before said of a node of a definition checked again is said again or dropped: a division by a 0 no longer written is no longer answered by its inputs", () => {
+  // effects' `share` divides by a written 0, which its inputs answer (it
+  // fails); that 0 made 0 + 0, the check doesn't answer it.
+  // (Checked over the check of an edit of a number elsewhere first, as
+  // the editor goes.)
+  const p = loadProgram(join(root, "examples", "effects"));
+  const names = p.pres.names, opts = p.options ?? checkOptions;
+  const twelve = "oakkfqskoiid0jh5qkl1u3af61";
+  assert.equal((p.code.nodes[twelve] as Node & { kind: "lit" }).value, 12);
+  const before: Code = { ...p.code, nodes: withNodes(p.code.nodes, { [twelve]: { ...p.code.nodes[twelve], value: 13 } as Node }) };
+  const info = infer(before, names, undefined, opts);
+  const zero = "g5918cgi7qpdg20tgukv5ojgch", at = parentOf(p.code, zero)!;
+  assert.equal((p.code.nodes[zero] as Node & { kind: "lit" }).value, 0);
+  const c = p.code.nodes[at.parent] as Node & { kind: "call"; args: Id[] };
+  const next: Code = { ...p.code, nodes: withNodes(p.code.nodes, {
+    zzf: { id: "zzf", kind: "ref", target: "builtin.arith.add" } as Node,
+    zzz: { id: "zzz", kind: "lit", value: 0 } as Node,
+    zzc: { id: "zzc", kind: "call", fn: "zzf", args: [zero, "zzz"] } as Node,
+    [at.parent]: { ...c, args: c.args.map((a) => (a === zero ? "zzc" : a)) },
+  }) };
+  const edited = inferEdited(before, next, names, info, opts);
+  assert.ok(edited, "checked over the check before");
+  const whole = infer(next, names, undefined, opts);
+  assert.ok([...(info.answered ?? [])].some((id) => !whole.answered?.has(id)), "the edit takes an answer away");
+  assert.deepEqual(seen(next, edited!, names), seen(next, whole, names));
 });

@@ -458,6 +458,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     info.spread = new OverSet(layer.spread ?? new Set());
     info.reshape = new OverMap(layer.reshape ?? new Map());
     if (layer.solveAt) info.solveAt = new OverMap(layer.solveAt);
+    // What the layer said of the nodes of a definition checked again is
+    // said again by this check, or isn't: a division whose divisor was a
+    // 0 and now isn't is no longer answered by its inputs.
+    if (reuse) for (const d of reuse.only) for (const id of subtree(code, d)) { info.answered.delete(id); info.spread.delete(id); info.opAt.delete(id); info.reshape.delete(id); info.solveAt?.delete(id); }
   }
   const err = (id: Id, message: string, missing?: Problem["missing"]) => info.errors.push(missing ? { id, message, missing } : { id, message });
   // A named handler's effect in a row is the effect tagged with the name's
