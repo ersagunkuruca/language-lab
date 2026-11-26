@@ -277,6 +277,8 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
   const pushes = grow ? builtBy(funcs, now, a, suffix) : new Set<SExpr>();
 
   // Every use of a, and of an item read of it, is one columns keep?
+  // An array given to a host: a local, or a list of its items.
+  const given = (x: SExpr) => isLocal(x) || (x.k === "rt" && x.fn === `array.items${suffix}`);
   for (const i of now) {
     const f = funcs[i];
     fnNow = f;
@@ -342,7 +344,13 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
             for (const x of e.args) walk(x, e);
             return;
           }
-          if (e.args.some(arrayOf)) return bad();
+          // Given whole to a host (C348: the flock page's birds to the
+          // frame's draw), as rows made there from the columns.
+          if (e.args.some(arrayOf)) {
+            if (!(whole && e.fn.startsWith("host:") && isRecord(r) && !leaves.some((l) => l.opt) && e.args.every((x) => !arrayOf(x) || given(x)))) return bad();
+            for (const x of e.args) if (!arrayOf(x)) walk(x, e); else if (x.k === "rt") walk(x.args[0], x);
+            return;
+          }
           break;
         case "world": case "apply": case "closure": case "new": case "list":
           // Whole, a closure may keep the array and one applied may be
@@ -367,6 +375,7 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
   // Written as columns.
   for (const i of now) {
     const f = funcs[i];
+    fnNow = f;
     const at = new Map<number, { x: Local; j: Local }>();
     const entry = entries.get(i), fold = folds.get(i);
     // The record (or the record in a field, by its path) at j of x, made
@@ -433,6 +442,7 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
         const copy = rt(front ? `array.cfront${suffix}` : `array.ccopy${suffix}`, go(e.args[0]));
         return { k: "let", i: j, value: front ? { k: "num", v: 0 } : go(e.args[1]), body: { k: "let", i: c, value: copy, body: written(loc(c), loc(j), e.args[e.args.length - 1], false) } };
       }
+      if (whole && e.k === "rt" && e.fn.startsWith("host:") && e.args.some(arrayOf)) return { ...e, args: e.args.map((x) => (!arrayOf(x) ? go(x) : x.k === "rt" ? { ...x, args: [rt(`array.crows${suffix}`, go(x.args[0]))] } : rt(`array.crows${suffix}`, go(x)))) };
       if (entry && e === entry.call) {
         const made = e.args[2];
         const args = made.k === "rt" && made.fn === `array.empty${suffix}` ? [e.args[0], e.args[1], rt(`array.cnew${suffix}`, e.args[1]), e.args[3]] : e.args;

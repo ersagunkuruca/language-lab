@@ -591,7 +591,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
           // Float32's (C309: already a binary32, so stored exactly).
           {
             const kind = (a: string, x: LType, i: number) => (ir.arrays[Number(a)].narrow?.[i] ? "Float32Array" : x === "f64" ? "Float64Array" : "Array");
-            const m = /^array\.c(new|build|push|copy|front|slice|of|length|in|get(\d+)|set([\d_]+))\.a(\d+)$/.exec(e.fn);
+            const m = /^array\.c(new|build|push|copy|front|slice|of|rows|length|in|get(\d+)|set([\d_]+))\.a(\d+)$/.exec(e.fn);
             if (m) {
               // A slice, its columns copied: from, count, each clamped to the
               // array (array-view.ts sliceOf) (C342).
@@ -602,6 +602,15 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
                 pre.push(`${d}const ${c} = R.itemsOf(${xs[0]}).items(), ${w} = { n: ${c}.length };`);
                 ts.forEach((x, i) => pre.push(`${d}{ const g = new ${kind(m[4], x, i)}(${c}.length); for (let k = 0; k < ${c}.length; k++) { const r = ${c}[k]; g[k] = r.f${i} ?? r.fields[${i}]; } ${w}.c${i} = g; }`));
                 return w;
+              }
+              // Its rows, for a host given it whole (C348: the frame's draw
+              // given the flock's birds): each item a record made of its
+              // leaves, a record in a field one of its own.
+              if (m[1] === "rows") {
+                let l = 0;
+                const row = (t: RType): string => made(t.variant, t.fields.map((x) => (isRecord(x.t) && !x.t.mutable && x.t.fields.length ? row(x.t) : `c.c${l++}[k]`)));
+                const made1 = row(ir.arrays[Number(m[4])].item as RType);
+                return `R.rowsOf(${xs[0]}, ${l}, (c, k) => ${made1})`;
               }
               if (m[1] === "slice") {
                 const ts = ir.arrays[Number(m[4])].leaves ?? (ir.arrays[Number(m[4])].item as RType).fields.map((x) => x.t);
