@@ -22,7 +22,7 @@ import { decidedStore, groupStore } from "../src/lang/library-store.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { addToStore, lineageOf, pointsAt, previousVersion, publishVersion, sameLines, upgrade, upgradeNames, upgradeOwn, verify, withModulesHeld, type Module } from "../src/lang/modules.ts";
 import { base, baseNames, loadProgram, optionsWith, programModules, programStore } from "../src/lang/load.ts";
-import { equal, mainProblem, pageProblem, runMain, runProgram, showerFor, valueMain, type Value, type World } from "../src/lang/run.ts";
+import { Aborted, equal, mainProblem, pageProblem, runMain, runProgram, showerFor, valueMain, type Value, type World } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
 import { showType, STRING } from "../src/lang/types.ts";
@@ -77,7 +77,7 @@ const { rangeChoices, rangeArrays } = compiles ? await import("../../compiler/sr
 const { parallelColumnMaps } = compiles ? await import("../../compiler/src/par-columns.ts") : ({} as typeof import("../../compiler/src/par-columns.ts"));
 const { intoAsSets, ownedRecords } = compiles ? await import("../../compiler/src/owned-records.ts") : ({} as typeof import("../../compiler/src/owned-records.ts"));
 const { lowerScalar } = compiles ? await import("../../compiler/src/scalar.ts") : ({} as typeof import("../../compiler/src/scalar.ts"));
-const { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, printedMain, runCoreMain, runPrintedMain } = compiles ? await import("../../compiler/src/core-js.ts") : ({} as typeof import("../../compiler/src/core-js.ts"));
+const { Aborted: CoreAborted, FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, printedMain, runCoreMain, runPrintedMain } = compiles ? await import("../../compiler/src/core-js.ts") : ({} as typeof import("../../compiler/src/core-js.ts"));
 const { withInverses } = compiles ? await import("../../compiler/src/inverses.ts") : ({} as typeof import("../../compiler/src/inverses.ts"));
 const { withOperationLambdas } = compiles ? await import("../../compiler/src/operation-values.ts") : ({} as typeof import("../../compiler/src/operation-values.ts"));
 const { withCharacterMaps } = compiles ? await import("../../compiler/src/character-maps.ts") : ({} as typeof import("../../compiler/src/character-maps.ts"));
@@ -758,6 +758,7 @@ function cPlaces(root: Id): string[] {
 switch (command) {
   case "run": {
     if (staticPage) {
+      try {
       // Every text, part and attribute called once, and the handlers left
       // out: server-side rendering without a server.
       // Through the core IR, as `ters build-web` makes it (C186: agent's
@@ -779,6 +780,14 @@ switch (command) {
       const page = runMain(p.code, p.info, main, { print: (s) => console.error(s), names: p.names, cells, world: world(), hosts });
       process.stdout.write(pageDocument(p.title, htmlText(page, evaluatorCall)));
       break;
+      } catch (e) {
+        // An abort nothing handled (a file the page reads isn't there) is
+        // said as its reason, as a compiled main says it.
+        if (!(e instanceof Aborted || (compiles && e instanceof CoreAborted))) throw e;
+        console.error(String(e.reason));
+        process.exitCode = 1;
+        break;
+      }
     }
     // Through the core IR's JavaScript when main lowers (L118c): tens of
     // times faster than the evaluator on a long run. The evaluator when it
