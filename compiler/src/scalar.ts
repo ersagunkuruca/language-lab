@@ -725,7 +725,7 @@ function verdictOf(place: string, code: Code, info: Info): { checked: number; pr
   if (was && onlyLiteralValues(was.code, code)) { verdicts.set(place, { ...was, code }); return { checked: was.checked, problems: 0 }; }
   const v = verdict(code, info);
   // VERDICT_CHECK=1: each verdict against the whole verify's (a sweep).
-  if (process.env.VERDICT_CHECK) { const w = verify(code, elaborate(code, info)); if (w.checked !== v.checked || w.problems.length !== v.problems) throw new Error(`verdict ${place}: ${v.checked}/${v.problems} against ${w.checked}/${w.problems.length}`); }
+  if (typeof process !== "undefined" && process.env.VERDICT_CHECK) { const w = verify(code, elaborate(code, info)); if (w.checked !== v.checked || w.problems.length !== v.problems) throw new Error(`verdict ${place}: ${v.checked}/${v.problems} against ${w.checked}/${w.problems.length}`); }
   if (v.problems) verdicts.delete(place);
   else verdicts.set(place, { code, checked: v.checked });
   return v;
