@@ -56,7 +56,19 @@ export const sitedOf = (d: Data): Sited | null => {
 };
 
 const part = (o: Value, i: number): Value => ((o as unknown as Record<string, Value>)[`f${i}`] ?? (o as Data).fields[i]);
-const items = (v: Value): Value[] => (Array.isArray(v) ? v : fromList(v));
+// A list's items: a JavaScript array as it is, a list over one
+// (bytes.ts ItemsList) or an array value (array-view.ts ArrayView) copied
+// out of its buffer at once, any other list walked. Told apart by shape,
+// so a page's drawing imports neither (I380: walking an array-held list
+// as cells made a cell an item, twice a draw).
+const items = (v: Value): Value[] => {
+  if (Array.isArray(v)) return v;
+  const o = v as unknown as { items?: () => Value[]; b?: unknown; i?: number; buf?: { items: Value[] }; start?: number; n?: number };
+  // An ItemsList never changes its array, so the whole of one is read as it is.
+  if (typeof o.items === "function") return o.i === 0 && Array.isArray(o.b) ? (o.b as Value[]) : o.items();
+  if (o.buf && typeof o.n === "number") return o.buf.items.slice(o.start!, o.start! + o.n);
+  return fromList(v);
+};
 // Leaves written as words at `at` in a buffer seen as f32s and as i32s.
 function put(v: Value, leaves: Leaf[], f: Float32Array, n: Int32Array, at: number): void {
   leaves.forEach((l, k) => {
@@ -67,9 +79,13 @@ function put(v: Value, leaves: Leaf[], f: Float32Array, n: Int32Array, at: numbe
     else n[at + k] = x === (true as unknown as Value) || (x as Data)?.tag === TRUE ? 1 : 0;
   });
 }
+// The same items, one by one: a list the program didn't change, though
+// compiled code hands each draw a list of its own over the array it keeps
+// (array.items copies), so its object is new every frame.
+const sameItems = (a: Value[] | null, b: Value[]) => a !== null && a.length === b.length && a.every((x, i) => x === b[i]);
 const words = (count: number) => { const b = new ArrayBuffer(Math.max(16, Math.ceil(count / 4) * 16)); return { b, f: new Float32Array(b), n: new Int32Array(b) }; };
 
-interface Slot { list: Value | null; items: GPUBuffer | null; caps: GPUBuffer | null; capsWere: string; group: GPUBindGroup | null; groupFor: unknown[] }
+interface Slot { list: Value[] | null; items: GPUBuffer | null; caps: GPUBuffer | null; capsWere: string; group: GPUBindGroup | null; groupFor: unknown[] }
 // What a pass draws into: the canvas, or a texture of its own (G10),
 // stored as rgba8unorm as raster.ts stores one, from 0 to 1.
 const TEXTURE_FORMAT: GPUTextureFormat = "rgba8unorm";
@@ -162,6 +178,11 @@ export class GpuFrames {
     const enc = this.device.createCommandEncoder();
     const screen = this.context.getCurrentTexture().createView();
     const drawnNow = new Set<string>();
+    // The instances this frame sent, by the leaves their site reads: a
+    // later draw of the same list reading the same leaves (the flock's
+    // shadows, birds and their distances) binds that buffer, sending
+    // nothing (I380).
+    const sentNow = new Map<string, { list: Value[]; buffer: GPUBuffer }>();
     passes.forEach((pass, pi) => {
       // A copy pass (G11): the image is written to its texture only when
       // it isn't the image that texture last held.
@@ -197,16 +218,23 @@ export class GpuFrames {
         const list = (d as Data).fields[1];
         const mesh = this.mesh((d as Data).fields[0], site);
         const slot = this.slot(`${pi}.${di}`);
-        // Instances: sent again only when the list isn't the last frame's.
-        const n = items(list).length;
-        if (slot.list !== list || !slot.items) {
-          const per = site.instance.length, w = words(n * per);
-          const pack = PACKS.get(site)?.instance;
-          if (pack) pack(items(list), w.f, w.n); else items(list).forEach((it, i) => put(it, site.instance, w.f, w.n, i * per));
-          if (slot.items && slot.items.size >= w.b.byteLength) this.device.queue.writeBuffer(slot.items, 0, w.b);
-          else { slot.items?.destroy(); slot.items = this.buffer(w.b, GPUBufferUsage.STORAGE); }
-          slot.list = list;
-          drawn.bytes += w.b.byteLength;
+        // Instances: sent again only when the list isn't the last frame's,
+        // and not at all when an earlier draw of this frame sent it.
+        const its = items(list), n = its.length, leaves = JSON.stringify(site.instance), sent = sentNow.get(leaves);
+        let instances: GPUBuffer;
+        if (sent && sameItems(sent.list, its)) instances = sent.buffer;
+        else {
+          if (!sameItems(slot.list, its) || !slot.items) {
+            const per = site.instance.length, w = words(n * per);
+            const pack = PACKS.get(site)?.instance;
+            if (pack) pack(its, w.f, w.n); else its.forEach((it, i) => put(it, site.instance, w.f, w.n, i * per));
+            if (slot.items && slot.items.size >= w.b.byteLength) this.device.queue.writeBuffer(slot.items, 0, w.b);
+            else { slot.items?.destroy(); slot.items = this.buffer(w.b, GPUBufferUsage.STORAGE); }
+            slot.list = its;
+            drawn.bytes += w.b.byteLength;
+          }
+          instances = slot.items!;
+          sentNow.set(leaves, { list: its, buffer: instances });
         }
         // Captures: the leaves of each in order, four words to a vec4u.
         const u = words(site.caps.reduce((t, ls) => t + ls.length, 0));
@@ -226,9 +254,9 @@ export class GpuFrames {
           if (!drawnNow.has(t)) throw new Error(`the texture "${t}" is read before a pass of this frame draws it`);
           return this.textures.get(t)!;
         });
-        const want: unknown[] = [slot.caps, slot.items, mesh.corners, pipeline, ...sampled];
+        const want: unknown[] = [slot.caps, instances, mesh.corners, pipeline, ...sampled];
         if (!slot.group || want.length !== slot.groupFor.length || want.some((x, i) => x !== slot.groupFor[i])) {
-          const entries: GPUBindGroupEntry[] = [slot.caps!, slot.items!, mesh.corners].map((buffer, binding) => ({ binding, resource: { buffer } }));
+          const entries: GPUBindGroupEntry[] = [slot.caps!, instances, mesh.corners].map((buffer, binding) => ({ binding, resource: { buffer } }));
           if (sampled.length) entries.push({ binding: 3, resource: this.linear() }, ...sampled.map((t, k) => ({ binding: 4 + k, resource: t.createView() })));
           slot.group = this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
           slot.groupFor = want;
