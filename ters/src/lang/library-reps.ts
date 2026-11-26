@@ -221,6 +221,26 @@ export function choosingFor<T>(key: string, f: () => T): T {
   try { return f(); } finally { context = was; }
 }
 
+// The types of a definition's nodes, zonked: found once for a program
+// and its check while the check binds nothing more, where each type test
+// of the chooser below zonked every node of every definition again (some
+// 80 ms of machine's choice).
+const zonkedKept = new WeakMap<Code, WeakMap<Info, { at: number; defs: Map<Id, Type[]> }>>();
+function typesIn(code: Code, info: Info, d: Id): Type[] {
+  const at = info.subst.bound();
+  let byInfo = zonkedKept.get(code);
+  if (!byInfo) zonkedKept.set(code, (byInfo = new WeakMap()));
+  let k = byInfo.get(info);
+  if (!k || k.at !== at) byInfo.set(info, (k = { at, defs: new Map() }));
+  let ts = k.defs.get(d);
+  if (!ts) {
+    ts = [];
+    for (const id of subtree(code, d)) { const t = info.typeOf.get(id); if (t) ts.push(info.subst.zonk(t)); }
+    k.defs.set(d, ts);
+  }
+  return ts;
+}
+
 function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[], skip: Set<Id>, options: LibraryOptions): Chosen & { reps: Representation[] } {
   const chosen: Representation[] = [];
   const key = context && `${context.key}#${context.n++}|${JSON.stringify([asked, [...skip].sort()])}`;
@@ -267,7 +287,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     const holders = tabled();
     if (!holders.size) return false;
     const has = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" && (t.id === ty || t.args.some(has)); };
-    return defs.some((d) => subtree(code, d).some((id) => { const t0 = info.typeOf.get(id); if (!t0) return false; const t = info.subst.zonk(t0); return t.t === "con" && holders.has(t.id) && !!t.args[0] && has(t.args[0]); }));
+    return defs.some((d) => typesIn(code, info, d).some((t) => t.t === "con" && holders.has(t.id) && !!t.args[0] && has(t.args[0])));
   };
   // A row and the rows of the types stored with it, by the same name
   // (together.ts: a pool's slots and its keys').
@@ -831,12 +851,7 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
 // map read again after a change is still right; one holder is what makes
 // each change constant.
 function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representation, tabled: ReadonlySet<Id> = new Set(), dataKeys = false): boolean {
-  for (const id of defs.flatMap((d) => subtree(code, d))) {
-    const t0 = info.typeOf.get(id);
-    if (!t0) continue;
-    const t = info.subst.zonk(t0);
-    if (t.t === "con" && t.id === row.of && !hashable(info.subst.zonk(t.args[0]))) return false;
-  }
+  for (const d of defs) for (const t of typesIn(code, info, d)) if (t.t === "con" && t.id === row.of && !hashable(t.args[0])) return false;
   return true;
   // Int, Text, or a tuple of them (C63f, std.ts `spelling`), or a record
   // of the program's own (a type with one case) whose fields are (C63g):
@@ -875,15 +890,15 @@ function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representati
 // a list in a map's keys or a set's items is, where those rows compare
 // them (C93).
 function keyed(info: Info, defs: Id[], code: Code, of: Id): boolean {
-  const has = (t: Type): boolean => t.t === "con" && (t.id === of || t.args.some((a) => has(info.subst.zonk(a))));
+  // (Types zonked already: typesIn.)
+  const has = (t: Type): boolean => t.t === "con" && (t.id === of || t.args.some(has));
   const holders = of === LIST ? new Set<Id>([MAP, SET_TYPE]) : new Set<Id>([of]);
   const deep = (t: Type): boolean => {
-    t = info.subst.zonk(t);
-    if (t.t === "con") return (holders.has(t.id) && !!t.args[0] && has(info.subst.zonk(t.args[0]))) || t.args.some(deep);
+    if (t.t === "con") return (holders.has(t.id) && !!t.args[0] && has(t.args[0])) || t.args.some(deep);
     if (t.t === "fn") return [...t.params, t.ret].some(deep);
     return false;
   };
-  return defs.some((d) => subtree(code, d).some((id) => { const t = info.typeOf.get(id); return !!t && deep(t); }));
+  return defs.some((d) => typesIn(code, info, d).some(deep));
 }
 
 // A stored value given to a definition where its type is a variable
