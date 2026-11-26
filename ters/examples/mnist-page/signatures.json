@@ -1,0 +1,6 @@
+{"j4b6hqrm4ah86t12kef5icp4jf": {
+"plain": [],
+"rows": [0],
+"type": {"t": "fn", "params": [{"t": "con", "id": "@02krlon2v897orsah3uj5pv1tl", "args": []}], "ret": {"t": "con", "id": "@02krlon2v897orsah3uj5pv1tl", "args": []}, "eff": {"effs": [], "tail": 0}},
+"vars": []
+}}

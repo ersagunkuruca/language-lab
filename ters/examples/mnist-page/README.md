@@ -2,7 +2,11 @@
 
 A small network learns to read handwritten digits while you watch. It has
 196 inputs (a 14 × 14 digit), 24 tanh units and 10 outputs, and it learns
-by backpropagation and Adam, a batch of 50 digits a frame. The canvas shows
+by backpropagation and Adam, a batch of 50 digits a frame. It computes in
+32-bit floats (Float32), what a GPU computes in, and its layers are matrix
+products written with `contracted`: the pixels by the hidden weights, the
+hidden units by the output weights, and their transposes on the way back.
+The canvas shows
 30 test digits with the network's guess under each, green when right and
 red when not, and the mean loss of each pass over the training digits.
 
@@ -10,7 +14,8 @@ red when not, and the mean loss of each pass over the training digits.
 
 Learn runs a batch every frame until Pause. Step runs one batch, and Start
 over goes back to the starting weights. In a browser it names about 130 of
-the 150 test digits right after 20 seconds or so. Past that it learns the
+the 150 test digits right after 5 seconds or so (a batch a frame, at 60
+frames a second). Past that it learns the
 600 training digits by heart: the loss keeps falling, and the test count
 stays put.
 
