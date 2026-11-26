@@ -346,6 +346,14 @@ export function changedOver(before: Record<Id, Node>, next: Record<Id, Node>): I
 // The ids a version over another holds itself (changed, added or taken
 // out), in no set order; every id when it is over none.
 export const ownNodeIds = (nodes: Record<Id, Node>): Id[] => Object.keys(rawNodes(nodes));
+// The ids whose node differs between two versions, in no set order, read
+// from the nodes each holds itself: when one sits over the other or both
+// over the same (changedOver without its order). Undefined when neither is so.
+export function changedOwn(a: Record<Id, Node>, b: Record<Id, Node>): Id[] | undefined {
+  const ua = nodesUnder(a), ub = nodesUnder(b);
+  const own = ub === a ? ownNodeIds(b) : ua === b ? ownNodeIds(a) : ua && ua === ub ? [...new Set([...ownNodeIds(a), ...ownNodeIds(b)])] : undefined;
+  return own?.filter((id) => a[id] !== b[id]);
+}
 export function nodeValues(nodes: Record<Id, Node>): Node[] {
   const under = nodesUnder(nodes);
   if (!under) return Object.values(nodes);
