@@ -174,10 +174,16 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   const codeOf = new Map<number, string>();
   // The functions each function's `both`s run.
   const bothOf = new Map<number, number[]>();
+  // Who looks at what each function works out (its calls' callers, a
+  // closure code's makers and appliers, a `both`'s), to work only on what
+  // a change reaches.
+  const callers = funcs.map(() => new Set<number>());
+  const applies = funcs.map(() => new Set<string>());
   const scan = (g: SFunc, e: SExpr, self = funcs.indexOf(g)) => {
-    if (e.k === "rt" && e.fn === "both.pure") { const c = e.args[0]; (bothOf.get(self) ?? bothOf.set(self, []).get(self)!).push(c?.k === "closure" ? c.fn : -1); }
-    if (e.k === "call") called.add(e.fn);
-    if (e.k === "closure") { codeOf.set(e.fn, e.t.key); if (e.d !== undefined) outside.add(e.d); }
+    if (e.k === "rt" && e.fn === "both.pure") { const c = e.args[0]; (bothOf.get(self) ?? bothOf.set(self, []).get(self)!).push(c?.k === "closure" ? c.fn : -1); if (c?.k === "closure") callers[c.fn]?.add(self); }
+    if (e.k === "call") { called.add(e.fn); callers[e.fn]?.add(self); }
+    if (e.k === "apply") applies[self].add(e.t.key);
+    if (e.k === "closure") { codeOf.set(e.fn, e.t.key); callers[e.fn]?.add(self); if (e.d !== undefined) outside.add(e.d); }
     // A function the runtime is handed by its number (a whole part of the
     // name: not the digits an id starts with, as `handleK:8li2…`).
     if (e.k === "rt") for (const m of e.fn.matchAll(/:(\d+)(?=:|$)/g)) outside.add(Number(m[1]));
@@ -204,6 +210,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   // The codes of each type the program's applies run.
   const codes = new Map<string, number[]>();
   for (const [c, k] of codeOf) (codes.get(k) ?? codes.set(k, []).get(k)!).push(c);
+  applies.forEach((ks, f) => ks.forEach((k) => (codes.get(k) ?? []).forEach((c) => callers[c].add(f))));
 
   // Parameters a function never looks at: not used, or only handed on to
   // its own calls of itself in the same place (a fold's input it ignores).
@@ -230,16 +237,27 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   const params: AV[][] = funcs.map((g, i) => g.params.map((_, j) => (outside.has(i) || (codeOf.has(i) && j === 0) ? "S" : "T")));
   const results: AV[] = funcs.map(() => "T");
 
-  let changed = true;
+  // Set when what a function's callers read of it changed: what it only
+  // reads, lends, or gives of what it captured; its inputs' holders.
+  let spread = false;
+  const wake = (i: number) => { if (!queued.has(i)) { queued.add(i); queue.push(i); } };
+  let queue: number[] = [];
+  const queued = new Set<number>();
+  const next = () => { const i = queue[head++]; if (head > 4096 && head * 2 > queue.length) { queue = queue.slice(head); head = 0; } queued.delete(i); return i; };
+  let head = 0;
   const linear = (self: number) => {
     const g = funcs[self], whole = once[self], fields = fieldOnce[self];
     // State on a path: locals given away whole, and fields given away.
-    type St = { gone: Set<number>; took: Set<string> };
-    const off = (i: number) => { if (whole[i]) { whole[i] = false; changed = true; } };
-    const offF = (k: string) => { if (fields.get(k) !== false) { fields.set(k, false); changed = true; } };
-    const tookAny = (s: St, i: number) => [...s.took].filter((k) => k.startsWith(`${i}.`));
-    const borrow = (i: number, s: St) => { if (s.gone.has(i)) off(i); for (const k of tookAny(s, i)) offF(k); };
-    const give = (i: number, s: St) => { borrow(i, s); s.gone.add(i); };
+    // What a path added is logged, so the arms of a match each start from
+    // the state before it without copying it.
+    type St = { gone: Set<number>; took: Map<number, Set<number>>; log: number[] };
+    const goes = (s: St, i: number) => { if (!s.gone.has(i)) { s.gone.add(i); s.log.push(i, -1); } };
+    const took = (s: St, i: number, f: number) => s.took.get(i)?.has(f) ?? false;
+    const takes = (s: St, i: number, f: number) => { let t = s.took.get(i); if (!t) s.took.set(i, (t = new Set())); if (!t.has(f)) { t.add(f); s.log.push(i, f); } };
+    const off = (i: number) => { whole[i] = false; };
+    const offF = (k: string) => { fields.set(k, false); };
+    const borrow = (i: number, s: St) => { if (s.gone.has(i)) off(i); s.took.get(i)?.forEach((f) => offF(`${i}.${f}`)); };
+    const give = (i: number, s: St) => { borrow(i, s); goes(s, i); };
     // A local given as two inputs of one call: the callee could read one
     // after changing the other.
     const twice = (xs: SExpr[], to?: number) => {
@@ -255,20 +273,25 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
         case "local": return plain(g.locals[e.i]) ? undefined : read ? borrow(e.i, s) : give(e.i, s);
         case "get": {
           // A field only read is borrowed, as a local is.
-          if (e.rec.k === "local") { const k = `${e.rec.i}.${e.i}`; if (plain(e.t.fields[e.i]?.t)) return; if (s.gone.has(e.rec.i) || s.took.has(k)) offF(k); if (!read) s.took.add(k); return; }
+          if (e.rec.k === "local") { const k = `${e.rec.i}.${e.i}`; if (plain(e.t.fields[e.i]?.t)) return; if (s.gone.has(e.rec.i) || took(s, e.rec.i, e.i)) offF(k); if (!read) takes(s, e.rec.i, e.i); return; }
           return walk(e.rec, s, false);
         }
         // So is a case's field, the match's local its value.
         case "field": {
-          if (e.rec.k === "local") { const k = `${e.rec.i}.${e.i}`; if (plain(e.t.cases[e.c]?.fields[e.i]?.t)) return; if (s.gone.has(e.rec.i) || s.took.has(k)) offF(k); if (!read) s.took.add(k); return; }
+          if (e.rec.k === "local") { const k = `${e.rec.i}.${e.i}`; if (plain(e.t.cases[e.c]?.fields[e.i]?.t)) return; if (s.gone.has(e.rec.i) || took(s, e.rec.i, e.i)) offF(k); if (!read) takes(s, e.rec.i, e.i); return; }
           return walk(e.rec, s, false);
         }
         case "if": case "case": {
           // A match only looks at its value; its arms take its fields.
           walk(e.k === "if" ? e.cond : e.scrut, s, e.k === "if" || e.scrut.k === "local");
           const arms = e.k === "if" ? [e.then, e.else] : e.arms.filter((a): a is SExpr => !!a);
-          const ends = arms.map((a) => { const t = { gone: new Set(s.gone), took: new Set(s.took) }; walk(a, t, false); return t; });
-          for (const t of ends) { t.gone.forEach((x) => s.gone.add(x)); t.took.forEach((x) => s.took.add(x)); }
+          const start = s.log.length, ends: number[] = [];
+          for (const a of arms) {
+            walk(a, s, false);
+            for (let j = start; j < s.log.length; j += 2) { const i = s.log[j], f = s.log[j + 1]; ends.push(i, f); if (f < 0) s.gone.delete(i); else s.took.get(i)?.delete(f); }
+            s.log.length = start;
+          }
+          for (let j = 0; j < ends.length; j += 2) if (ends[j + 1] < 0) goes(s, ends[j]); else takes(s, ends[j], ends[j + 1]);
           return;
         }
         case "op": for (const a of e.args) walk(a, s, true); return;
@@ -292,7 +315,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
           inputs(e.args.flatMap((a): [SExpr, boolean][] => (fieldOf(a, e.t.key, y) ? [] : [[a, false]])), s);
           for (const a of e.args) if (fieldOf(a, e.t.key, y)) walk(a, s, false);
           if (s.gone.has(y)) off(y);
-          s.gone.add(y);
+          goes(s, y);
           return;
         }
         default: for (const k of kids(e)) walk(k, s, false);
@@ -308,7 +331,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
       for (const [a, read] of xs) if (read || !handed(a)) walk(a, s, read);
       for (const [a, read] of xs) if (!read && handed(a)) walk(a, s, false);
     };
-    walk(g.body, { gone: new Set(), took: new Set() }, false);
+    walk(g.body, { gone: new Set(), took: new Map(), log: [] }, false);
     // A parameter only borrowed: never given away whole nor in part.
     const given = new Set<number>(), lent = new Set<number>();
     // How a value is used: only read (0), part of what the function gives
@@ -331,7 +354,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
         case "if": gives(e.cond, 0); gives(e.then, m); gives(e.else, m); return;
         case "op": for (const a of e.args) gives(a, 0); return;
         case "apply": gives(e.fn, 0); for (const a of e.args) gives(a, 2); return;
-        case "cap": if (m && !plain(ir.shapes[e.shape]?.caps[e.i]) && !capGiven[self].has(e.i)) { capGiven[self].add(e.i); changed = true; } return;
+        case "cap": if (m && !plain(ir.shapes[e.shape]?.caps[e.i]) && !capGiven[self].has(e.i)) { capGiven[self].add(e.i); spread = true; } return;
         case "rt": { const o = op(e), r = (o !== null && READS.has(o)) || READS_RT.test(e.fn); e.args.forEach((a) => gives(a, r ? 0 : 2)); return; }
         case "call": e.args.forEach((a, j) => gives(a, reads[e.fn]?.[j] ? 0 : lends[e.fn]?.[j] ? m : 2)); return;
         default: for (const k of kids(e)) gives(k, 2);
@@ -339,8 +362,8 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
     };
     gives(g.body, 1);
     g.params.forEach((_, j) => {
-      if (reads[self][j] && (given.has(j) || lent.has(j))) { reads[self][j] = false; changed = true; }
-      if (lends[self][j] && given.has(j)) { lends[self][j] = false; changed = true; }
+      if (reads[self][j] && (given.has(j) || lent.has(j))) { reads[self][j] = false; spread = true; }
+      if (lends[self][j] && given.has(j)) { lends[self][j] = false; spread = true; }
     });
   };
 
@@ -390,7 +413,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
         case "fail": case "abort": kids(e).forEach((k) => av(self, k, env, at)); return "T";
         case "call": {
           const xs = e.args.map((a) => av(self, a, env, at));
-          xs.forEach((x, j) => { const p = params[e.fn]; if (p && !outside.has(e.fn)) { const m = meet(p[j], reads[e.fn][j] || (lends[e.fn][j] && lendable(e.args[j])) ? "S" : x); if (!same(m, p[j])) { p[j] = m; changed = true; } } });
+          xs.forEach((x, j) => { const p = params[e.fn]; if (p && !outside.has(e.fn)) { const m = meet(p[j], reads[e.fn][j] || (lends[e.fn][j] && lendable(e.args[j])) ? "S" : x); if (!same(m, p[j])) { p[j] = m; wake(e.fn); } } });
           // What it lent its answer is shared with the answer from here on:
           // a local, or a local's field.
           e.args.forEach((a, j) => {
@@ -409,7 +432,7 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
           av(self, e.fn, env, at);
           const xs = e.args.map((a) => av(self, a, env, at));
           const cs = inner(e.t.key) ? codes.get(e.t.key) ?? [] : [];
-          for (const c of cs) xs.forEach((x, j) => { const p = params[c]; if (p && !outside.has(c) && j + 1 < p.length) { const m = meet(p[j + 1], x); if (!same(m, p[j + 1])) { p[j + 1] = m; changed = true; } } });
+          for (const c of cs) xs.forEach((x, j) => { const p = params[c]; if (p && !outside.has(c) && j + 1 < p.length) { const m = meet(p[j + 1], x); if (!same(m, p[j + 1])) { p[j + 1] = m; wake(c); } } });
           return cs.length ? cs.reduce<AV>((m, c) => meet(m, results[c]), "T") : "S";
         }
         case "rt": {
@@ -435,25 +458,26 @@ export function holders(ir: CoreIR, roots: number[] = [], takes = new Set<number
   // they don't hang on holders, and a parameter taken as only read while
   // that was still being worked out would count what it's given as shared
   // for good (moths' `filed`, given a new grid each tick).
-  for (let rounds = 0; changed && rounds < 100; rounds++) {
-    changed = false;
-    funcs.forEach((_, i) => linear(i));
-  }
   const none: Holders = { owned: new Set(), one: () => false, into: new Set() };
-  if (changed) return none;
-  changed = true;
-  for (let rounds = 0; changed && rounds < 100; rounds++) {
-    changed = false;
-    funcs.forEach((_, i) => {
-      if (unreached.has(i)) return;
-      const r = meet(results[i], body(i, () => {}));
-      if (!same(r, results[i])) { results[i] = r; changed = true; }
-    });
+  const budget = () => 100 * funcs.length + 100;
+  funcs.forEach((_, i) => wake(i));
+  for (let n = 0; head < queue.length; n++) {
+    if (n > budget()) return none;
+    const i = next();
+    spread = false;
+    linear(i);
+    if (spread) callers[i].forEach(wake);
+  }
+  funcs.forEach((_, i) => { if (!unreached.has(i)) wake(i); });
+  for (let n = 0; head < queue.length; n++) {
+    if (n > budget()) return none;
+    const i = next();
+    const r = meet(results[i], body(i, () => {}));
+    if (!same(r, results[i])) { results[i] = r; callers[i].forEach((c) => { if (!unreached.has(c)) wake(c); }); }
   }
   // Each replace's array, as the fixpoint left it: it has one holder when
   // it arrived with one and the replace is the last that uses it.
   const owned = new Set<SExpr>();
-  if (changed) return none;
   const vals = new Map<SExpr, AV>();
   const into = new Set<SExpr>();
   funcs.forEach((_, i) => !unreached.has(i) && body(i, (e, v, env) => {
