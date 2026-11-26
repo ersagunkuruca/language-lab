@@ -1076,8 +1076,12 @@ static double lab_world_sleep(double ms) {
   // Asking for a permission (L236): a command line answers yes; a native
   // page's runtime sets lab_ask to ask the person (c.ts, L236b), which
   // may park the handler that asked until they answer.
-  "world.askPermission": { uses: [], c: `static int (*lab_ask)(const char *what, size_t n);
-static int32_t lab_world_askPermission(lab_cell *t) { int r = lab_ask ? lab_ask((const char *)LAB_TB(t), LAB_TN(t)) : 1; lab_drop(t); return r; }` },
+  // The screen's asker (L236b): 1 yes, 0 no; and the file the person
+  // chose for an ask's yes (ters_page_chosen, L271c), malloc'd.
+  "world.ask": { uses: [], c: `#define LAB_ASKS 1
+static int (*lab_ask)(const char *what, size_t n);
+static char *lab_chosen;` },
+  "world.askPermission": { uses: ["world.ask"], c: `static int32_t lab_world_askPermission(lab_cell *t) { int r = lab_ask ? lab_ask((const char *)LAB_TB(t), LAB_TN(t)) : 1; lab_drop(t); return r; }` },
   "world.print": { uses: [], c: `static void lab_world_print(lab_cell *t) { fwrite(LAB_TB(t), 1, LAB_TN(t), stdout); putchar('\\n'); lab_drop(t); }` },
   // A seed from the world for Random's generator (C136): four bytes of
   // /dev/urandom, or the time and an address where there is none.
@@ -1620,8 +1624,11 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
   // A file handed to the person (L271a, as world.ts on the command line):
   // written in the folder the program runs in, under its name alone
   // ("file" when it has none).
+  // In an app (L271c), the screen asks the person where to keep it
+  // ("offer file:" and the name, as a save dialog would), and it's
+  // written where they chose; no place chosen aborts.
   "world.offerFile": {
-    uses: ["world.putBytes"],
+    uses: ["world.putBytes", "world.ask", "world.chosen"],
     c: (o) => `static void lab_world_offerFile(lab_cell *name, ${o.record} b) {
   const char *s = (const char *)LAB_TB(name);
   size_t end = LAB_TN(name), start;
@@ -1633,14 +1640,31 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
   while (end > 0 && LAB_SEP(s[end - 1])) end--;
   for (start = end; start > 0 && !LAB_SEP(s[start - 1]); start--) {}
 #undef LAB_SEP
-  lab__put_bytes("offerFile", name, end > start ? lab__text_of(s + start, end - start) : lab__text_of("file", 4), b);
+  lab_cell *alone = end > start ? lab__text_of(s + start, end - start) : lab__text_of("file", 4);
+  if (lab_ask) {
+    lab_cell *at = lab__chosen("offer file:", alone);
+    if (!at) { lab__chosen_none("no place was chosen to keep ", alone); lab_drop(b.f0); lab_drop(name); return; }
+    lab_drop(alone);
+    alone = at;
+  }
+  lab__put_bytes("offerFile", name, alone, b);
 }`,
   },
   // A file the person chooses (L271a): on the command line there's no one
   // to choose, so it aborts, as world.ts does.
+  // In an app (L271c), the screen asks the person for one ("ask for
+  // file:" and the kinds, as an open dialog would), and its bytes are
+  // read; none chosen aborts, as a page's picker does.
   "world.askForFile": {
-    uses: ["world.fail"],
+    uses: ["world.fail", "world.ask", "world.chosen", "world.readBytes"],
     c: (o) => `static ${o.record} lab_world_askForFile(lab_cell *kinds) {
+  if (lab_ask) {
+    lab_cell *at = lab__chosen("ask for file:", kinds);
+    lab_drop(kinds);
+    if (at) return lab_world_readBytes(at);
+    lab__chosen_none("no file was chosen", 0);
+    return (${o.record}){ &${o.nil} };
+  }
   if (lab__log_begin("askForFile")) lab__log_text(kinds);
   lab_drop(kinds);
   static const char why[] = "there's no one to choose a file on the command line: read one with read bytes";
@@ -1651,6 +1675,34 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
   return (${o.record}){ &${o.nil} };
 }`,
   },
+  // What the screen is asked for a file (L271c): the ask, what before
+  // and the text after it (kept); the path the person chose as a Text,
+  // or null for none. And the reason for none, a text after it if one
+  // is given (dropped).
+  "world.chosen": {
+    uses: ["world.ask", "world.fail"],
+    c: `static lab_cell *lab__chosen(const char *what, lab_cell *t) {
+  size_t a = strlen(what), n = LAB_TN(t);
+  char *q = malloc(a + n + 1);
+  if (!q) lab_oom();
+  memcpy(q, what, a); memcpy(q + a, LAB_TB(t), n); q[a + n] = 0;
+  free(lab_chosen); lab_chosen = 0;
+  int yes = lab_ask(q, a + n);
+  free(q);
+  if (!yes || !lab_chosen) { free(lab_chosen); lab_chosen = 0; return 0; }
+  lab_cell *r = lab__text_of(lab_chosen, strlen(lab_chosen));
+  free(lab_chosen); lab_chosen = 0;
+  return r;
+}
+static void lab__chosen_none(const char *why, lab_cell *t) {
+  size_t a = strlen(why), n = t ? LAB_TN(t) : 0;
+  lab_cell *r = lab__text(a + n);
+  memcpy(LAB_TB(r), why, a);
+  if (t) { memcpy(LAB_TB(r) + a, LAB_TB(t), n); lab_drop(t); }
+  lab_drop(lab_reason);
+  lab_reason = r;
+  lab_st = 2;
+}` },
   // A zone's offset from UTC at an instant, in seconds (L188): the host's
   // zone database through TZ, NaN for a zone it doesn't have (a file under
   // TZDIR or /usr/share/zoneinfo). The local time read back as UTC by

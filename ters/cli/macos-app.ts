@@ -119,6 +119,7 @@ int ters_page_clock(void);
 int ters_page_frame(void);
 int ters_page_permission(int yes);
 void ters_page_files(const char *dir);
+void ters_page_chosen(const char *path);
 
 static NSColor *colour(uint32_t c) { return [NSColor colorWithSRGBRed:((c >> 16) & 255) / 255.0 green:((c >> 8) & 255) / 255.0 blue:(c & 255) / 255.0 alpha:(c >> 24) / 255.0]; }
 static NSString *str(const char *s, size_t n) { return [[NSString alloc] initWithBytes:s length:n encoding:NSUTF8StringEncoding] ?: @""; }
@@ -483,6 +484,25 @@ static TWhere *W;
 @end
 static int u_ask(void *c, const char *s, size_t n) {
   NSString *what = str(s, n);
+  // A file the page offers or asks for (L271c): where to keep it in the
+  // Mac's own save panel, named as the page names it, or which to read
+  // in its open panel; or -ters-choose's path for a check.
+  BOOL offer = [what hasPrefix:@"offer file:"], open = [what hasPrefix:@"ask for file:"];
+  if (offer || open) {
+    NSString *f = [NSUserDefaults.standardUserDefaults stringForKey:@"ters-choose"];
+    if (f.length) { ters_page_chosen(f.fileSystemRepresentation); return 1; }
+    NSString *name = [what substringFromIndex:offer ? 11 : 13];
+    printf("ask %s\n", offer ? "offer file" : "ask for file");
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSSavePanel *p = offer ? [NSSavePanel savePanel] : [NSOpenPanel openPanel];
+      if (offer) p.nameFieldStringValue = name;
+      else { NSOpenPanel *o = (NSOpenPanel *)p; o.canChooseFiles = YES; o.canChooseDirectories = NO; o.allowsMultipleSelection = NO; }
+      BOOL yes = [p runModal] == NSModalResponseOK && p.URL;
+      if (yes) ters_page_chosen(p.URL.fileSystemRepresentation);
+      answered(offer ? @"offer file" : @"ask for file", yes);
+    });
+    return -1;
+  }
   // The person's files (L284, C318): a folder they pick in the Mac's own
   // open panel, opened once the handler that asked waits, or
   // -ters-folder's for a check.

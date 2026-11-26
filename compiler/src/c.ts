@@ -1570,7 +1570,9 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     // fiber's (Android's Java checks its stack). An event while a handler
     // is parked runs at once, and its own asks can't wait: no, unless
     // already known.
-    const waits = rts.has("world.askPermission");
+    // So does one that offers a file or asks for one (L271c): the screen
+    // asks the person where, or which.
+    const waits = rts.has("world.askPermission") || rts.has("world.offerFile") || rts.has("world.askForFile");
     if (waits) rts.add("fibers");
     const PARKED_C = `#include <string.h>
 static lab__ctx ters_ev_back, ters_ev_at;
@@ -1699,6 +1701,10 @@ int ters_page_permission(int yes);
 // The folder the person picked for the page's files (L284, C318), on a
 // desktop: a path that isn't absolute is in it from now on.
 void ters_page_files(const char *dir);
+// The file the person chose for what the page asked last (L271c: "offer
+// file:" and a name, where to keep it; "ask for file:" and kinds, which
+// to read), told before the answer's yes.
+void ters_page_chosen(const char *path);
 static ters_host *ters_h;
 // Run after the page changed (c-layout.ts lays it out again).
 static void (*ters_after)(void);
@@ -2269,6 +2275,17 @@ void ters_page_held(int held) { ters_page_lock(); ters_held = held; ters_page_un
 int ters_page_clock(void) { ters_page_lock(); int r = ters__page_clock(); ters_page_unlock(); return r; }
 int ters_page_frame(void) { ters_page_lock(); int r = ters__page_frame(); ters_page_unlock(); return r; }
 int ters_page_permission(int yes) { ters_page_lock(); int r = ters__page_permission(yes); ters_page_unlock(); return r; }
+void ters_page_chosen(const char *path) {
+#ifdef LAB_ASKS
+  size_t n = strlen(path) + 1;
+  char *at = malloc(n);
+  if (!at) lab_oom();
+  memcpy(at, path, n);
+  ters_page_lock(); free(lab_chosen); lab_chosen = at; ters_page_unlock();
+#else
+  (void)path;
+#endif
+}
 void ters_page_files(const char *dir) {
 #ifdef LAB_FILES_AT
   size_t n = strlen(dir) + 1;

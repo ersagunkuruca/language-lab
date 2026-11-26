@@ -2219,6 +2219,15 @@ int main(int argc, char **argv) {
       continue;
     }
 #endif
+    if (!strcmp(s, "chosen")) {
+      // chosen:PATH: the person chose the file at PATH for what was asked
+      // (L271c), and said yes.
+      ters_page_chosen(argv[a] + 7);
+      ters_page_permission(1);
+      free(s);
+      u_show(root);
+      continue;
+    }
     if (!strcmp(s, "permission")) {
       // permission:yes (or no): the person's answer to what was asked.
       ters_page_permission(!strcmp(id, "yes"));

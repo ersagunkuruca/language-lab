@@ -92,6 +92,7 @@ int ters_page_clock(void);
 int ters_page_frame(void);
 int ters_page_permission(int yes);
 void ters_page_files(const char *dir);
+void ters_page_chosen(const char *path);
 
 #define TITLE ${cString(title)}
 #define APP_ID ${cString(id)}
@@ -473,7 +474,49 @@ static int pickFolder(void) {
   say("files: %s\n", yes ? "a folder picked" : "none picked");
   return yes;
 }
+// A file the page offers or asks for (L271c): where to keep it in
+// Windows' own save dialog, named as the page names it, or which to
+// read in its open dialog; or --ters-choose's path for a check.
+#define WM_CHOOSE (WM_APP + 3)
+static WCHAR *CHOOSE, *NAME;
+static int SAVING;
+static int chooseFile(void) {
+  int yes = 0;
+  HRESULT co = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+  IFileDialog *d = NULL;
+  if (SUCCEEDED(CoCreateInstance(SAVING ? &CLSID_FileSaveDialog : &CLSID_FileOpenDialog, NULL, CLSCTX_INPROC_SERVER, &IID_IFileDialog, (void **)&d))) {
+    FILEOPENDIALOGOPTIONS o = 0;
+    IFileDialog_GetOptions(d, &o);
+    IFileDialog_SetOptions(d, o | FOS_FORCEFILESYSTEM | (SAVING ? FOS_OVERWRITEPROMPT : FOS_FILEMUSTEXIST));
+    if (SAVING && NAME) IFileDialog_SetFileName(d, NAME);
+    IShellItem *it = NULL;
+    PWSTR path = NULL;
+    if (SUCCEEDED(IFileDialog_Show(d, W)) && SUCCEEDED(IFileDialog_GetResult(d, &it))) {
+      if (SUCCEEDED(IShellItem_GetDisplayName(it, SIGDN_FILESYSPATH, &path))) { char *u = narrow(path, (int)wcslen(path)); ters_page_chosen(u); free(u); CoTaskMemFree(path); yes = 1; }
+      IShellItem_Release(it);
+    }
+    IFileDialog_Release(d);
+  }
+  if (SUCCEEDED(co)) CoUninitialize();
+  say("%s: %s\n", SAVING ? "offer file" : "ask for file", yes ? "a file chosen" : "none chosen");
+  return yes;
+}
 static int u_ask(void *c, const char *s, size_t n) {
+  int offer = n >= 11 && !memcmp(s, "offer file:", 11), open = n >= 13 && !memcmp(s, "ask for file:", 13);
+  if (offer || open) {
+    if (CHOOSE) { char *u = narrow(CHOOSE, (int)wcslen(CHOOSE)); ters_page_chosen(u); free(u); say("%s: %s\n", offer ? "offer file" : "ask for file", "--ters-choose"); return 1; }
+    SAVING = offer;
+    free(NAME);
+    NAME = NULL;
+    if (offer) {
+      int k = MultiByteToWideChar(CP_UTF8, 0, s + 11, (int)n - 11, NULL, 0);
+      NAME = malloc(sizeof *NAME * (k + 1));
+      MultiByteToWideChar(CP_UTF8, 0, s + 11, (int)n - 11, NAME, k);
+      NAME[k] = 0;
+    }
+    PostMessageW(W, WM_CHOOSE, 0, 0);
+    return -1;
+  }
   if (n == 5 && !memcmp(s, "files", 5)) {
     if (FOLDER) { picked(FOLDER); say("files: %s\n", "--ters-folder"); return 1; }
     PostMessageW(W, WM_PICK, 0, 0);
@@ -1315,6 +1358,7 @@ static LRESULT CALLBACK windowed(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_GETMINMAXINFO: { MINMAXINFO *mm = (MINMAXINFO *)l; mm->ptMinTrackSize.x = (LONG)(240 * SCALE); mm->ptMinTrackSize.y = (LONG)(160 * SCALE); return 0; }
     case WM_FRAME: frame(); return 0;
     case WM_PICK: { int yes = pickFolder(); held(); ters_page_permission(yes); tick(); return 0; }
+    case WM_CHOOSE: { int yes = chooseFile(); held(); ters_page_permission(yes); tick(); return 0; }
     case WM_TIMER: if (w == TAP_TIMER) tapStep(); return 0;
     case WM_ACTIVATEAPP:
       if (!w) { PAUSED = 1; moment(E_PAUSE); }
@@ -1397,6 +1441,7 @@ int main(void) {
     char *a = narrow(argv[i + 1], (int)wcslen(argv[i + 1]));
     if (!wcscmp(argv[i], L"--ters-out")) { if (!_wfreopen(argv[i + 1], L"w", stdout)) fprintf(stderr, "can't write %s\n", a); }
     else if (!wcscmp(argv[i], L"--ters-folder")) { FOLDER = malloc(sizeof *FOLDER * (wcslen(argv[i + 1]) + 1)); wcscpy(FOLDER, argv[i + 1]); }
+    else if (!wcscmp(argv[i], L"--ters-choose")) { CHOOSE = malloc(sizeof *CHOOSE * (wcslen(argv[i + 1]) + 1)); wcscpy(CHOOSE, argv[i + 1]); }
     else if (!wcscmp(argv[i], L"--ters-taps")) {
       for (char *t = strtok(a, "|"); t; t = strtok(NULL, "|")) if (*t) { TAPS = realloc(TAPS, sizeof *TAPS * (NTAPS + 1)); TAPS[NTAPS++] = strdup(t); }
       STEP = -1;
