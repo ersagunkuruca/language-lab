@@ -47,3 +47,19 @@ test("a page carries them in a script it reads, and a file the page writes is re
   assert.equal(w.readFile!("bird.obj"), "v 1 1 1\n");
   assert.equal(carrying("<body>\n", {}), "<body>\n");
 });
+
+// The flock's bird is read from bird.obj, which its page carries, by an
+// OBJ-subset reader written in Ters (G11): corners from v lines, faces from
+// f lines fanned into triangles, a corner's texture and normal left out.
+test("flock-frame-page reads its bird from the OBJ file its page carries", async () => {
+  const { Session } = await import("../mcp/session.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { cpSync } = await import("node:fs");
+  const dir = mkdtempSync(join(tmpdir(), "obj-"));
+  cpSync(join(import.meta.dirname, "../examples/flock-frame-page"), dir, { recursive: true });
+  const s = new Session(dir);
+  const quad = JSON.stringify("# a square\nv 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1/1/1 2/2/1 3/3/1 4/4/1\nf 2 3 4\n");
+  assert.match(s.eval(`‹obj mesh›(${quad})`), /^= mesh\(\[vec3\(0, 0, 0\), vec3\(1, 0, 0\), vec3\(1, 1, 0\), vec3\(0, 1, 0\)\], \[0, 1, 2, 0, 2, 3, 1, 2, 3\]\)/);
+  const p = loadProgram(dir);
+  assert.deepEqual(Object.keys(folderFiles(dir, p.code)), ["bird.obj"]);
+});

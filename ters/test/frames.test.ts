@@ -167,7 +167,10 @@ test("the flock page's first frame: sky, floor and birds", async () => {
   const named = (n: string) => p.own.defs.find((d) => p.pres.names[d] === n)!;
   const r = makeRunner(p.code, info, { print: () => {} });
   const sky = r.value(named("start sky"));
-  const frame = [...r.call(r.value(named("frame of")), sky)][0] as Value;
+  // Its bird, from the OBJ file beside it (G11).
+  const { readFileSync } = await import("node:fs");
+  const bird = [...r.call(r.value(named("obj mesh")), readFileSync(join(import.meta.dirname, "../examples/flock-frame-page/bird.obj"), "utf8"))][0] as Value;
+  const frame = [...r.call(r.value(named("frame of")), sky, bird)][0] as Value;
   const img = rasterize(frame, 64, 60, evaluatorCall);
   const colours = new Set<string>();
   for (let i = 0; i < img.rgba.length; i += 4) colours.add(img.rgba.slice(i, i + 3).join(","));
