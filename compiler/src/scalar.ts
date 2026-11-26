@@ -69,7 +69,7 @@ import { shownImplementations, implementationsOf } from "../../ters/src/lang/std
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { withFilledArrays } from "./fill-arrays.ts";
 import { fieldShapes } from "../../ters/src/lang/nested.ts";
-import { solvesOnce } from "../../ters/src/lang/run.ts";
+import { resolvedAlready, solvesOnce } from "../../ters/src/lang/run.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
 import { NUMERIC, relationFor } from "../../ters/src/lang/equations.ts";
 import { writablePlan, type Expr } from "./relation.ts";
@@ -838,6 +838,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // An edit of a number none of its runs reads takes what it baked
     // before (literals-again.ts).
     if (!opts.shader && opts.bake !== false && !envSet("NO_BAKE")) ({ code, info, names } = overLiterals(`baked ${roots.join(" ")}`, { code, info, names }, () => {
+      // Its arithmetic is resolved (preparedIn), and nothing since writes
+      // generic arithmetic, so the runs' evaluator takes it as it is: its
+      // resolving again found nothing to do in every program, after
+      // scanning all of it (machine: 18 ms an edit).
+      resolvedAlready(code, info);
       const b = bakeCalls(code, info, names);
       if (b.baked.length) {
         const checked = infer(b.code, names, undefined, recheck);
