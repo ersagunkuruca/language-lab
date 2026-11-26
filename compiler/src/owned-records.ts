@@ -22,15 +22,15 @@
 import type { Code, Id } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { oneHolder } from "../../ters/src/lang/one-holder.ts";
-import { holders } from "./holders.ts";
+import { holders, type Holders } from "./holders.ts";
 import { kids, mapKids, type CoreIR, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 const isD = (t: LType | undefined, d: RType) => typeof t === "object" && t !== null && "variant" in t && t.key === d.key;
 
-export function ownedRecords(ir: CoreIR, code: Code, info: Info, names: Record<Id, string>, main: Id): number {
+export function ownedRecords(ir: CoreIR, code: Code, info: Info, names: Record<Id, string>, main: Id, shared?: () => Holders): number {
   let n = 0;
   const roots = ir.funcs.flatMap((g, i) => (g.def === main && !g.inner ? [i] : []));
-  const into = holders(ir, roots).into;
+  const into = (shared ?? (() => holders(ir, roots)))().into;
   for (const d of ir.records) {
     if (d.mutable || !d.fields.length) continue;
     if (!ir.funcs.some((f) => found(f.body, (e) => e.k === "make" && e.t.key === d.key && rootOf(e, d) !== null))) continue;
@@ -38,10 +38,12 @@ export function ownedRecords(ir: CoreIR, code: Code, info: Info, names: Record<I
     // A record given to a map's function as an item of an array: holders.ts
     // knows no holders of an array's items yet, so there one-holder.ts, by
     // type, still decides (drift with its list as an array).
+    // Asked only of a make holders.ts left (it walks the program's source).
     const rebuilt = new Set<Id>();
-    const byType = oneHolder(code, info, main, new Set([d.def]), new Set(), new Map(), names, undefined, true, rebuilt).ok;
+    let byType: boolean | undefined;
+    const typed = () => (byType ??= oneHolder(code, info, main, new Set([d.def]), new Set(), new Map(), names, undefined, true, rebuilt).ok);
     let here = 0;
-    for (const f of ir.funcs) f.body = inPlace(f, f.body, d, (m, y) => { const b = f.binders?.[y]; if (!into.has(m) && !(byType && b && rebuilt.has(b))) return false; here++; return true; });
+    for (const f of ir.funcs) f.body = inPlace(f, f.body, d, (m, y) => { const b = f.binders?.[y]; if (!into.has(m) && !(b && typed() && rebuilt.has(b))) return false; here++; return true; });
     if (!here) continue;
     for (const f of ir.funcs) { copyCaptures(ir, f, d); snapshot(f, d); }
     d.owned = true;

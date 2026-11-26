@@ -19,16 +19,18 @@
 
 import type { Id } from "../../ters/src/model.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
-import { holders } from "./holders.ts";
+import { holders, type Holders } from "./holders.ts";
 import { isArray, kids, type CoreIR, type SExpr } from "./scalar.ts";
 
 // The program's functions called from outside: main's own.
 const rootsOf = (ir: CoreIR, main: Id) => ir.funcs.flatMap((g, i) => (g.def === main && !g.inner ? [i] : []));
 
-export function ownedArrays(ir: CoreIR, main: Id, maps = false): number {
+// shared: holders() of main's functions, worked out once (after the maps)
+// for the passes that read it (holders.ts sharedHolders).
+export function ownedArrays(ir: CoreIR, main: Id, maps = false, shared?: () => Holders): number {
   const roots = rootsOf(ir, main);
   let n = maps ? mapsInPlace(ir, roots) : 0;
-  for (const e of holders(ir, roots).owned) if (e.k === "rt" && REPLACE.test(e.fn)) { e.fn = e.fn.replace(REPLACE, "array.replaceOwned.a$1"); n++; }
+  for (const e of (shared ?? (() => holders(ir, roots)))().owned) if (e.k === "rt" && REPLACE.test(e.fn)) { e.fn = e.fn.replace(REPLACE, "array.replaceOwned.a$1"); n++; }
   return n;
 }
 

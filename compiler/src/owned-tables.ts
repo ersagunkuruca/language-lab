@@ -11,14 +11,16 @@
 // the program's source as one-holder.ts did.
 
 import type { Id } from "../../ters/src/model.ts";
-import { holders } from "./holders.ts";
+import { holders, type Holders } from "./holders.ts";
 import type { CoreIR } from "./scalar.ts";
 
 const CHANGE = /^table\.(put|remove)\.t(\d+)$/;
 
-export function ownedTables(ir: CoreIR, main: Id): number {
+// shared: holders() of main's functions, worked out once for the passes
+// that read it (holders.ts sharedHolders).
+export function ownedTables(ir: CoreIR, main: Id, shared?: () => Holders): number {
   const roots = ir.funcs.flatMap((g, i) => (g.def === main && !g.inner ? [i] : []));
   let n = 0;
-  for (const e of holders(ir, roots).owned) if (e.k === "rt" && CHANGE.test(e.fn)) { e.fn = e.fn.replace(CHANGE, "table.$1Owned.t$2"); n++; }
+  for (const e of (shared ?? (() => holders(ir, roots)))().owned) if (e.k === "rt" && CHANGE.test(e.fn)) { e.fn = e.fn.replace(CHANGE, "table.$1Owned.t$2"); n++; }
   return n;
 }

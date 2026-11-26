@@ -32,7 +32,7 @@ import { intRanges } from "./int-ranges.ts";
 import { loopRecords } from "./loop-records.ts";
 import { boundedReads, countedInts, keptArraysOf, keptColumns } from "./kept-arrays.ts";
 import { ownedArrays } from "./owned-arrays.ts";
-import { ownPushes, ownedPerValue } from "./holders.ts";
+import { ownPushes, ownedPerValue, sharedHolders } from "./holders.ts";
 import { columns } from "./columns.ts";
 import { linearCalls } from "./linear-calls.ts";
 import { arrayOffsets } from "./array-offsets.ts";
@@ -912,12 +912,14 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   writtenArrays(ir);
   // A replace in an array of a type whose every value has one holder,
   // written in place (owned-arrays.ts, C93 s4).
-  if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, roots[0], true);
+  // The three after it read one holders() (sharedHolders).
+  const shared = sharedHolders(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
+  if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, roots[0], true, shared);
   // And each other replace whose array has one holder, decided per value
   // (holders.ts, C327f).
-  if (!envSet("NO_OWN") && !envSet("NO_HOLDERS")) ownedPerValue(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
+  if (!envSet("NO_OWN") && !envSet("NO_HOLDERS")) ownedPerValue(ir, [], shared);
   // And puts and removes on tables nobody else holds (owned-tables.ts).
-  if (!envSet("NO_OWN") && !envSet("NO_OWN_TABLES") && roots.length === 1) ownedTables(ir, roots[0]);
+  if (!envSet("NO_OWN") && !envSet("NO_OWN_TABLES") && roots.length === 1) ownedTables(ir, roots[0], shared);
   // A push onto an array a call just made, on its view (C196).
   if (!envSet("NO_PUSHES")) ownedPushes(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
   // And records rebuilt from their own fields (owned-records.ts, C93 s5).

@@ -67,7 +67,7 @@ const { deepLoops } = compiles ? await import("../../compiler/src/deep-loops.ts"
 const { ownedTables } = compiles ? await import("../../compiler/src/owned-tables.ts") : ({} as typeof import("../../compiler/src/owned-tables.ts"));
 const { itemReads } = compiles ? await import("../../compiler/src/item-reads.ts") : ({} as typeof import("../../compiler/src/item-reads.ts"));
 const { columns } = compiles ? await import("../../compiler/src/columns.ts") : ({} as typeof import("../../compiler/src/columns.ts"));
-const { ownPushes, ownedPerValue } = compiles ? await import("../../compiler/src/holders.ts") : ({} as typeof import("../../compiler/src/holders.ts"));
+const { ownPushes, ownedPerValue, sharedHolders } = compiles ? await import("../../compiler/src/holders.ts") : ({} as typeof import("../../compiler/src/holders.ts"));
 const { chosenParts } = compiles ? await import("../../compiler/src/chosen-parts.ts") : ({} as typeof import("../../compiler/src/chosen-parts.ts"));
 const { closureParts } = compiles ? await import("../../compiler/src/closure-parts.ts") : ({} as typeof import("../../compiler/src/closure-parts.ts"));
 const { checkedOnce } = compiles ? await import("../../compiler/src/checked-once.ts") : ({} as typeof import("../../compiler/src/checked-once.ts"));
@@ -378,12 +378,14 @@ function nativeLoweredNow(main: Id, wasm: boolean, page: boolean, from: Program)
     // (deep-loops.ts).
     if (!process.env.NO_CONS_LOOPS) consLoops(lowered);
     if (!process.env.NO_DEEP_LOOPS) deepLoops(lowered);
-    ownedArrays(lowered, root, true);
+    // The passes from here to columns read one holders() (sharedHolders).
+    const roots = lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : []));
+    const shared = sharedHolders(lowered, roots);
+    ownedArrays(lowered, root, true, shared);
     // And each other replace or push whose array has one holder, decided
     // per value (holders.ts, C327f), as on JavaScript.
-    const roots = lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : []));
-    if (!process.env.NO_HOLDERS) ownedPerValue(lowered, roots);
-    ownedRecords(lowered, q.code, q.info, q.names, root);
+    if (!process.env.NO_HOLDERS) ownedPerValue(lowered, roots, shared);
+    ownedRecords(lowered, q.code, q.info, q.names, root, shared);
     columns(lowered, roots, { plain: true });
     ownPushes(lowered);
     // A record read only by its parts, as its parts, as on JavaScript
