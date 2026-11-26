@@ -893,3 +893,56 @@ test("an input's placeholder in C is told to the screen as its hint (C320c)", { 
   const inputs = r.stdout.toString().split("\x1e\n")[0].split("\n").map((s) => s.trim()).filter((s) => s.startsWith("input "));
   assert.deepEqual(inputs.map((s) => s.includes(' hint "Filter"')), [true, false], inputs.join("\n"));
 });
+
+// With TERS_LOG set, a page in C logs its events as a browser page's run
+// does (L280d): each handler's event, what it was given and where its
+// element is under the root (html.ts pathOf), a run of frames as one
+// entry. So an app's run replays in the evaluator (`ters decisions
+// --measure --replay`): the counter and todo list end where C left them.
+test("a page in C logs its events with their elements' paths, and the evaluator replays the run to where C ended (L280d)", { skip }, async () => {
+  const { mkdtempSync, readFileSync } = await import("node:fs"), { tmpdir } = await import("node:os");
+  const { readLog, eventsIn } = await import("../../ters/src/lang/worldlog.ts");
+  const { k, main } = pageProgram({ fields: false });
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  const actions = ["click:plus", "click:plus", "input:new:eggs", "keydown:new:Enter", "held:shift", "click:plus", "held:", "frames:3:16"];
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const file = join(mkdtempSync(join(tmpdir(), "c-page-log-")), "log.json");
+  const r = spawnSync(compile(emitC(l, { main, page: "headless" }).c), actions, { env: { ...process.env, TERS_LOG: file } });
+  assert.equal(r.status, 0, r.stderr.toString());
+  const c = r.stdout.toString().split("\x1e\n").slice(0, -1);
+  const log = readLog(readFileSync(file, "utf8"));
+  // What the evaluator logs for the same actions.
+  const own: Parameters<typeof showPage>[0]["replay"] & object = [];
+  const page = showPage({ code, info, names, main, program: "test", doc: fakeDoc(), store: store(), console: { log() {}, error() {} }, frame: () => {}, log: own });
+  const root = page.root as FakeEl;
+  root.find("plus").fire("click", {}); root.find("plus").fire("click", {});
+  root.find("new").type_("eggs"); root.find("new").fire("keydown", { key: "Enter" });
+  root.find("plus").fire("click", { shiftKey: true });
+  page.stop();
+  const ev = (xs: typeof log) => [...eventsIn(xs)].map(({ name, given, path }) => ({ name, path, held: given[5] ?? 0, value: name === "click" ? "" : given[0] }));
+  assert.deepEqual(ev(log).filter((e) => e.name !== "frame"), ev(own));
+  // Replayed, the evaluator's page ends where C's did.
+  const again = showPage({ code, info, names, main, program: "test", doc: fakeDoc(), store: store(), console: { log() {}, error() {} }, frame: () => {}, replay: log });
+  assert.equal((again.root as FakeEl).html(), c.at(-1));
+  again.stop();
+});
+
+// bounce's frames, logged by C as a run of frames (L280d), given back to
+// the evaluator: it draws what C drew after the last.
+test("bounce's frames logged in C replay in the evaluator to where C ended (L280d)", { skip }, async () => {
+  const { mkdtempSync, readFileSync } = await import("node:fs"), { tmpdir } = await import("node:os");
+  const { readLog } = await import("../../ters/src/lang/worldlog.ts");
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/bounce"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const file = join(mkdtempSync(join(tmpdir(), "c-page-log-")), "log.json");
+  const r = spawnSync(compile(emitC(l, { main, page: "headless" }).c), ["frames:30:25"], { env: { ...process.env, TERS_LOG: file } });
+  assert.equal(r.status, 0, r.stderr.toString());
+  const log = readLog(readFileSync(file, "utf8"));
+  assert.deepEqual(log.map((e) => e.op), ["frames"]);
+  assert.equal(log[0].seconds?.length, 30);
+  const page = showPage({ code: p0.code, info, names: p0.pres.names, main, program: "bounce", doc: fakeDoc(), store: store(), console: { log() {}, error() {} }, frame: () => {}, replay: log });
+  assert.equal((page.root as FakeEl).html(), r.stdout.toString().split("\x1e\n").slice(0, -1).at(-1));
+  page.stop();
+});
