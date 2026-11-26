@@ -15,9 +15,9 @@
 
 import { COPIED_FROM, NODE_COPIED_FROM, originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM } from "./prelude-ids.ts";
 import { stableIds } from "../stable-ids.ts";
-import { bindsOf, children, ownerOfTypeParts, dependencies, dependenciesOfAll, layerOf, onLayer, freshId, idsMadeBy, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call, copyNodes, nodeEntries, withNodes, ownNodeIds, sameValue, litOrigin, idsPlace, moveIdsTo } from "../model.ts";
+import { bindsOf, children, ownerOfTypeParts, dependencies, dependenciesOfAll, layerOf, onLayer, freshId, idsMadeBy, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call, copyNodes, nodeEntries, withNodes, ownNodeIds, sameValue, litOrigin, idsPlace, moveIdsTo, nodesOver, changedOwn, derivedFrom } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { checksKept, infer, type Info } from "./infer.ts";
+import { checksKept, infer, inferEdited, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
 import { digest, hashes } from "../hash.ts";
 import { LIBRARY, TREES } from "./library.ts";
@@ -32,7 +32,7 @@ import { COMPANIONS, TOGETHER } from "./together.ts";
 import { ownLibraryHolders } from "./own-holders.ts";
 import { keptMap } from "../kept.ts";
 import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
-import { INT, STRING, Subst, showIn, type Type } from "./types.ts";
+import { INT, STRING, Subst, type Type } from "./types.ts";
 import type { Pins } from "./signatures.ts";
 
 // What equal, show and compare see of a value: these, given a stored one,
@@ -147,7 +147,9 @@ function sameNodesAsBefore(code: Code): void {
 // changes as they were. Null where it can't be (a definition added or
 // removed, a node removed, a copy of an edited definition, a node the
 // rewrite changed among those edited): chosen again.
-const lastChoice = keptMap<string, { code: Code; info: Info; options: LibraryOptions; r: Chosen & { reps: Representation[] }; ids: [number | null, number | null] }>();
+const lastChoice = keptMap<string, { code: Code; info: Info; options: LibraryOptions; r: Chosen & { reps: Representation[] }; ids: [number | null, number | null]; checked?: Info }>();
+// Options as text, to know the same ones made again.
+const optionsText = (o: object | undefined): string | undefined => { try { return JSON.stringify(o ?? null, (_, v) => (v instanceof Map ? [...v] : v instanceof Set ? [...v] : v)); } catch { return undefined; } };
 // How many choices were taken again so (the tests).
 export let choicesReplayed = 0;
 const REP_OF = new Set(LIBRARY.reps.map((r) => r.of));
@@ -173,12 +175,15 @@ function replayed(key: string, code: Code, info: Info, defs: Id[], options: Libr
   // (Walked here without subtree's kept walks, which a walk of the last
   // program would move on.)
   const walk = (c: Code, root: Id): Id[] => { const out: Id[] = [], todo = [root]; while (todo.length) { const id = todo.pop()!; out.push(id); const n = c.nodes[id]; if (n) todo.push(...children(n)); } return out; };
-  const changed: Id[] = [];
-  const seen = new Set<Id>();
-  for (const d of defs) for (const id of [...walk(code, d), ...walk(C, d)]) {
-    if (seen.has(id)) continue;
-    seen.add(id);
-    if (C.nodes[id] !== code.nodes[id]) changed.push(id);
+  let changed: Id[] | undefined = changedOwn(C.nodes, code.nodes);
+  if (!changed) {
+    changed = [];
+    const seen = new Set<Id>();
+    for (const d of defs) for (const id of [...walk(code, d), ...walk(C, d)]) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (C.nodes[id] !== code.nodes[id]) changed.push(id);
+    }
   }
   if (!changed.length) return null;
   if (changed.some((id) => code.nodes[id] === undefined || C.nodes[id]?.kind === "def" || code.nodes[id].kind === "def")) return null;
@@ -208,7 +213,22 @@ function replayed(key: string, code: Code, info: Info, defs: Id[], options: Libr
     if (t.t === "fn") return [...t.params, t.ret].every((x) => plain(x, s));
     return !REP_OF.has(t.id) && !(ownDefs.has(t.id) && ownHolds(t.id)) && t.args.every((x) => plain(x, s));
   };
-  const shown = (t: Type | undefined, s: Subst) => (t ? showIn(t, {}, s) : "");
+  // Two types alike, their variables (and rows') one for one.
+  const vs = new Map<number, number>(), vsBack = new Map<number, number>(), rs = new Map<unknown, unknown>(), rsBack = new Map<unknown, unknown>();
+  const pair = <K>(m: Map<K, K>, back: Map<K, K>, a: K, b: K) => { const x = m.get(a), y = back.get(b); if (x === undefined && y === undefined) { m.set(a, b); back.set(b, a); return true; } return x === b && y === a; };
+  const alike = (a0: Type | undefined, b0: Type | undefined): boolean => {
+    if (!a0 || !b0) return a0 === b0;
+    const a = I.subst.zonk(a0), b = info.subst.zonk(b0);
+    if (a.t !== b.t) return false;
+    if (a.t === "var") return pair(vs, vsBack, a.v, (b as typeof a).v);
+    if (a.t === "con") { const y = b as typeof a; return a.id === y.id && a.args.length === y.args.length && a.args.every((x, i) => alike(x, y.args[i])); }
+    const y = b as typeof a;
+    if (a.params.length !== y.params.length || !a.params.every((x, i) => alike(x, y.params[i])) || !alike(a.ret, y.ret)) return false;
+    const ra = I.subst.resolveRow(a.eff), rb = info.subst.resolveRow(y.eff);
+    if (ra.effs.length !== rb.effs.length || ra.effs.some((e, i) => e !== rb.effs[i])) return false;
+    if ((ra.tail === null) !== (rb.tail === null) || (ra.tail !== null && !pair(rs, rsBack, ra.tail, rb.tail))) return false;
+    return ra.effs.every((e) => { const xa = ra.args?.[e] ?? [], xb = rb.args?.[e] ?? []; return xa.length === xb.length && xa.every((x, i) => alike(x, xb[i])); });
+  };
   // Each node changed in place is where the rewrite left it: in its
   // definition, or in one holding that definition's body (main as
   // stored), not in a copy of it (a loop's, cons-onto.ts) with the
@@ -218,14 +238,14 @@ function replayed(key: string, code: Code, info: Info, defs: Id[], options: Libr
     const mine = new Set(walk(C, d));
     for (const x of [d, ...r.code.defs.filter((m) => { const b = (r.code.nodes[m] as NodeOf<"def"> | undefined)?.body; return b !== undefined && b !== null && m !== d && mine.has(b); })]) for (const id of walk(r.code, x)) placed.add(id);
   }
-  const nodes = copyNodes(r.code.nodes);
+  const into: Record<Id, Node> = {};
   for (const d of edited) {
-    if (shown(I.typeOf.get(d), I.subst) !== shown(info.typeOf.get(d), info.subst)) return null;
+    if (!alike(I.typeOf.get(d), info.typeOf.get(d))) return null;
     for (const id of walk(code, d)) {
       const n = code.nodes[id], before = C.nodes[id];
       if (before === n) {
         // Kept, and typed as it was.
-        if (shown(I.typeOf.get(id), I.subst) !== shown(info.typeOf.get(id), info.subst)) return null;
+        if (!alike(I.typeOf.get(id), info.typeOf.get(id))) return null;
         continue;
       }
       if (before) {
@@ -236,12 +256,12 @@ function replayed(key: string, code: Code, info: Info, defs: Id[], options: Libr
         // another place in it could change what flows where).
         const now = children(n), then = children(before);
         if (now.length !== then.length || now.some((x, i) => x !== then[i] && C.nodes[x] !== undefined)) return null;
-        const same = n.kind === before.kind && (n.kind !== "ref" || n.target === (before as NodeOf<"ref">).target) && (!isCall(n) || n.fn === (before as Call).fn) && shown(I.typeOf.get(id), I.subst) === shown(info.typeOf.get(id), info.subst);
+        const same = n.kind === before.kind && (n.kind !== "ref" || n.target === (before as NodeOf<"ref">).target) && (!isCall(n) || n.fn === (before as Call).fn) && alike(I.typeOf.get(id), info.typeOf.get(id));
         if (!same && (!plain(info.typeOf.get(id), info.subst) || !plain(I.typeOf.get(id), I.subst))) return null;
       } else if (!plain(info.typeOf.get(id), info.subst) || r.code.nodes[id] !== undefined || n.kind === "arm" || n.kind === "match" || n.kind === "fold") return null;
       // What the definition reaches is as it was (a split's sides).
       if (n.kind === "ref" && code.nodes[n.target]?.kind === "def" && !(before?.kind === "ref" && before.target === n.target)) return null;
-      nodes[id] = n;
+      into[id] = n;
     }
   }
   // No node of an edited definition left behind.
@@ -249,7 +269,14 @@ function replayed(key: string, code: Code, info: Info, defs: Id[], options: Libr
   for (const d of edited) for (const id of walk(C, d)) if (!inDef.has(id)) return null;
   choicesReplayed++;
   if (was.ids[1] !== null) moveIdsTo(was.ids[1]);
-  return { ...r, code: { nodes, defs: r.code.defs } };
+  const nodes = copyNodes(r.code.nodes);
+  const replaced: Id[] = [];
+  for (const id in into) if (into[id] !== r.code.nodes[id]) { nodes[id] = into[id]; replaced.push(id); }
+  // What the replay replaced, so the check after it need not look for it
+  // (inferEdited); no node is gone.
+  const out = { nodes, defs: r.code.defs };
+  derivedFrom(out, r.code, replaced, true);
+  return { ...r, code: out };
 }
 
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
@@ -261,8 +288,11 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     const choose = () => choiceOf(code, info, names, main, defs, asked, skip, options);
     const replayKey = checksKept(info.options) ? `${main} ${defs.join(" ")}|${asked.map((x) => `${x.of} ${x.name}`).join(",")}|${[...skip].join(",")}` : undefined;
     const idsBefore = idsPlace();
-    const r = (replayKey && replayed(replayKey, code, info, defs, options, idsBefore)) || (checksKept(info.options) ? stably(idsMadeBy(choose), code, defs) : choose());
-    if (replayKey) lastChoice.set(replayKey, { code, info, options, r, ids: [idsBefore, idsPlace()] });
+    const last = replayKey ? lastChoice.get(replayKey) : undefined;
+    const again = replayKey ? replayed(replayKey, code, info, defs, options, idsBefore) : null;
+    const r = again || (checksKept(info.options) ? stably(idsMadeBy(choose), code, defs) : choose());
+    const kept: { code: Code; info: Info; options: LibraryOptions; r: Chosen & { reps: Representation[] }; ids: [number | null, number | null]; checked?: Info } | undefined = replayKey ? { code, info, options, r, ids: [idsBefore, idsPlace()] } : undefined;
+    if (replayKey) lastChoice.set(replayKey, kept!);
     if (!r.reps.length) return { code, names, chosen: [], insiders: [] };
     if (checksKept(info.options)) sameNodesAsBefore(r.code);
     // The program's own options where nothing is added, so the check reads
@@ -277,7 +307,11 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     // Its units aren't checked again: a rewrite changes none (I261).
     const checkWith = { ...info.options, ...(r.insiders.length ? { insiders: [...(info.options?.insiders ?? []), ...r.insiders] } : {}), ends, units: false as const };
     const carried = carriedChoice(code, info, r.code, r.reps, defs);
-    let checked = carried ? { ...carried, options: checkWith } : infer(r.code, r.names, undefined, checkWith);
+    // A choice taken again is checked over the last one's check, as the
+    // edit was (infer.ts inferEdited).
+    const lastCheck = again && last?.checked?.options && !carried && optionsText(last.checked.options) === optionsText(checkWith) ? inferEdited(last.r.code, r.code, r.names, last.checked, last.checked.options) : null;
+    let checked = carried ? { ...carried, options: checkWith } : lastCheck ?? infer(r.code, r.names, undefined, checkWith);
+    if (kept) kept.checked = checked;
     // A pin that names a type stored now (the sounds module's on Bytes,
     // L271c) is the meaning's: the definitions under it take the stored
     // type, as the check carried says (carried-reps.ts). Where the check
