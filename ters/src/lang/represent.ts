@@ -691,12 +691,16 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
   // T's Literal's from fraction, when the row does it (Nat's `nat
   // literal` stored as an Int, L249b): a literal written at T becomes that
   // job's call, given its top and bottom as Ints.
-  const fromFraction = Object.keys(rep.impl).find((j) => code.defs.some((d) => {
+  // (The definitions read once, not once for each job: a fifth of
+  // represent's time in machine's choice.)
+  const literalJobs = new Set<Id>();
+  for (const d of code.defs) {
     const b = code.nodes[(code.nodes[d] as NodeOf<"def"> | undefined)?.body ?? ""];
-    if (!isCall(b) || b.args.length !== 1) return false;
+    if (!isCall(b) || b.args.length !== 1) continue;
     const f = code.nodes[b.fn], a = code.nodes[b.args[0]];
-    return f?.kind === "ref" && f.target === LITERAL_V && a?.kind === "ref" && a.target === j;
-  }));
+    if (f?.kind === "ref" && f.target === LITERAL_V && a?.kind === "ref" && Object.hasOwn(rep.impl, a.target)) literalJobs.add(a.target);
+  }
+  const fromFraction = Object.keys(rep.impl).find((j) => literalJobs.has(j));
 
   // The representation's own code stays as it is: it's written on R, and
   // `meaning` is written on T.
