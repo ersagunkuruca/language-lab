@@ -877,7 +877,7 @@ function cancelPick(): boolean {
 
 const FILE_WORDS: Record<string, string> = {
   "code.json": "the code", "drafts.json": "the loose parts", "names.short.json": "the names", "names.descriptive.json": "the names",
-  "comments.json": "the notes", "layout.json": "the layout", "examples.json": "the example values",
+  "comments.json": "the comments", "layout.json": "the layout", "examples.json": "the example values",
 };
 function travel(from: Doc[], to: Doc[], label: string) {
   if (from === undo && !from.length && deleted) return undeleteProgram();
@@ -1133,7 +1133,7 @@ function rename(id: Id, value: string, set: Layer) {
 function setComment(id: Id, value: string) {
   const comments = { ...doc.comments };
   if (value.trim()) comments[id] = value; else delete comments[id];
-  commit({ comments }, ["comments.json"], id === PROGRAM ? "The program's comment is saved." : "Comment saved on the node itself, not on a line.");
+  commit({ comments }, ["comments.json"], id === PROGRAM ? "The program's comment is saved." : "Comment saved.");
 }
 
 // A unit is part of a number's type, so declaring one goes through the
