@@ -26,6 +26,16 @@ export function valueRead(code: Code): (id: Id) => boolean {
   return got;
 }
 
+// What a program read as `from` is, `to` differing from it only in some
+// literals' values: which values are read depends on where the literals
+// are, not on any value (the walk below reads no literal's), so `to`'s
+// answer is `from`'s, without a walk of its nodes again (a number edit's
+// compile asked it of every step's program, 15 ms of machine's).
+export function sameValueReads(from: Code, to: Code): void {
+  const got = kept.get(from);
+  if (got && !kept.has(to)) kept.set(to, got);
+}
+
 function readsOf(code: Code): (id: Id) => boolean {
   const parent = parentLookup(code);
   const target = (id: Id): Id | undefined => { const n = code.nodes[id]; return n?.kind === "ref" ? n.target : undefined; };
