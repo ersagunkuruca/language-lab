@@ -15,7 +15,7 @@
 // partial evaluation (Futamura, 1971; Jones, Gomard and Sestoft, 1993).
 
 import type { Bound, Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
-import { dependencies, freshId, isCall, SCHEMA, subtree, copyNodes, dropNode, nodeIds, ownerOfTypeParts } from "../../ters/src/model.ts";
+import { dependencies, freshId, isCall, SCHEMA, subtree, copyNodes, dropNode, nodeIds, nodesOfKind, ownerOfTypeParts } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
@@ -351,6 +351,10 @@ export function expandInverses(code: Code, names: Names, info?: Info, left?: Set
 // lowering, and `ters native` and WebAssembly's, which lower scalar.ts's
 // core IR straight).
 export function withInverses(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
+  // Every expansion starts from an inverse or a conjugate the program
+  // names: with none, nothing (one look at its refs, where the expansion
+  // read every node three times: machine, 15 ms an edit).
+  if (!nodesOfKind(code, "ref").some((n) => n.target === INVERSE || n.target === CONJUGATE)) return { code, info, names };
   let inv = expandInverses(code, names, info);
   if (!inv.expanded.length) return { code, info, names };
   let checked = infer(inv.code, inv.names, undefined, info.options);
