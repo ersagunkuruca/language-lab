@@ -35,7 +35,7 @@
 
 import { FN } from "../../../invertible/src/expr.js";
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, copyNodes, freshId, isCall, nodeIds, ownerOfTypeParts, type Call } from "../model.ts";
+import { children, copyNodes, freshId, isCall, nodesOfKind, ownerOfTypeParts, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import { LIBRARY } from "./library.ts";
@@ -974,7 +974,9 @@ export function expandArrayGradients(code: Code, names: Names, info: Info, only?
   const overRecord = (call: Id) => { const o = over(call); return !!o && o.of !== ARRAY && o.of !== TENSOR && o.of !== NUMBER && recordType(code, o.of); };
   const overMany = (call: Id) => overArray(call) || overRecord(call);
   const asked = (n: Node | undefined) => isCall(n) && n.args.length === 1 && code.nodes[n.fn]?.kind === "ref" ? (code.nodes[n.fn] as NodeOf<"ref">).target : null;
-  const calls = nodeIds(code.nodes).filter((id) => {
+  // (From the index of calls, kept over the nodes under: every node of
+  // the program read was a twentieth of machine's choice.)
+  const calls = nodesOfKind(code, "call").map((n) => n.id).filter((id) => {
     const n = code.nodes[id], t = asked(n);
     if ((t !== S.gradient && t !== S.valueAndGradient) || (only && !only(id))) return false;
     const f = (n as Call).args[0];
