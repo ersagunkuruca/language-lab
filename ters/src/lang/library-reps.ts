@@ -1004,13 +1004,14 @@ function looked(code: Code, info: Info): (def: Id) => Set<number> {
 // first, optional, all, seeded and with fuel run a function and hand on
 // what it answers (dice's `seeded` given a function making a list, C196).
 const PASSES_ON = new Set<Id>([S.first, S.optional, S.all, S.seeded, S.fuel]);
-// What a canvas renders (FRAMES.md): a frame's passes, a pass's draws and a
-// mesh's corners and triangles are read only by the runtime (raster.ts,
-// gpu-frame.ts), which takes an array or a list alike. So the program may
+// What a canvas renders (FRAMES.md): a frame's passes, a pass's draws, a
+// mesh's corners and triangles and an image's texels are read only by the
+// runtime (raster.ts, gpu-frame.ts), which takes an array or a list alike.
+// So the program may
 // pass them about holding arrays: a list made into one of their cases is
 // converted as a builtin's is, and only taking one apart (a field read, a
 // match) keeps List as written.
-const RUNTIME_READ = new Set<Id>(["std.frame", "std.pass", "std.mesh"]);
+const RUNTIME_READ = new Set<Id>(["std.frame", "std.pass", "std.mesh", "std.image"]);
 // Builtins that only move values of a variable type about (C70).
 const STRUCTURAL = new Set<Id>([S.oneOf, S.fail, ...Object.values(ARRAY_OPS)]);
 // `owned`: the program's own types the rewrite leaves as they are, whose
