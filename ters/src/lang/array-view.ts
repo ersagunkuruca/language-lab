@@ -72,14 +72,9 @@ export class ArrayView {
 (ArrayView.prototype as { tag: string }).tag = ARRAY_TAG;
 export type ArrayValue = ArrayView | { tag: Id; fields: unknown[] };
 // A buffer holding xs[from, to) in its middle, with room for as many
-// again on each side. The room holds 0, not undefined: V8 keeps a JS
-// array of numbers unboxed, a Float64 a slot, only while it holds nothing
-// else, and one undefined made every Float64 written into it a number
-// object of its own (C303: mnist's Adam pass over 10,000 digits 5.1 s,
-// 3.4 s with 0, a tenth of it the collector's). Arrays of other values
-// read only their own slots, so they don't tell.
+// again on each side.
 export const arrayOf = (xs: unknown[], from = 0, to = xs.length): ArrayView => {
-  const n = to - from, room = Math.max(4, n), items = new Array(n + 2 * room).fill(0);
+  const n = to - from, room = Math.max(4, n), items = new Array(n + 2 * room).fill(undefined);
   for (let i = 0; i < n; i++) items[room + i] = xs[from + i];
   return new ArrayView(versionOf({ items, lo: room, hi: room + n }), room, n);
 };
@@ -123,7 +118,7 @@ export const pushFront = (a: ArrayValue, x: unknown): ArrayView => {
   // Copied with its room in front, where the pushes are going: twice as
   // many again, and 16 from empty, so an array built item by item from
   // the back (a block of samples) is copied a few times, not at 4, 8, 16….
-  const n = v.n, room = Math.max(16, 2 * n), items = new Array(room + n + 4).fill(0);
+  const n = v.n, room = Math.max(16, 2 * n), items = new Array(room + n + 4).fill(undefined);
   for (let i = 0; i < n; i++) items[room + i] = b.items[v.start + i];
   items[room - 1] = x;
   return new ArrayView(versionOf({ items, lo: room - 1, hi: room + n }), room - 1, n + 1);
