@@ -41,3 +41,12 @@ test("moths through ters wasi and ters native prints what the ideal prints", asy
   assert.equal(built.status, 0, built.stderr);
   assert.equal(spawnSync(join(dir, "m"), ["50", "1000"], { encoding: "utf8" }).stdout, want, "ters native");
 });
+
+// C362: on WebAssembly the moths are columns, each read with `item at`
+// made from them where it leaves whole (into `met`), as on JavaScript.
+test("moths through ters wasi keeps the moths as columns (C362)", () => {
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), dir = mkdtempSync(join(tmpdir(), "moths-"));
+  const made = spawnSync(process.execPath, [lab, "wasi", folder, "-o", join(dir, "m.wasm")], { encoding: "utf8", env: { ...process.env, TERS_NO_KEPT_OUTPUT: "1", COLUMNS_WHY: "1" } });
+  assert.equal(made.status, 0, made.stderr);
+  assert.doesNotMatch(made.stderr, /Moth kept rows/);
+});

@@ -202,16 +202,18 @@ export function columns(ir: CoreIR, roots: number[], opts: { plain?: boolean; wh
     // record's leaves.
     const slots = opts.whole && opts.grow ? slotOf(r) : null;
     if (!slots && (!isRecord(r) || !r.fields.length)) continue;
-    // A Float32 field too (C309): its value a column of binary32s.
-    if (opts.plain && isRecord(r) && r.fields.some((x) => !["f64", "int", "text", "i32"].includes(x.t as string) && !(isRecord(x.t) && isFloat32(x.t)))) continue;
-    if (stored(ir, a, r as RType | DType, roots, !!opts.whole, !!opts.grow, rtsOf(), live!, !!opts.whole || !!opts.plain)) { n++; rts = null; }
+    // A Float32 field too (C309): its value a column of binary32s; and a
+    // record of Float64s, a column each (C362: a moth's place).
+    if (opts.plain && isRecord(r) && r.fields.some((x) => !["f64", "int", "text", "i32"].includes(x.t as string) && !(isRecord(x.t) && (isFloat32(x.t) || x.t.fields.every((y) => y.t === "f64"))))) continue;
+    if (stored(ir, a, r as RType | DType, roots, !!opts.whole, !!opts.grow, rtsOf(), live!, !!opts.whole || !!opts.plain, !!opts.plain)) { n++; rts = null; }
   }
   return n;
 }
 
 // `deep`: a record in a field a column per leaf (whole, or plain, where
-// the only such field is a Float32's).
-function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: boolean, grow: boolean, rts: Map<string, Set<number>>, live: Set<number>, deep: boolean): boolean {
+// such a field is a Float32's or a record of Float64s: C362). `plain`:
+// WebAssembly's columns, with fewer ops than JavaScript's.
+function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: boolean, grow: boolean, rts: Map<string, Set<number>>, live: Set<number>, deep: boolean, plain = false): boolean {
   const leaves = isRecord(r) ? leavesOf(r, deep) : slotLeaves(r);
   const leafAt = (path: number[]) => leaves.findIndex((l) => l.path.length === path.length && l.path.every((x, k) => x === path[k]));
   const suffix = `.a${a.index}`;
@@ -355,8 +357,10 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
         case "world": case "apply": case "closure": case "new": case "list":
           // Whole, a closure may keep the array and one applied may be
           // given it: their code is reached from the roots and kept to
-          // columns too. Items are made where read.
-          if (whole && (e.k === "closure" || e.k === "apply")) break;
+          // columns too. Items are made where read. Not on WebAssembly
+          // (plain): flock's birds kept by its grid's closures measured
+          // 8% slower as columns there (C362).
+          if (whole && !plain && (e.k === "closure" || e.k === "apply")) break;
           if ((e.k === "closure" ? e.caps : e.k === "list" ? e.items : e.args).some((x: SExpr) => arrayOf(x) || (!whole && isItem(x)))) return bad();
           break;
         case "call":
@@ -476,7 +480,9 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
       // v once, in a let, where more than one leaf reads it.
       const once = (v: SExpr, t: LType, arm: boolean): SExpr => {
         let l: SExpr | undefined = v.k === "local" || arm ? v : named.get(v);
-        if (!l) { const ti = f.locals.push(t) - 1; lets.push({ i: ti, value: v }); l = loc(ti); named.set(v, l as Local); }
+        // (Its value no tail call any more, where it was one: `moth at`
+        // put in a map's closure, its call given whole.)
+        if (!l) { const ti = f.locals.push(t) - 1; lets.push({ i: ti, value: (v.k === "call" || v.k === "apply") && v.tail ? { ...v, tail: false } : v }); l = loc(ti); named.set(v, l as Local); }
         return l;
       };
       const partOf = (v: SExpr, path: number[], t: LType, lf: Leaf, arm = false): SExpr => {
@@ -506,6 +512,9 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
     };
     f.body = unread(go(f.body));
   }
+  // WebAssembly (plain) has a column's make, length, check, reads and
+  // writes (wasm.ts COL_FN); an array needing more stays rows there.
+  if (plain) { const more = (e: SExpr): boolean => (e.k === "rt" && e.fn.endsWith(suffix) && /^array\.c(slice|of|rows|build|front|copy|push)\./.test(e.fn)) || kids(e).some(more); if (funcs.some((g) => more(g.body))) return false; }
   ir.funcs.splice(0, ir.funcs.length, ...funcs);
   if (whole) a.leaves = leaves.map((l) => l.t);
   if (leaves.some((l) => l.narrow)) a.narrow = leaves.map((l) => !!l.narrow);
