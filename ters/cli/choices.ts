@@ -211,16 +211,25 @@ const IN_RUNS = new Set(["map", "keep", "add", "max", "min", "with", "every", "a
 // With `main`, the program's workers' entry too.
 // `resident`: the record fields whose lists may stay on the GPU between
 // ticks (gpu-resident.ts keptOnGpu, G13b), each an entry a person may hold on the CPU.
-export function placeLines(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target: "JavaScript page" | "JavaScript" = "JavaScript page", main?: Id, close: ReadonlySet<number> = new Set(), resident: readonly { at: Id; type: string; field: string }[] = []): string[] {
+// `culled`: the draws the page may cull on the GPU (gpu-draws.ts
+// cullable, G14b2), by the draw's call, each an entry a person may hold
+// to none.
+export function placeLines(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target: "JavaScript page" | "JavaScript" = "JavaScript page", main?: Id, close: ReadonlySet<number> = new Set(), resident: readonly { at: Id; type: string; field: string }[] = [], culled: readonly Id[] = []): string[] {
+  const { defOf, nameOf } = definitionOf(ir, names);
   const lines = [...sitesPlaced(ir, gpu, names, target, close), ...resident.map((f) => `${f.at} place: ${f.type}'s ${f.field}: ${BETWEEN}; among CPU, ${BETWEEN}; target ${target}`)];
-  return main !== undefined && lines.length ? [...lines, poolLine(main, ({ ...LIBRARY.names, ...names })[main] ?? main, ir.awayMaps?.length ? target : "JavaScript")] : lines;
+  const culls = culled.map((at) => `${writtenAt(at)} place: ${nameOf(defOf(at))}'s draw culling: GPU; among none, GPU; target JavaScript page`);
+  return [...lines, ...(main !== undefined && lines.length ? [poolLine(main, ({ ...LIBRARY.names, ...names })[main] ?? main, ir.awayMaps?.length ? target : "JavaScript")] : []), ...culls];
 }
-function sitesPlaced(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target: string, close: ReadonlySet<number>): string[] {
+// The definition a node is in, by its name as written: main's copy stored
+// otherwise (library-reps.ts) is still main.
+function definitionOf(ir: Lowered, names: Names) {
   const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code);
   const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
-  // A definition by its name as written: main's copy stored otherwise
-  // (library-reps.ts) is still main.
   const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
+  return { defOf, nameOf };
+}
+function sitesPlaced(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target: string, close: ReadonlySet<number>): string[] {
+  const { defOf, nameOf } = definitionOf(ir, names);
   if (!ir.awayMaps?.length) {
     if (!ir.sharedSites?.length) return [];
     const kept = sitesKept(ir.funcs ?? []);
@@ -329,6 +338,8 @@ export const HELD = "held ";
 // of so many items instead.
 const PLACE = /^(\S+) place: .*: ([^:;]+); among ([^;]+)(?:; in (?:chunks of )?(\d+) (?:runs(?: a thread)?|items))?; target (.+)$/;
 const CHUNKED = "; in chunks of ";
+// A draw's culling entry (G14b2), apart from the placements it looks like.
+const CULLING = /^(\S+) place: .*'s draw culling: (none|GPU); among none, GPU; target JavaScript page$/;
 // The placements held on the main thread (L280h), by the node each is
 // about, for JavaScript (a page's or a command-line program's workers)
 // and for C's threads; and a command-line program's held on its worker
@@ -340,16 +351,19 @@ const CHUNKED = "; in chunks of ";
 // And how each call of neighbours is held to find them (`near`, L280g).
 // And the maps held on the GPU though their arithmetic is only close
 // (`close`, G12), each among the page's too, on the GPU; and the record
-// fields whose lists are held on the CPU (`cpu`, G13b).
-export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][]; pool: [string, number][]; near: [Id, "every pair" | "k-d tree" | number][]; close: Id[]; cpu: Id[] }
-export const NONE_HELD: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [], close: [], cpu: [] };
+// fields whose lists are held on the CPU (`cpu`, G13b); and the draws held
+// unculled (`unculled`, G14b2).
+export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][]; pool: [string, number][]; near: [Id, "every pair" | "k-d tree" | number][]; close: Id[]; cpu: Id[]; unculled: Id[] }
+export const NONE_HELD: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [], close: [], cpu: [], unculled: [] };
 export function heldPlaces(lines: readonly string[]): HeldPlaces {
-  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [], close: [], cpu: [] };
+  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [], close: [], cpu: [], unculled: [] };
   for (const l of lines) {
     const near = nearHeld(l);
     if (near) { out.near.push(near); continue; }
     const pooled = l.startsWith(HELD) ? POOLED.exec(l.slice(HELD.length)) : null;
     if (pooled) { if (/^\d+$/.test(pooled[2])) out.pool.push([pooled[3], Number(pooled[2])]); continue; }
+    const culling = l.startsWith(HELD) ? CULLING.exec(l.slice(HELD.length)) : null;
+    if (culling) { if (culling[2] === "none") out.unculled.push(culling[1]); continue; }
     const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null;
     if (!p) continue;
     const [, id, on, , runs, target] = p;
@@ -425,6 +439,7 @@ export function heldWarnings(written: readonly string[], alone: readonly string[
   const places = written.flatMap((l) => {
     const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null, was = p && placed.get(`${p[1]} ${p[5]}`);
     if (!p || !was) return [];
+    if (CULLING.test(l.slice(HELD.length))) return was[2] !== p[2] ? [`held   ${p[1]} (${p[5]}): ${p[2] === "none" ? "every instance drawn" : "culled on the GPU"}, where the compiler would ${was[2] === "none" ? "draw every instance" : "cull it on the GPU"}`] : [];
     if (POOLED.test(l.slice(HELD.length))) return was[2] !== p[2] ? [`held   ${p[1]} (${p[5]}): ${p[2]} ${POOL_OF[p[5] as keyof typeof POOL_OF].replace(p[2] === "1" ? /s$/ : /$^/, "")}, where the compiler would start ${was[2]}`] : [];
     return [...(was[2] !== p[2] ? [`held   ${p[1]} (${p[5]}): ${p[2]}, where the compiler would run it on ${was[2]}`] : []), ...(p[4] && was[4] && p[4] !== was[4] ? [l.includes(CHUNKED) ? `held   ${p[1]} (${p[5]}): in chunks of ${p[4]} items, where the compiler would cut it in chunks of ${was[4]}` : `held   ${p[1]} (${p[5]}): in ${p[4]} runs${p[5] === "C" ? " a thread" : ""}, where the compiler would share it in ${was[4]}`] : [])];
   });

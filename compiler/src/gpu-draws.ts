@@ -36,6 +36,7 @@ import { withNodes } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { NUMBER, type Type } from "../../ters/src/lang/types.ts";
 import { TARGET, TRUE } from "../../ters/src/lang/std-ids.ts";
+import { HeldSet } from "../../ters/src/lang/prelude-ids.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { isRecord, kids, lowerScalar, type CoreIR, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
 import { emitWgsl, vectorWidth } from "./wgsl.ts";
@@ -163,16 +164,28 @@ export function packsOf(sites: Record<number, DrawSite>): string {
 // `whole`: the draws whose instances may be a list kept on the GPU (G13,
 // gpu-resident.ts), laid out as a kernel's answers are, every leaf of an
 // instance: such a site says that layout as `kept`.
-export function gpuDraws(ir: CoreIR, whole: ReadonlySet<number> = new Set()): { sites: Record<number, DrawSite>; refused: Map<number, string> } {
+// `unculled`: the draws held drawn whole (below).
+export function gpuDraws(ir: CoreIR, whole: ReadonlySet<number> = new Set(), unculled: ReadonlySet<Id> = heldWhole): { sites: Record<number, DrawSite>; refused: Map<number, string> } {
   const sites: Record<number, DrawSite> = {}, refused = new Map<number, string>();
   for (const d of ir.drawSites ?? []) {
-    try { sites[d.site] = drawSite(ir, d.site, d.vertex, d.fragment, d.caps, whole.has(d.site)); }
+    try { sites[d.site] = drawSite(ir, d.site, d.vertex, d.fragment, d.caps, whole.has(d.site), unculled.has(d.at)); }
     catch (e) { refused.set(d.site, e instanceof Error ? e.message : String(e)); }
   }
   return { sites, refused };
 }
 
-function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[], whole = false): DrawSite {
+// The draws a person held unculled (the program's decisions, `none`,
+// G14b2), by the draw's call: every instance drawn, none skipped.
+let heldWhole: ReadonlySet<Id> = new Set();
+export function holdUnculled(at: Iterable<Id>) { heldWhole = new HeldSet(at); }
+// The draws the page may cull (CULLING.md), by the draw's call, found with
+// none held: an entry held so is still written.
+export const cullable = (ir: CoreIR): Id[] => {
+  const sites = gpuDraws(ir, new Set(), new Set()).sites;
+  return (ir.drawSites ?? []).filter((d) => sites[d.site]?.cull).map((d) => d.at);
+};
+
+function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[], whole = false, unculled = false): DrawSite {
   const zonk = (x: Id) => { const y = ir.info.typeOf.get(x); return y && ir.info.subst.zonk(y); };
   const capTypes = caps.map(zonk);
   if (capTypes.some((t) => !t)) throw new Error("reads a value whose type isn't known");
@@ -290,7 +303,7 @@ ${textures.slice(1).map((_, j) => `  if (t == ${j + 1}.0) { return textureSample
   // that is, whether no one plane has every corner outside it. A corner
   // that gives no position (out of fuel) is outside every plane, as it
   // draws nothing. Not for a draw of one instance or one sampling textures.
-  const cull = !unread && !textures.length;
+  const cull = !unread && !textures.length && !unculled;
   const culling = cull ? `
 @group(0) @binding(3) var<storage, read_write> lab_kept: array<u32>;
 struct LabCull { n: u32, corners: u32 }

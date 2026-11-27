@@ -87,6 +87,11 @@ export interface Info {
   // Calls whose Choice was dropped because their inputs answer them
   // (L125b): x / 2, or period(1, 9.81). A compiler calls them plainly.
   answered?: Set<Id>;
+  // Calls whose Choice or Diverge the modes of the callee given these
+  // functions dropped (L29, L47): their check reads the callee's body, not
+  // only its type, so a check kept by types (check-cache.ts) holds it only
+  // while that body is the same (I387). By call, the callee.
+  byBody?: Map<Id, Id>;
   // Calls given one tuple for several inputs, f(p) for f(x, y) (L128).
   spread?: Set<Id>;
   // Each input that is a function of n inputs given for a function of one
@@ -1637,7 +1642,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
               const an = () => (modes ??= analyzer(code, names));
               const mine = r && dropped(r, asked !== undefined ? asked : seenVerdict(code, "mode", given.target, ports, spec, () => an().ofMode(given.target, ports, spec)));
               const theirs = rr && ret.t === "fn" && dropped(rr, back !== undefined ? back : seenVerdict(code, "returned", given.target, [], spec, () => an().ofReturned(given.target, spec)));
-              if (mine || theirs) fr = { ...fr, ...(mine ? { eff: mine } : {}), ...(theirs && ret.t === "fn" ? { ret: { ...ret, eff: theirs } } : {}) };
+              if (mine || theirs) { fr = { ...fr, ...(mine ? { eff: mine } : {}), ...(theirs && ret.t === "fn" ? { ret: { ...ret, eff: theirs } } : {}) }; (info.byBody ??= new Map()).set(id, given.target); }
             }
           }
         }
