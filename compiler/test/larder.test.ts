@@ -94,3 +94,19 @@ test("larder: native and WebAssembly print what the ideal prints", { skip }, () 
     assert.deepEqual({ out: lines(readFileSync(out, "utf8")), err: lines(readFileSync(err, "utf8")), code }, want, `wasi, ${name}`);
   }
 });
+
+// ters compile's module as a process: before the fix every "" in it was
+// the number of the frames' empty record tag (moduleTags), so `words`
+// kept empty words, no blank line was blank, and the sample book stopped
+// at its first one ("line 9: expected an amount…").
+test("larder: ters compile's module prints what the ideal prints", () => {
+  const dir = mkdtempSync(join(tmpdir(), "larder-js-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts");
+  const made = spawnSync(process.execPath, ["--no-warnings", ters, "compile", folder, "-o", join(dir, "larder.mjs")], { encoding: "utf8", env: { ...process.env, TERS_NO_KEPT_OUTPUT: "1" } });
+  assert.equal(made.status, 0, made.stderr);
+  const lines = (s: string) => (s ? s.replace(/\n$/, "").split("\n") : []);
+  for (const [name, text] of [["sample", sample], ["made up", book(8, 3)]]) {
+    writeFileSync(join(dir, "b.txt"), text);
+    const r = spawnSync(process.execPath, [join(dir, "larder.mjs"), "b.txt"], { cwd: dir, encoding: "utf8", env: { ...process.env, TERS_WORKERS: "0" } });
+    assert.deepEqual({ out: lines(r.stdout), err: lines(r.stderr), code: r.status }, w.ideal(["b.txt"], { "b.txt": text }), name);
+  }
+});

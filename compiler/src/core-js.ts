@@ -1384,7 +1384,10 @@ export function moduleTags(ir: CoreIR, hosts: boolean, only?: Set<number>): { js
   const js = emitCoreJs(ir, only).js.replace(/R\.stop\(([^,()]+), "[^"]*", "[^"]*"(, "(?:[^"\\]|\\.)*")?\)/g, (_, c: string, name = "") => `R.stop(${c}, 0, 0${name})`);
   if (hosts || solving(js)) return { js, tags: {} };
   const own = [...new Set([...js.matchAll(/\.prototype\.tag = ("(?:[^"\\]|\\.)*");/g)].map((m) => JSON.parse(m[1]) as string))]
-    .filter((t) => !/^(std|builtin|type|effect)\./.test(t));
+    // Not a record's empty tag (a search's frames, scalar.ts): every ""
+    // in the module was that number, so larder's `words` kept the empty
+    // ones and no blank line was blank (I374's frames, #3422).
+    .filter((t) => t !== "" && !/^(std|builtin|type|effect)\./.test(t));
   if (!own.length) return { js, tags: {} };
   const num = new Map(own.map((t, i) => [JSON.stringify(t), i]));
   const tags = Object.fromEntries(own.map((t, i) => [String(i), t]));
