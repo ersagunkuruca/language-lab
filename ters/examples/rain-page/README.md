@@ -2,7 +2,10 @@
 
 Rain on the greenhouse glass at night: 20,000 drops sliding down it, the
 greenhouse dark behind with a lamp glowing. Drag across the glass to wipe
-the drops away; new ones run in from the top.
+the drops away; new ones run in from the top. Closer looks at the glass's
+middle two, then four times as close, then at the whole glass again; at
+four times most drops are outside the picture, which is what culling
+(G14) skips.
 
 It is the example of the GPU and physics rows (BACKLOG G12 to G19).
 Each drop is a record of Float32s, as a graphics card keeps

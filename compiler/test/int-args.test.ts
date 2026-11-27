@@ -41,3 +41,16 @@ test("the outer sum's inputs become locals, and its small case is written out", 
   assert.equal(intArgs(ir), 0, "core-js already ran it");
   assert.match(emitCoreJs(ir).js, /typeof l\d+ === "number" && typeof l\d+ === "number" && \(t\d+ = l\d+ \+ l\d+\)/);
 });
+
+test("the new locals come after the last one the body names, not after unused ones left at the end (#3492, T18d1)", () => {
+  // f(a, b) = (a + b) * (a - b), with two unused locals after b, as passes
+  // before may leave them, more or fewer from one compile to the next.
+  const add = { k: "rt", fn: "int.add", args: [{ k: "local", i: 0 }, { k: "local", i: 1 }] };
+  const sub = { k: "rt", fn: "int.sub", args: [{ k: "local", i: 0 }, { k: "local", i: 1 }] };
+  const f = { def: "f", name: "f", params: ["int", "int"], result: "int", locals: ["int", "int", "int", "int"], body: { k: "rt", fn: "int.mul", args: [add, sub] }, spends: false, budgeted: false };
+  const ir = { funcs: [f] } as unknown as Parameters<typeof intArgs>[0];
+  assert.equal(intArgs(ir), 1);
+  const lets: number[] = [];
+  for (let e = ir.funcs[0].body as { k: string; i?: number; body?: unknown }; e.k === "let"; e = e.body as typeof e) lets.push(e.i!);
+  assert.deepEqual(lets, [2, 3]);
+});

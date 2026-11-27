@@ -130,6 +130,12 @@ jobs:
           seed=$(( $(date -u +%s) / 86400 ))
           echo "Seed $seed" >> "$GITHUB_STEP_SUMMARY"
           SEED=$seed node --test compiler/test/fuzz.test.ts || { echo "Seed $seed found a difference: keep it in compiler/test/fuzz-seeds.json (T18b)" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+      # Edit sequences at the night's seed (T18g) on five examples, 30 steps each.
+      - name: Edit sequences at tonight's seed
+        if: always()
+        run: |
+          seed=$(( $(date -u +%s) / 86400 ))
+          EDIT_STEPS=30 EDIT_SEQ="[[\"sort\",$seed],[\"buffer\",$seed],[\"dice\",$seed],[\"effects\",$seed],[\"turtle\",$seed]]" node --test ters/test/edit-sequences.test.ts || { echo "Seed $seed broke an edit law: keep the cut-down steps in ters/test/edit-sequences.test.ts KEPT with a row (T18g)" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
 
   # Past fixes put back (T18d, ters/test/injections/): each must make a
   # test it names fail, and affected.ts must pick that test before a merge.
@@ -153,6 +159,32 @@ jobs:
         working-directory: ters
       - name: Each past fix put back is caught
         run: node ters/test/injections.ts
+
+  # Today's evaluator against yesterday's (T18f, compiler/test/fuzz-reference.ts):
+  # seed 1 and the night's generated programs, each answer the same. The
+  # day-old main, not the good tag: good has stood at 11-14 while the browser
+  # job was red (I367), and over 13 days meanings changed on purpose (I293's
+  # step counting changed seed 12's g17). A red here is a meaning that changed
+  # since yesterday: if no DONE.md row of the day says so, it's a bug. It
+  # doesn't hold the good tag.
+  reference:
+    needs: changed
+    if: needs.changed.outputs.run == 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ters/package-lock.json
+      - run: npm ci
+        working-directory: ters
+      - name: The evaluator answers as yesterday's
+        run: node compiler/test/fuzz-reference.ts --ref "$(git rev-list -1 --before='24 hours ago' HEAD)"
 
   good:
     needs: [tests, browser]

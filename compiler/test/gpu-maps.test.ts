@@ -150,7 +150,7 @@ function rainPage(close?: "offered" | "held"): string {
   if (close) s.replace("wobble", "0.001", "0.0009765625");
   s.remove("main");
   s.define("main", "function", []);
-  s.step("main", "now", "cell(touched(start pane, 320.0, 240.0))");
+  s.step("main", "now", "cell(touched(start pane, 320.0, 240.0, 1.0))");
   const hole = /□#(\w+)/.exec(s.view("main"))![1];
   s.replace(hole, 'tag("main", [button("Tick", (event) => write(now, ticked(read(now)))), p([text(() => show(sum(map(read(now).drops, (d) => as float64(d.x) + 2.0 * as float64(d.y) + 4.0 * as float64(d.speed) + as float64(d.seed)))))])])');
   s.save();
@@ -344,8 +344,11 @@ test("rain-page's drops stay on the GPU between ticks, slid by the kernel and dr
     const drops = 20000, steps = drops * 4, all = drops * 5 * 4;
     // Kept: every run brings back only the sum of its steps (G13c3), and
     // nothing of the drops is sent, neither by the frames nor for their
-    // steps (G13c): only the first tick's drops, once.
-    assert.deepEqual(kept.reads.filter((n) => n !== 12), [], kept.reads.join(" "));
+    // steps (G13c): only the first tick's drops, once. The first run may
+    // come before the frames draw with WebGPU, and then brings its drops
+    // back as an ordinary list.
+    assert.deepEqual(kept.reads.slice(1).filter((n) => n !== 12), [], kept.reads.join(" "));
+    assert.ok([12, all + steps].includes(kept.reads[0]), kept.reads.join(" "));
     const first = kept.log.indexOf(-12), since = kept.log.slice(first);
     // Before it, the frames drew ordinary lists of drops, sending only the
     // 3 leaves a drop's vertex reads, not all 5 (G13c); the kernel was
