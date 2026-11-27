@@ -559,7 +559,10 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
         const opaque = [...asked.flatMap((r) => Object.keys(r.impl)), ...replaced(), ...edges];
         const per = g.heads.map((h) => [h, choose(code, main, [spec, ...left], undefined, opaque, undefined, { jobs: new Set([...g.of].filter(([, x]) => x === h).map(([id]) => target(id))), referred }).rep] as const);
         const rowsOf = new Set(per.map(([, r]) => r));
-        if (rowsOf.size > 1 && !rowsOf.has(spec) && !keyed(info, defs, code, ty) && [...rowsOf].every((r) => !generic(info, defs, code, r) && plainBoundary(code, defs, r))) {
+        // Not where a hash table would hold lists (depot's routes): the
+        // table's builtins count as reading all they hold (generic), so
+        // lists after it would stay as written.
+        if (rowsOf.size > 1 && !rowsOf.has(spec) && !([...rowsOf].some((r) => r.oneHolder) && listsInValues(code, info, defs, ty)) && !keyed(info, defs, code, ty) && [...rowsOf].every((r) => !generic(info, defs, code, r) && plainBoundary(code, defs, r))) {
           for (const r of rowsOf) { pick(r); groupsOf.set(r, new Set(per.filter(([, x]) => x === r).map(([h]) => h))); }
           sites = g;
           continue;
@@ -1136,6 +1139,15 @@ function keyed(info: Info, defs: Id[], code: Code, of: Id): boolean {
 // there or in a definition it hands them to (`looked`). `map`, `first`,
 // `keep` and `sort by` pass their items on unseen, so a map over pairs
 // that hold a map keeps the trees.
+// Whether a value of `ty` (a Map) in the program's definitions holds a
+// list: its second argument, or a type holding one.
+function listsInValues(code: Code, info: Info, defs: Id[], ty: Id): boolean {
+  const inside = holdsType(code, LIST);
+  const has = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || inside(t.id) || t.args.some(has) : t.t === "fn" ? [...t.params, t.ret].some(has) : false; };
+  const values = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? (t.id === ty && !!t.args[1] && has(t.args[1])) || t.args.some(values) : t.t === "fn" ? [...t.params, t.ret].some(values) : false; };
+  return defs.some((d) => typesIn(code, info, d).some(values));
+}
+
 function generic(info: Info, defs: Id[], code: Code, rep: Representation): boolean {
   // A list is in nearly every type's definition (a Set, a Map, a record
   // with a list field), so for List the types' definitions count too.
