@@ -34,11 +34,11 @@
 import type { Code, Id } from "../../ters/src/model.ts";
 import { withNodes } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
-import { NUMBER, type Type } from "../../ters/src/lang/types.ts";
+import { ARRAY, NUMBER, type Type } from "../../ters/src/lang/types.ts";
 import { TARGET, TRUE } from "../../ters/src/lang/std-ids.ts";
 import { HeldSet } from "../../ters/src/lang/prelude-ids.ts";
 import type { Names } from "../../ters/src/presentation.ts";
-import { isRecord, kids, lowerScalar, type CoreIR, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { isArray, isRecord, kids, lowerScalar, type CoreIR, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
 import { emitWgsl, vectorWidth } from "./wgsl.ts";
 
 // The leaves and the site, as the runtime reads them (gpu-frame.ts).
@@ -191,6 +191,9 @@ function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]
   if (capTypes.some((t) => !t)) throw new Error("reads a value whose type isn't known");
   // The captured targets, in binding order: textures it samples.
   const textures = capTypes.flatMap((t, i) => (t!.t === "con" && t!.id === TARGET ? [i] : []));
+  // The captured Arrays (G15a1, LIGHTS.md): each a storage buffer, its
+  // size read as the shader runs, so one pipeline serves any length.
+  const lists = capTypes.flatMap((t, i) => (t!.t === "con" && t!.id === ARRAY ? [i] : []));
   let nodes = ir.code.nodes;
   const typeOf = new Map(ir.info.typeOf);
   const defs: Id[] = [];
@@ -232,14 +235,20 @@ function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]
   for (const [id, which] of [[vId, "vertex"], [fId, "fragment"]] as const) if (l.refused.has(id)) throw new Error(`its ${which} function ${l.refused.get(id)}`);
   const vi = l.funcs.findIndex((g) => g.def === vId && !g.inner), fi = l.funcs.findIndex((g) => g.def === fId && !g.inner);
   const vf = l.funcs[vi], ff = l.funcs[fi];
-  const sh = emitWgsl(l);
+  // Each entry's array inputs, the captured Arrays it is given (buffer r
+  // as the size -1 - r).
+  const givenTo = (fn: number, from: number) => l.funcs[fn].params.flatMap((t, j) => (!isArray(t) ? [] : j >= from && lists.includes(j - from) ? [-1 - lists.indexOf(j - from)] : [NaN]));
+  const given = lists.length ? { entries: new Map([[vi, givenTo(vi, 2)], [fi, givenTo(fi, 1)]].filter(([, xs]) => (xs as number[]).length) as [number, number[]][]), at: (r: number) => `lab_list${r}_at`, length: (r: number) => `lab_list${r}_len()` } : undefined;
+  const sh = emitWgsl(l, given ? { given } : {});
   const vEntry = sh.entries.get(vi), fEntry = sh.entries.get(fi);
   if (!vEntry) throw new Error(`its vertex function ${sh.refused.get(vId) ?? "can't run on the GPU"}`);
   if (!fEntry) throw new Error(`its fragment function ${sh.refused.get(fId) ?? "can't run on the GPU"}`);
   const structs = sh.structs;
   // The inputs' leaves: the instance, the corner, then each value read.
   const [it, ct] = vf.params, capLs = vf.params.slice(2);
-  const allInstance = unread ? [] : leavesOf(it), allCorner = leavesOf(ct), capLeaves = capLs.map((t, i) => (textures.includes(i) ? [] : leavesOf(t)));
+  const allInstance = unread ? [] : leavesOf(it), allCorner = leavesOf(ct), capLeaves = capLs.map((t, i) => (textures.includes(i) || lists.includes(i) ? [] : leavesOf(t)));
+  const listLeaves = lists.map((i) => { const t = capLs[i]; return isArray(t) ? leavesOf(t.item) : null; });
+  if (listLeaves.some((x) => !x)) throw new Error("reads an Array whose items aren't Float64s, Ints, Bools or records of them");
   // Only what the vertex function reads of an instance and of a corner
   // crosses (G8): the rest is 0 in the shader.
   const instance = allInstance && reached(allInstance, readPaths(l.funcs, vi, 0)), corner = allCorner && reached(allCorner, readPaths(l.funcs, vi, 1));
@@ -267,7 +276,17 @@ function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]
   const words = capLeaves.reduce((n, x) => n + x!.length, 0);
   const capWord = (k: number) => `lab_caps[${k >> 2}].${"xyzw"[k & 3]}`;
   const at = { k: 0 };
-  const capsWgsl = capLs.map((t, i) => (textures.includes(i) ? `${textures.indexOf(i)}.0` : rebuilt(t, structs, fromWord(capWord), at)));
+  const capsWgsl = capLs.flatMap((t, i) => (lists.includes(i) ? [] : [textures.includes(i) ? `${textures.indexOf(i)}.0` : rebuilt(t, structs, fromWord(capWord), at)]));
+  // Buffer r: its length, then each item's leaves.
+  const wgslType = (t: LType) => (t === "f64" ? "f32" : t === "int32" ? "i32" : t === "i32" ? "bool" : structs.get((t as RType).key)?.name ?? "f32");
+  const listing = lists.map((i, r) => {
+    const item = (capLs[i] as { item: LType }).item, n = listLeaves[r]!.length;
+    return `
+@group(0) @binding(${16 + r}) var<storage, read> lab_list${r}: array<u32>;
+fn lab_list${r}_len() -> i32 { return i32(lab_list${r}[0]); }
+fn lab_list${r}_at(i: i32) -> ${wgslType(item)} { return ${rebuilt(item, structs, fromWord((k) => `lab_list${r}[1u + u32(i) * ${n}u + ${k}u]`))}; }`;
+  }).join("");
+  const readLists = lists.map((_, r) => ` _ = lab_list${r}[0];`).join("");
   if (sh.wgsl.includes("lab_sampled(") && !textures.length) throw new Error("samples a texture it doesn't capture (sampled reads a pass's target the draw's function was written beside)");
   // Texture t at a place across it, between its four nearest texels (the
   // sampler's), at its full size (level 0), so either stage may read it.
@@ -309,7 +328,7 @@ ${textures.slice(1).map((_, j) => `  if (t == ${j + 1}.0) { return textureSample
 struct LabCull { n: u32, corners: u32 }
 @group(0) @binding(4) var<uniform> lab_cull: LabCull;
 @compute @workgroup_size(64) fn lab_cull_main(@builtin(global_invocation_id) lab_g: vec3u) {
-  _ = lab_caps[0]; _ = lab_inst[0]; _ = lab_corner[0];
+  _ = lab_caps[0]; _ = lab_inst[0]; _ = lab_corner[0];${readLists}
   let lab_it = lab_g.x + lab_g.y * 65535u * 64u;
   if (lab_it >= lab_cull.n) { return; }
   var lab_out = 63u;
@@ -326,14 +345,14 @@ ${gaveNone ? `    if (${gaveNone}) { b = 63u; }
   const wgsl = `${sh.wgsl}
 @group(0) @binding(0) var<uniform> lab_caps: array<vec4u, ${Math.max(1, Math.ceil(words / 4))}>;
 @group(0) @binding(1) var<storage, read> lab_inst: array<u32>;
-@group(0) @binding(2) var<storage, read> lab_corner: array<u32>;${kept ? `\noverride lab_iw: u32 = ${nI}u;${instance.map((_, j) => `\noverride lab_i${j}: u32 = ${j}u;`).join("")}` : ""}${sampling}
+@group(0) @binding(2) var<storage, read> lab_corner: array<u32>;${listing}${kept ? `\noverride lab_iw: u32 = ${nI}u;${instance.map((_, j) => `\noverride lab_i${j}: u32 = ${j}u;`).join("")}` : ""}${sampling}
 struct LabPlaced {
   @builtin(position) position: vec4f,
 ${vary.join("\n")}
 }
 @vertex fn lab_vs(@builtin(vertex_index) lab_vi: u32, @builtin(instance_index) lab_ii: u32) -> LabPlaced {
   // Every binding read, so the layout made from the module has all three.
-  _ = lab_caps[0]; _ = lab_inst[0]; _ = lab_corner[0];
+  _ = lab_caps[0]; _ = lab_inst[0]; _ = lab_corner[0];${readLists}
   let lab_it = lab_ii; // drawn
 ${placing}
   var o: LabPlaced;
@@ -342,9 +361,9 @@ ${carry.join("\n")}
 ${gaveNone ? `  if (${gaveNone}) { var nan = 0x7fc00000u; o.position = vec4f(bitcast<f32>(nan)); }\n` : ""}  return o;
 }
 @fragment fn lab_fs(o: LabPlaced) -> @location(0) vec4f {
-${textures.length ? `  // The sampler and every texture in the layout, read or not.\n  _ = lab_sampler;${textures.map((_, k) => ` _ = lab_tex${k};`).join("")}\n` : ""}${start}  let k = ${fEntry}(${[v, ...capsWgsl].join(", ")});
+${lists.length ? `  // Every Array in the layout, read or not.\n ${readLists}\n` : ""}${textures.length ? `  // The sampler and every texture in the layout, read or not.\n  _ = lab_sampler;${textures.map((_, k) => ` _ = lab_tex${k};`).join("")}\n` : ""}${start}  let k = ${fEntry}(${[v, ...capsWgsl].join(", ")});
 ${fuel || none ? `  if (${[fuel ? "lab_fuel < 0.0" : "", none ? "lab_none" : ""].filter(Boolean).join(" || ")}) { discard; }\n` : ""}  return vec4f(${k[0]}, ${k[1]}, ${k[2]}, ${colour === 4 ? k[3] : "1.0"});
 }${culling}
 `;
-  return { wgsl, caps: capLeaves as Leaf[][], instance, corner, colour, ...(textures.length ? { textures } : {}), ...(kept ? { kept } : {}), ...(cull ? { cull: true as const } : {}) };
+  return { wgsl, caps: capLeaves as Leaf[][], instance, corner, colour, ...(textures.length ? { textures } : {}), ...(kept ? { kept } : {}), ...(cull ? { cull: true as const } : {}), ...(lists.length ? { lists: lists.map((cap, r) => ({ cap, leaves: listLeaves[r]! })) } : {}) };
 }

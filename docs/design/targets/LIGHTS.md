@@ -101,9 +101,12 @@ Ersagun measures on a real GPU later, as with G13d.
 
 ## Steps
 
-- **G15a1**: a draw captures an `Array` of records whose size the page
-  gives: a storage buffer, and `at` and `length` on it in WGSL (wgsl.ts's
-  arrays at a size known only at run time; gpu-frame.ts sends it).
+- **G15a1** (done): a draw captures an `Array` of records whose size the
+  page gives: a storage buffer at binding 16 + r, its length then each
+  item's leaves, read by `item at` and `array length` in WGSL (wgsl.ts
+  `given`: such an array is passed on and read, never copied as a value;
+  gpu-frame.ts sends it again only when its items change). One module
+  serves any length (gpu-lists.test).
 - **G15a2**: a captured List goes as such an array, and a fold over it
   (sum, map then sum, fold) lowers to a loop over its indices; rain-page's
   lamps as a list.
