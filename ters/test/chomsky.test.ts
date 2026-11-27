@@ -2,7 +2,8 @@
 // Chomsky's hierarchy, each classed and its words listed; deciding a word
 // is total where no rule shrinks a form, and searched under fuel above.
 // A regular grammar's automaton, its deterministic one and the grammar
-// read back from it give the same words.
+// read back from it give the same words. A context-free grammar's pushdown
+// automaton accepts its words, as many ways as it has parse trees (L293c).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -62,4 +63,19 @@ test("chomsky: an automaton's run is a Choice, its ways through a word counted",
   assert.match(s.eval(`accepting paths(automaton of(${g}), form of("babb"))`), /= 1 /);
   assert.match(s.eval(`accepting paths(automaton of(${g}), form of("bbab"))`), /= 0 /);
   assert.match(s.eval(`accepting paths(deterministic(automaton of(${g})), form of("babb"))`), /= 1 /);
+});
+
+test("chomsky: a context-free grammar's pushdown automaton accepts its words, once for each parse tree", () => {
+  const out = session().run("main", ["6"]);
+  assert.match(out, /sums: context free\n(  .*\n)*  most parse trees of a word up to 6: 2 \(a\+a\+a\)\n/);
+  assert.match(out, /sums by precedence: context free\n(  .*\n)*  most parse trees of a word up to 6: 1 /);
+  const accepts = out.match(/moves; words up to 6 it accepts: .*/g)!;
+  assert.equal(accepts.length, 3);
+  for (const line of accepts) assert.match(line, /: the same$/);
+  const s = session();
+  const g = (name: string) => `item at(keep(grammars, (x) => x.name = "${name}"), 0, grammar("", "", nil))`;
+  const trees = (name: string, w: string) => s.eval(`ways to accept(pushdown of(${g(name)}), ${g(name)}, form of("${w}"))`);
+  assert.match(trees("sums", "a+a+a+a"), /= 5 /);
+  assert.match(trees("sums by precedence", "a+a+a+a"), /= 1 /);
+  assert.match(trees("sums", "a+a+"), /= 0 /);
 });

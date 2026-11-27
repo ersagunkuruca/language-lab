@@ -9,8 +9,8 @@ ters run examples/chomsky [length]
 
 A grammar is a value: `grammar(name, start, rules)`, each rule a list of
 symbols rewritten to another, written as text such as
-`"S → aSb | ab"` (capital letters are variables). The program builds five,
-one at each level and a second regular one, and for each prints its level and its words up to a
+`"S → aSb | ab"` (capital letters are variables). The program builds seven,
+one at each level, a second regular one and two more context-free ones, and for each prints its level and its words up to a
 length (6):
 
 | grammar | rules | level |
@@ -18,6 +18,8 @@ length (6):
 | a⁺b* | S → aS \| a \| aB; B → bB \| b | regular |
 | third from last is a | S → aS \| bS \| aA; A → aB \| bB; B → a \| b | regular |
 | aⁿbⁿ | S → aSb \| ab | context free |
+| sums | E → E+E \| E*E \| a | context free |
+| sums by precedence | E → E+T \| T; T → T*F \| F; F → a | context free |
 | aⁿbⁿcⁿ | S → aSBc \| abc; cB → Bc; bB → bb | context sensitive |
 | a^(2^n) | S → ACaB; Ca → aaC; CB → DB \| E; aD → Da; AD → AC; aE → Ea; AE → ε | unrestricted |
 
@@ -47,6 +49,16 @@ length (6):
   states it can be in; "third from last is a" goes from 4 states to 8.
   The automaton read back as a grammar (`grammar of automaton`) gives the
   same words, and the program checks all four agree.
+
+- **Pushdown automata** (`pushdown of`, L293c): a context-free grammar's
+  automaton has one state; a variable on top of the stack is replaced by
+  one of its right sides, and a terminal on top is taken off when the
+  word has it next. A run is a Choice again, and its runs are the
+  grammar's leftmost derivations, so `count` of them (`ways to accept`)
+  is how many parse trees a word has: a+a+a+a has 5 in "sums" (each way
+  to bracket it) and 1 in "sums by precedence". A stack longer than
+  what is left of the word is given up, which is right when no rule
+  shrinks a form, and a budget of moves makes the search end.
 
 So the line between decidable and semi-decidable shows in the types:
 
