@@ -173,7 +173,10 @@ export function givenEffects(code: Code, info: Info): Given {
       else if (a?.kind === "ref" && code.nodes[a.target]?.kind === "def" && !SIGS[a.target]) {
         const scheme = info.schemes.get(a.target), t = scheme ? (info.subst ? info.subst.zonk(scheme.type) : scheme.type) : undefined;
         e = t?.t === "fn" ? new Set(t.eff.effs) : null;
-      } else if (a?.kind === "ref" && code.nodes[a.target]?.kind === "binder") e = given(a.target);
+      } else if (a?.kind === "ref" && a.target === binder) e = new Set();
+      // (The input passed on as it was, by the definition calling itself:
+      // what its other callers give.)
+      else if (a?.kind === "ref" && code.nodes[a.target]?.kind === "binder") e = given(a.target);
       if (!e) { out = null; break; }
       e.forEach((x) => out!.add(x));
     }
