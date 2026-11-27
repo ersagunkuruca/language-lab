@@ -31,7 +31,7 @@
 "dlg10ebgekmk3l1pta4dokdhsj": "An answer as text.",
 "e0q6qkk7g2lud4iasn58kitf54": "Every symbol the grammar's rules write.",
 "e2e4jfh204h6gr82uocp07afo3": "How many forms there are of n symbols or fewer over m symbols, 1 + m(1 + m(…)): a bound on the rounds a search over them needs.",
-"e9nocnhop9stbjgrqfv5k8jh7k": "chomsky [length]: four grammars, one at each level of the hierarchy, each with its level and its words up to a length (6).",
+"e9nocnhop9stbjgrqfv5k8jh7k": "chomsky [length]: seven grammars, at every level of the hierarchy, each with its level and its words up to a length (6).",
 "ed1vn0v8ph961803nmt5o99de6": "The state a regular grammar's automaton goes to when a rule ends the word.",
 "ess6lujubscvif9bpeog9768ke": "Every state one move on c takes the automaton to from this state.",
 "ev4k7ksh9q80or390t5go9ak2d": "The most ways through the automaton any word of n letters or fewer has: 1 when it is unambiguous on all of them.",
