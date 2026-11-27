@@ -491,10 +491,14 @@ T18g. T18a: `node ters/test/reach.ts [test]` prints, from the test map, how much
 `compiler/src` and `ters/src/lang` a test runs next to all tests, by file, and the
 files it never enters (default: the generated programs, 65% and 45% on 11-27).
 T18b: the Nightly's `seed` job runs the generated programs at the night's seed; a seed that
-finds a difference goes into `compiler/test/fuzz-seeds.json`, replayed by every run.
+finds a difference goes into `compiler/test/fuzz-seeds.json` with the row that fixes it, replayed by
+every run as a todo until that row is done.
 T18c: a run that finds a difference prints its first one cut down (compiler/test/fuzz-shrink.ts,
 `SHRINK=0` skips it).
 T18d: `node ters/test/injections.ts` puts each past fix in `ters/test/injections/` back and checks
 a test catches it and `affected.ts` picks that test (the Nightly's `injections` job). A bug fix
 whose test would catch it again gets an entry: its fix reversed as `injection.patch` (implementation
 files only) and `meta.json` (`bug`, `what`, `tests`).
+T18e: each generated program also runs under `FUZZ_HOLDS` (default 2) random holds of Map, Set and
+List, as a `.decisions` file may write them; every engine must print what the evaluator prints, and
+an engine refusing a hold the chooser took is a difference too.

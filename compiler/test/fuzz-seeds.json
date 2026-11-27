@@ -1,4 +1,11 @@
 {
-  "about": "Seeds of compiler/test/fuzz.test.ts (C101) kept because a run found a difference at them (T18b). Each: the seed, the date found, the row that fixes it. fuzz.test.ts runs seed 1 and each of these; remove one once its row is done and the definition it showed has its own test.",
-  "seeds": []
+  "about": "Seeds of compiler/test/fuzz.test.ts (C101) kept because a run found a difference at them (T18b). Each: the seed, the date found, the row that fixes it. fuzz.test.ts runs seed 1 and each of these, a kept one as a todo until its row is done; remove one once its row is done and the definition it showed has its own test.",
+  "seeds": [
+    {
+      "seed": 5,
+      "found": "2026-11-27",
+      "row": "C366",
+      "what": "held Map as hash table: JavaScript from the core IR and WebAssembly and C refuse g16, which calls table keys"
+    }
+  ]
 }

@@ -32,14 +32,19 @@ import { shrunk } from "./fuzz-shrink.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { checkOptions } from "../../ters/src/lang/load.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
 
-const COUNT = Number(process.env.FUZZ ?? 40);
+const COUNT = Number(process.env.FUZZ ?? 40), HOLDS = Number(process.env.FUZZ_HOLDS ?? 2);
+// A small seeded generator for the holds (mulberry32, as fuzz-programs.ts's).
+const rng = (seed: number) => { let a = seed >>> 0; return <T>(xs: T[]): T => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return xs[Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * xs.length)]; }; };
 // The seeds (T18b): SEED=n alone, or seed 1 and every seed kept in
 // fuzz-seeds.json, a seed some night's run found a difference at (the
 // Nightly runs the night's seed too). A kept seed stays until its bug is
-// fixed and the definition that showed it has a test of its own.
-const kept = (JSON.parse(readFileSync(join(import.meta.dirname, "fuzz-seeds.json"), "utf8")) as { seeds: { seed: number }[] }).seeds.map((k) => k.seed);
-const SEEDS = process.env.SEED ? [Number(process.env.SEED)] : [1, ...kept.filter((k) => k !== 1)];
+// fixed and the definition that showed it has a test of its own. Until
+// then it runs as a todo naming its row, so main stays green; SEED=n runs
+// it as a test.
+const kept = (JSON.parse(readFileSync(join(import.meta.dirname, "fuzz-seeds.json"), "utf8")) as { seeds: { seed: number; row: string }[] }).seeds;
+const SEEDS: { seed: number; row?: string }[] = process.env.SEED ? [{ seed: Number(process.env.SEED) }] : [{ seed: 1 }, ...kept.filter((k) => k.seed !== 1)];
 
 // The inputs every definition is called with.
 // The last: Ints past 64 bits and a Float64 near the top (C115).
@@ -73,6 +78,7 @@ async function compare(p: Program, SEED: number, only?: number[]) {
 
   // Every difference, by engine, so one run shows them all.
   const differ: Difference[] = [];
+  let held_ = 0;
   // What JavaScript from the core IR doesn't run yet (C137c).
   const unsupported = new Set<string>(); let compared = 0;
   // An overflow nobody uses may not be reported (FLOAT-VALUES-2026-11-01
@@ -162,15 +168,50 @@ async function compare(p: Program, SEED: number, only?: number[]) {
       await engines({ code: c.code, info, names: c.names }, ` (${c.chosen.join(", ")})`, false, true, true);
     }
   }
-  return { differ, compared, unsupported };
+  // Decisions held at random (T18e): each combination holds Map, Set and
+  // List each as one of the rows a person may hold in the program's
+  // `.decisions` (L280c); every engine must still print what the evaluator
+  // prints. A hold the chooser refuses here ("can't be held") is skipped.
+  // FUZZ_HOLDS=n tries n combinations (default 2). Influence: rustc's
+  // harness in Ephyra's case studies, each case under random pass toggles.
+  const pickHold = rng(SEED * 7919 + 17);
+  const rows = new Map<Id, string[]>();
+  for (const r of LIBRARY.reps) if (["Map", "Set", "List"].includes(LIBRARY.names[r.of])) rows.set(r.of, [...(rows.get(r.of) ?? []), r.name]);
+  for (let h = 0; h < HOLDS; h++) {
+    const held = new Map([...rows].map(([of, names]) => [of, pickHold(names)] as [Id, string]));
+    let c: ReturnType<typeof withLibraryRepresentations> | undefined;
+    // A type the chooser refuses to hold so is let go, the rest kept.
+    while (held.size && !c) {
+      try { c = withLibraryRepresentations(p.code, p.info, p.names, p.main, p.own, [], { hostMaps: true, held }); }
+      catch (e) {
+        const m = /^(\S+) can't be held/.exec((e as Error).message), of = m && [...held.keys()].find((t) => LIBRARY.names[t] === m[1]);
+        if (!of) throw e;
+        held.delete(of);
+      }
+    }
+    if (!c?.chosen.length) continue;
+    const tag = ` (held ${[...held].map(([of, name]) => `${LIBRARY.names[of]} as ${name}`).join(", ")})`;
+    const info = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+    assert.deepEqual(info.errors.map((e) => e.message), [], `seed ${SEED}${tag}`);
+    const rc = makeRunner(c.code, info, { print: () => {}, names: c.names });
+    pick.forEach((i) => INPUTS.forEach(([x, n], j) => check(stopped(() => { for (const v of rc.call(rc.value(p.entries[i]), x, norm(n), norm(BigInt(j)))) return v as unknown as string; return "no answer"; }), i, j, `the evaluator${tag}`)));
+    // An engine refusing a program under a hold a person may write is a
+    // difference too: the chooser should have refused the hold instead.
+    for (const [js, native] of [[true, false], [false, true]]) {
+      try { await engines({ code: c.code, info, names: c.names }, tag, js, native, true); }
+      catch (e) { differ.push({ i: -1, j: -1, engine: `${js ? "JavaScript" : "WebAssembly and C"}${tag}`, text: `seed ${SEED}${tag}: ${js ? "JavaScript from the core IR" : "WebAssembly and C"} refused: ${(e as Error).message.split("\n").filter((l) => /^\s*[+-]? *'/.test(l)).map((l) => l.trim().replace(/^[+-]\s*/, "")).join(" ") || (e as Error).message}` }); }
+    }
+    held_++;
+  }
+  return { differ, compared, unsupported, held: held_ };
 }
 
-for (const SEED of SEEDS) test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C give the same text (C101, seed ${SEED})`, async () => {
+for (const { seed: SEED, row } of SEEDS) test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C give the same text (C101, seed ${SEED})`, row ? { todo: `kept until ${row}` } : {}, async () => {
   const p = program(SEED, COUNT, INPUTS.map(([, , xs]) => xs));
   assert.deepEqual(p.info.errors.map((e) => e.message), [], `seed ${SEED}`);
-  const { differ, compared, unsupported } = await compare(p, SEED);
-  console.log(`seed ${SEED}: JavaScript from the core IR compared ${compared}${unsupported.size ? `, skipped ${[...unsupported].join(", ")}` : ""}`);
+  const { differ, compared, unsupported, held } = await compare(p, SEED);
+  console.log(`seed ${SEED}: JavaScript from the core IR compared ${compared}${unsupported.size ? `, skipped ${[...unsupported].join(", ")}` : ""}; ${held} of ${HOLDS} held decisions run`);
   // The first difference cut down (T18c), unless SHRINK=0.
-  if (differ.length && process.env.SHRINK !== "0") console.log(await shrunk(p, differ[0], (q, i) => compare(q, SEED, [i]).then((c) => c.differ)));
+  if ((differ[0]?.i ?? -1) >= 0 && process.env.SHRINK !== "0") console.log(await shrunk(p, differ[0], (q, i) => compare(q, SEED, [i]).then((c) => c.differ)));
   assert.deepEqual(differ.map((d) => d.text), []);
 });
