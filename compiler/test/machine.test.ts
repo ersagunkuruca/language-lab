@@ -71,11 +71,12 @@ test("machine: its WebAssembly splits lists as compiled JavaScript does, and agr
 // the compiled program stores them as arrays where its step loop and the
 // parts that would choose arrays reach them (its assembler's appends too,
 // onto what its loops carry, since C234), and as written in the rest,
-// beside its maps and sets as hash tables, where it walked
+// beside its maps and sets as hash tables (its command line too, which
+// it drops a word of after --trace and --limit), where it walked
 // cons lists at every step (C93; trees for the whole until C93 s3b). Bigger
 // than the rest, so walking a list each step would show.
 test("machine: the step loop's lists as arrays beside the hash tables, and the same at a bigger size (C93)", () => {
-  assert.deepEqual(w.chosen, ["Map as hash table", "Set as hash table", "List as array of List from profile, traced, warnings, run of, optimized, assembled"]);
+  assert.deepEqual(w.chosen, ["Map as hash table", "Set as hash table", "List as array of List from profile, traced, warnings, run of, optimized, assembled, options of"]);
   const t = performance.now();
   all(["p.asm"], { "p.asm": sized("primes", 20000) }, ["core"]);
   assert.ok(performance.now() - t < 10000, "primes 20000 compiled in under 10 s (47.9 s as cons lists, under 1 s as trees)");

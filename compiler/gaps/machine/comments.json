@@ -10,6 +10,7 @@
 "1s0mpcdl8corcc99aebb22pemn": "One run: 9, or 3-5.",
 "21mjd2j21jannig6lg4526b85l": "A jlt instruction: go to t if a < b.",
 "26epr3j6tmgr823bfnhjdknr9p": "A jump whose test is known: a jump when it holds, nothing when it doesn't.",
+"28h7dvshgl52d089t0210i39de": "The number after an option that takes one.",
 "2rltr8grksv288ot78pcj8kjmo": "A jnz instruction: go to t unless a = 0.",
 "2vbkrcif91pc6a04anurb7l19m": "Each file reported, in order.",
 "31ui5qm13aug1ng5lcske0tk01": "A value on top of the stack, moved on.",
