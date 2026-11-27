@@ -40,7 +40,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I389 | An if inside a match row stays on one line however long: machine's `paired` prints a 198-character line in the text view, where an if past the width goes one branch per line elsewhere (render.ts; QA-2026-11-27 L1) | [QA-2026-11-27](docs/reports/qa/QA-2026-11-27.md) | 2026-11-27 |
 | I390 | The rain page's definitions draw slowest of all: `apart` 0.99 s alone, every other program's slowest under 0.7 s; measure which part of drawing costs first (QA-2026-11-27 L2) | [QA-2026-11-27](docs/reports/qa/QA-2026-11-27.md) | 2026-11-27 |
 | L298 | chomsky's main comment says "four grammars" (it builds seven) and its output says "at most 1 way(s)" (QA-2026-11-27 L3) | [QA-2026-11-27](docs/reports/qa/QA-2026-11-27.md) | 2026-11-27 |
 | L294 | Nested patterns over several fields kept as the rows they were written as. `add(into, number(x), number(y)) → …`, `add(into, a, number(0)) → …` is stored as the match compiler's decision tree (L290b) and shown as matches nested four deep with binders like `‹field 2›`; `match [a, b]` is worse. One scrutinee's patterns (turtle, machine's `items of words`) are shown back flat. Keep the pattern table (or show the tree back as its rows) so a program like machine's `simplified` reads as one flat match. | machine rewrite, 2026-11-27 | 2026-11-27 |
