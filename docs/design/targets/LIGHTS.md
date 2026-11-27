@@ -28,9 +28,15 @@ reach a place once there are many, and what all of this is measured on.
 
 ## A list a draw reads (G15a)
 
+A shader has no lists today. It has arrays, each of a size known where it
+is made (C66c, wgsl.ts), and a function taking one is copied for each size
+it is given (C66d). A captured list has no size until the page runs.
+
 A fragment function may read a list it captured: `lamps`, a list of
 `Lamp` records (a place, a colour, a reach). It reaches the shader as a
-storage buffer of the records' leaves and a count. A fold over it (add,
+storage buffer of the records' leaves, an array whose size the shader
+reads from the buffer (WGSL's runtime-sized `array<T>`), so one pipeline
+serves any number of lamps. A fold over it (add,
 largest, smallest, or a map and then one of those) lowers to a WGSL loop
 over that buffer, in the list's order. A sum adds in order, as it does
 on the CPU, so the shader's sum is the evaluator's whenever its products
@@ -95,9 +101,12 @@ Ersagun measures on a real GPU later, as with G13d.
 
 ## Steps
 
-- **G15a**: a draw reads a captured list of records, and a fold over it
-  lowers to a WGSL loop (gpu-draws.ts, wgsl.ts, gpu-frame.ts sends it);
-  rain-page's lamps as a list.
+- **G15a1**: a draw captures an `Array` of records whose size the page
+  gives: a storage buffer, and `at` and `length` on it in WGSL (wgsl.ts's
+  arrays at a size known only at run time; gpu-frame.ts sends it).
+- **G15a2**: a captured List goes as such an array, and a fold over it
+  (sum, map then sum, fold) lowers to a loop over its indices; rain-page's
+  lamps as a list.
 - **G15b1**: `within` in std, as a keep, with reference.ts and LIBRARY.md
   (offered-needs-reference); rain-page's fireflies, lit forward, measured.
 - **G15b2**: the grid, a compute pass, and its `way` entry in the
