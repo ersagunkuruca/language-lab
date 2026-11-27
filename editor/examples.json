@@ -47,6 +47,7 @@
     { "program": "ledger", "label": "Bigger program: ledger, money entries totalled", "folders": ["ledger"], "run": { "args": ["book.csv"], "names": ["book"], "files": ["book.csv"] } },
     { "program": "chapters", "label": "Bigger program: chapters, a book split into chapters", "folders": ["chapters"], "run": { "args": ["book.md", "out"], "names": ["book", "folder"], "files": ["book.md"] } },
     { "program": "calc", "label": "Bigger program: calc, a calculator for big numbers", "folders": ["calc"] },
+    { "program": "chomsky", "label": "Bigger program: chomsky, grammars and their machines", "folders": ["chomsky"], "run": { "args": ["6"], "names": ["length"] } },
     { "program": "clinic", "label": "Bigger program: clinic, a waiting-room simulation", "folders": ["compiler/gaps/clinic"], "editor": false, "run": { "files": ["clinic.txt"] } },
     { "program": "crew", "label": "Bigger program: crew, workers as fibers", "folders": ["compiler/gaps/crew"], "editor": false, "run": { "args": ["plan.txt"], "names": ["plan"], "files": ["plan.txt"] } },
     { "program": "break", "label": "Bigger program: break, a pool break event by event", "folders": ["compiler/gaps/break"], "editor": false },
