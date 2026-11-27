@@ -204,8 +204,11 @@ of text; they were these cells logging every finished row).
   trust what it runs** (TESTING.md §8, T16, Ersagun 2026-11-14). It picks
   the tests from the test map (what each test ran and read, recorded by
   CI): the cheapest set that still runs every line your branch changed,
-  usually a few files and under a minute. `--list --why` says which and
-  why. Never pick files by hand, never add `--full` or `--all` "to be
+  the tests named for a changed file, the ones that broke main on
+  2026-11-27 (choices, kept-items, module-decisions, map-tree, the mnist
+  tests), then every other test that ran a changed line or read a changed
+  file, quickest first, while the whole run fits in about ten minutes
+  (Ersagun 2026-11-27). `--list --why` says which and why. Never pick files by hand, never add `--full` or `--all` "to be
   safe", and after a fix run it again rather than a bigger set: it runs
   only what the fix reaches. While working, run the file of what you
   edited by name (`node --test test/….test.ts`); the command is for the
@@ -220,8 +223,10 @@ of text; they were these cells logging every finished row).
   brings it back to daily), so every test still runs weekly and none runs
   twice on code it passed on. A file that fails names the commit that
   broke it in the run's summary (`--bisect`). Look at Check main for your
-  commit; if it is red, or a later run names your commit, fixing it is
-  your next job. Main red for more than an hour stops every lane's merges
+  commit; if it is red, or a later run names your commit, revert your
+  commit at once (a pull request titled "Main red (<failing file>): revert
+  #N"), then land it again with the fix (Ersagun 2026-11-27: main was red
+  7.5 of 14 hours from fixes made forward). Main red for more than an hour stops every lane's merges
   (P10, REVIEW-2026-11-16 §1: 42 merged through 16 red hours): merge
   nothing until Check main is green again, or the failing file has a row
   a lane is taking; a lane's own fix for it merges. The "Main green" check (T17,
