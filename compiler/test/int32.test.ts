@@ -32,7 +32,8 @@ test("Int in a shader is an i32, with + − × negate and abs checked for overfl
   assert.match(s.wgsl, /fn lab_imul\(a: i32, b: i32\) -> i32/);
   assert.match(s.wgsl, /var<private> lab_fuel: f32;/);
   assert.match(s.wgsl, /return -2147483647i - 1i;/);
-  assert.match(s.wgsl, /f32\(p0\)/);
+  // An Int made a number: exact past 2²⁴ too, or given back (G12b lab_itof).
+  assert.match(s.wgsl, /return lab_itof\(p0\);/);
   // With `data`, an Int is the heap's (WebAssembly and C), never int32.
   assert.deepEqual(lowerScalar(p.code, p.info, p.names, [p.poly], { data: true }).funcs.find((f) => f.def === p.poly)?.params, ["int", "int"]);
 });

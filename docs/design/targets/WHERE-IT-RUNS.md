@@ -5,6 +5,16 @@ handler's maps, keeps, folds and searches, WebGPU for its Int maps and
 keeps, and threads on C (DONE.md, C61, C41 to C43). The status below
 lists the steps as they landed.
 
+**The GPU only close (G12, 2026-11-27).** A page's map or keep of
+records of Float32s, Ints and Bools goes to the GPU by cost only where
+the GPU's arithmetic is the CPU's bit for bit (gpu-maps.ts `inexact`).
+Where it is only close (a division, a square root, a product the GPU may
+fuse with a sum, a Float64's step), the map's placement entry offers
+`GPU close` among where it runs, and the compiler never picks it. A
+person who holds it (`held … : GPU close; …` in the program's
+`.decisions`) has the map run on the GPU wherever the browser has
+WebGPU, its answers maybe differing from the CPU's in the last bits.
+
 Status: design note, C61's first step (2026-11-06). Built since: a
 together's pure branches on worker threads on Node (C41, 2026-11-09,
 compiler/src/branches-rt.ts, examples/area), and a `map` of a function
