@@ -301,14 +301,14 @@ test("rain-page's drops stay on the GPU between ticks, slid by the kernel and dr
     assert.equal(/resident:!0/.test(readFileSync(out, "utf8")), !held);
     const page = await browser.newPage();
     await page.addInitScript(() => {
-      type W = { reads: number[]; sent: number[]; ctx?: unknown; GPUBuffer?: { prototype: { getMappedRange(...a: unknown[]): ArrayBuffer } }; GPUQueue?: { prototype: { writeBuffer(b: unknown, o: number, d: ArrayBufferView | ArrayBuffer): void } } };
+      type W = { reads: number[]; sent: number[]; log: number[]; ctx?: unknown; GPUBuffer?: { prototype: { getMappedRange(...a: unknown[]): ArrayBuffer } }; GPUQueue?: { prototype: { writeBuffer(b: unknown, o: number, d: ArrayBufferView | ArrayBuffer): void } } };
       const w = window as unknown as W;
-      w.reads = []; w.sent = [];
+      w.reads = []; w.sent = []; w.log = [];
       const now = performance.now.bind(performance);
       performance.now = () => now() * 100;
       const b = w.GPUBuffer?.prototype, q = w.GPUQueue?.prototype;
-      if (b) { const read = b.getMappedRange; b.getMappedRange = function (...x: unknown[]) { const a = read.apply(this, x); w.reads.push(a.byteLength); return a; }; }
-      if (q) { const write = q.writeBuffer; q.writeBuffer = function (buf: unknown, o: number, d: ArrayBufferView | ArrayBuffer, ...x: unknown[]) { w.sent.push(d.byteLength); return (write as (...a: unknown[]) => void).call(this, buf, o, d, ...x); }; }
+      if (b) { const read = b.getMappedRange; b.getMappedRange = function (...x: unknown[]) { const a = read.apply(this, x); w.reads.push(a.byteLength); w.log.push(-a.byteLength); return a; }; }
+      if (q) { const write = q.writeBuffer; q.writeBuffer = function (buf: unknown, o: number, d: ArrayBufferView | ArrayBuffer, ...x: unknown[]) { w.sent.push(d.byteLength); w.log.push(d.byteLength); return (write as (...a: unknown[]) => void).call(this, buf, o, d, ...x); }; }
       const ctx = HTMLCanvasElement.prototype.getContext as (this: HTMLCanvasElement, t: string, ...x: unknown[]) => unknown;
       (HTMLCanvasElement.prototype as unknown as { getContext: typeof ctx }).getContext = function (t, ...x) {
         if (t !== "webgpu") return ctx.call(this, t, ...x);
@@ -323,9 +323,9 @@ test("rain-page's drops stay on the GPU between ticks, slid by the kernel and dr
     // Till the slide has run on the GPU a few times.
     await page.waitForFunction(() => (window as unknown as { reads: number[] }).reads.length >= 6, undefined, { timeout: 30000 });
     const seen = await page.evaluate(async () => {
-      const w = window as unknown as { reads: number[]; sent: number[]; ctx: { dev: { createBuffer(d: object): { mapAsync(m: number): Promise<void>; getMappedRange(): ArrayBuffer }; createCommandEncoder(): { copyTextureToBuffer(a: object, b: object, s: number[]): void; finish(): unknown }; queue: { submit(c: unknown[]): void } }; tex: { width: number; height: number } } };
+      const w = window as unknown as { reads: number[]; sent: number[]; log: number[]; ctx: { dev: { createBuffer(d: object): { mapAsync(m: number): Promise<void>; getMappedRange(): ArrayBuffer }; createCommandEncoder(): { copyTextureToBuffer(a: object, b: object, s: number[]): void; finish(): unknown }; queue: { submit(c: unknown[]): void } }; tex: { width: number; height: number } } };
       const { dev, tex } = w.ctx, row = Math.ceil(tex.width * 4 / 256) * 256;
-      const reads = [...w.reads], sent = [...w.sent];
+      const reads = [...w.reads], sent = [...w.sent], log = [...w.log];
       const buf = dev.createBuffer({ size: row * tex.height, usage: 0x01 | 0x08 }), enc = dev.createCommandEncoder();
       enc.copyTextureToBuffer({ texture: tex }, { buffer: buf, bytesPerRow: row }, [tex.width, tex.height]);
       dev.queue.submit([enc.finish()]);
@@ -333,7 +333,7 @@ test("rain-page's drops stay on the GPU between ticks, slid by the kernel and dr
       const px = new Uint8Array(buf.getMappedRange());
       const colours = new Set<number>();
       for (let y = 0; y < tex.height; y += 4) for (let x = 0; x < tex.width; x += 4) { const i = y * row + x * 4; colours.add((px[i] << 16) | (px[i + 1] << 8) | px[i + 2]); }
-      return { reads, sent, colours: colours.size };
+      return { reads, sent, log, colours: colours.size };
     });
     await page.close();
     return seen;
@@ -343,9 +343,11 @@ test("rain-page's drops stay on the GPU between ticks, slid by the kernel and dr
     if (!kept || !onCpu) return;
     const drops = 20000, steps = drops * 4, all = drops * 5 * 4;
     // Kept: after the first run's answers, only the steps come back, and
-    // no frame sends the drops.
+    // nothing of the drops is sent, neither by the frames nor for their
+    // steps (G13c): only the first tick's drops, once.
     assert.deepEqual(kept.reads.slice(1).filter((n) => n !== steps), [], kept.reads.join(" "));
-    assert.ok(kept.sent.filter((n) => n >= all).length <= 2, kept.sent.join(" "));
+    const since = kept.log.slice(kept.log.indexOf(-steps));
+    assert.deepEqual(since.filter((n) => n >= steps), [], kept.log.join(" "));
     // Held on the CPU: each run brings the drops back, and frames send them.
     assert.ok(onCpu.reads.every((n) => n === all + steps), onCpu.reads.join(" "));
     assert.ok(onCpu.sent.filter((n) => n >= all).length > 6, onCpu.sent.join(" "));

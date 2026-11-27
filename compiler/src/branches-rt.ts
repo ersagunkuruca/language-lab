@@ -1165,7 +1165,7 @@ function gpuMap(given: { items: unknown[]; words: Int32Array | Uint32Array } | G
     let ins: GpuBuf;
     if (held) ins = held.buffer as GpuBuf;
     else { const w = (given as { words: Int32Array | Uint32Array }).words; ins = dev.createBuffer({ size: Math.max(4, w.byteLength), usage: STORAGE | COPY_DST }); dev.queue.writeBuffer(ins, 0, w); }
-    const outs = dev.createBuffer({ size: outBytes, usage: STORAGE | COPY_SRC }), steps = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC | COPY_DST });
+    const outs = dev.createBuffer({ size: outBytes, usage: STORAGE | COPY_SRC }), steps = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC });
     const capped = dev.createBuffer({ size: caps.byteLength, usage: STORAGE | COPY_DST });
     dev.queue.writeBuffer(capped, 0, caps);
     // Kept on the GPU, only the steps come back, then the answers only
@@ -1173,9 +1173,9 @@ function gpuMap(given: { items: unknown[]; words: Int32Array | Uint32Array } | G
     const job = dev.createBuffer({ size: 16, usage: UNIFORM | COPY_DST }), back = dev.createBuffer({ size: (stay ? 0 : outBytes) + bytes, usage: MAP_READ | COPY_DST });
     const head = new ArrayBuffer(16);
     new Float32Array(head, 0, 1)[0] = budget; new Uint32Array(head, 4, 1)[0] = n;
-    // Each item's steps −1 till the kernel writes them: one it never ran
-    // is worked out here.
-    dev.queue.writeBuffer(job, 0, new Uint8Array(head)); dev.queue.writeBuffer(steps, 0, new Float32Array(Math.max(1, n)).fill(-1));
+    // The kernel writes every item's steps, −1 for one given back, so
+    // nothing is sent for them (G13c).
+    dev.queue.writeBuffer(job, 0, new Uint8Array(head));
     const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: ((m.words ? m.words.caps.some((c) => c.length) : m.caps.length) ? [ins, outs, steps, job, capped] : [ins, outs, steps, job]).map((b, binding) => ({ binding, resource: { buffer: b } })) });
     const enc = dev.createCommandEncoder(), p = enc.beginComputePass(), groups = Math.ceil(n / 64);
     p.setPipeline(pipe); p.setBindGroup(0, bg); p.dispatchWorkgroups(Math.min(groups, 65535), Math.ceil(groups / 65535)); p.end();
