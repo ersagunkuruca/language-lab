@@ -103,6 +103,14 @@ lists a view holds would be another representation (an array or tree
 stored for the list, as the list chooser picks elsewhere). That is a
 later step, if the measures after step 3 ask for it.
 
+## Lists as arrays, 2026-11-27
+
+Ersagun chose to change how views hold lists (11-27 07:31 UTC). C354a
+(#3501) lets a page's lists be arrays: a frame of board's timer went from
+0.88 to about 0.4 ms. C354b brings back step 1's memo for arrays: a list a
+card was pushed onto is the same buffer, longer, so finding the new items
+costs nothing, and an add at 2000 cards went from about 0.96 to 0.62 ms.
+
 ## Prior art
 
 - Umut Acar, *Self-Adjusting Computation*, PhD thesis, Carnegie Mellon

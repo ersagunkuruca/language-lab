@@ -7,7 +7,7 @@
 import { bordered } from "../../ters/src/lang/border.ts";
 import { ARRAY_OPS, CELL_OPS, CONS, FALSE, LOCALE_V, NIL, NONE, SOME, TICKET_V, TRUE } from "../../ters/src/lang/std-ids.ts";
 import { madeItem } from "../../ters/src/lang/over.ts";
-import { ArrayView, arrayOf, arrayOfItems, rangeArray, arrayView, pushFrontOwned, pushOwned, replaceOwned, emptyFor } from "../../ters/src/lang/array-view.ts";
+import { ArrayView, arrayOf, arrayOfItems, rangeArray, arrayView, pushFrontOwned, pushOwned, replaceOwned, emptyFor, sliceOf, itemsIn, pushBack } from "../../ters/src/lang/array-view.ts";
 import { hashset$items, show as showFloat, table$empty, table$entries, table$has, table$keys, table$put, table$remove, table$size } from "../../ters/src/lang/std-run.ts";
 import { directRead, directTable, pairPut, pairPutOwned, pairRead, pairRemove, pairRemoveOwned, pairTable, tableRead, tablePutOwned, tableRemoveOwned, type Table } from "../../ters/src/lang/table.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
@@ -812,6 +812,43 @@ export const RUNTIME = {
   int: (s: string) => I.norm(BigInt(s)),
   // A data value's case number, for `tag`.
   caseOf: (x: { tag: Id }, variants: Id[]) => variants.indexOf(x.tag),
+  // A list's cells past those of `was` (memo-calls.ts listMemoFuncs, C354):
+  // what `now` has after `was`'s items, when its first items are `was`'s,
+  // the same values in the same order; undefined otherwise.
+  listAfter: (was: unknown, now: unknown): unknown => {
+    // An array: the same buffer's version from the same place, longer (a
+    // push into its room, C354a), and the items past was's.
+    if (was instanceof ArrayView || now instanceof ArrayView) {
+      if (!(was instanceof ArrayView && now instanceof ArrayView) || was.ver !== now.ver || was.start !== now.start || now.n < was.n) return undefined;
+      return sliceOf(now, was.n, now.n - was.n);
+    }
+    type L = { tag: Id; f0?: unknown; f1?: unknown; fields: unknown[] };
+    let p = was as L, q = now as L;
+    for (; p.tag === CONS; p = (p.f1 ?? p.fields[1]) as L, q = (q.f1 ?? q.fields[1]) as L) {
+      if (q.tag !== CONS || (p.f0 ?? p.fields[0]) !== (q.f0 ?? q.fields[0])) return undefined;
+    }
+    return q;
+  },
+  // `a` with `b` after it: a's cells made again before b, each as a's are.
+  listJoined: (a: unknown, b: unknown): unknown => {
+    if (a instanceof ArrayView && b instanceof ArrayView) { let r = a; for (const x of itemsIn(b)) r = pushBack(r, x); return r; }
+    type L = { tag: Id; f0?: unknown; f1?: unknown; fields: unknown[] };
+    const first = a as L;
+    if (first.tag !== CONS) return b;
+    if ((b as L).tag !== CONS) return a;
+    const items: unknown[] = [];
+    for (let p = first; p.tag === CONS; p = (p.f1 ?? p.fields[1]) as L) items.push(p.f0 ?? p.fields[0]);
+    const K = Object.prototype.hasOwnProperty.call(first, "f0") ? (first.constructor as new (h: unknown, t: unknown) => unknown) : null;
+    let out = b;
+    for (let i = items.length - 1; i >= 0; i--) out = K ? new K(items[i], out) : { tag: CONS, fields: [items[i], out] };
+    return out;
+  },
+  // A list the memo keeps or gives (C354a): an array as a view of its own,
+  // its buffer marked shared, so an owned push or replace by whoever holds
+  // one (holders.ts) changes neither the kept one nor its items.
+  keptList: (v: unknown): unknown => { if (!(v instanceof ArrayView)) return v; v.ver.shared = true; return new ArrayView(v.ver, v.start, v.n); },
+  // Two closures' captures the same values.
+  sameCaps: (a: unknown[], b: unknown[]): boolean => a.length === b.length && a.every((x, i) => Object.is(x, b[i])),
   // A closure: a function of its inputs, calling its code with itself
   // first, holding what it captured, so the evaluator's runtime (a page,
   // the library) calls it as any function.
