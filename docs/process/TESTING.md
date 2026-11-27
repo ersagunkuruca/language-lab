@@ -506,3 +506,8 @@ T18f: `node compiler/test/fuzz-reference.ts [--ref good] [seed…]` runs the gen
 evaluator and on an older commit's (a git worktree, each on its own library) and lists the answers that
 differ; the Nightly's `reference` job compares with the day-old main. A difference is a meaning that
 changed: a bug unless a DONE.md row says it was meant.
+T18g: ters/test/edit-sequences.test.ts makes seeded sequences of MCP edits (replace, rename, comment,
+undo) on copies of examples; after each, a refused edit changed nothing, the kept check says what a
+check from scratch says, the saved files read back the same, and an undo gives back the program; two
+sequences from one start merge as merge-files.ts should. A broken law is cut down to the steps it needs
+and kept in the file's KEPT list, a todo naming its row. The Nightly's `seed` job runs it at the night's seed.
