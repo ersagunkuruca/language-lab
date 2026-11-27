@@ -209,3 +209,15 @@ test("an else if chain reads flat, each else at the first if's indent", () => {
   // Each test its own row: no then on an else if's line.
   assert.ok(elses.every((i) => !lines[i].includes(" then ")), lines.join("\n"));
 });
+
+// I389: an if in a match row is as wide as its one line, so one past the
+// width goes one branch per line (machine's paired kept a 154-character if
+// on its load row, a 198-character line in the text).
+test("a wide if in a match row breaks into its branches", () => {
+  const p = loadProgram(join(root, "../compiler/gaps/machine"));
+  const lines = renderBlocks(p.code, p.pres, infer(p.code, p.pres.names), p.named("paired")).split("\n");
+  const ifs = lines.filter((l) => /\bif b = a₂ and\b/.test(l));
+  assert.ok(ifs.length > 0, lines.join("\n"));
+  assert.ok(ifs.every((l) => !l.includes(" then ")), lines.join("\n"));
+  assert.ok(lines.filter((l) => !l.trim().startsWith("--")).every((l) => l.trimStart().length <= 100), lines.join("\n"));
+});

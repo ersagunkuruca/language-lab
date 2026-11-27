@@ -285,7 +285,11 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
     let w = widths.get(id);
     if (w === undefined) {
       measuring = true;
-      try { w = pieceText(inline(id).p).length; } finally { measuring = false; }
+      // An if has no inline form of its own (‹match›): it is as wide as its
+      // one line, if c then a else b (machine's paired kept a 154-character
+      // if on one line).
+      const ifWidth = () => { const m = n as NodeOf<"match">, arm = (v: Id) => (node(m.arms.find((a) => (node(a) as NodeOf<"arm">).variant === v)!) as NodeOf<"arm">).body, w = (x: Id) => pieceText(inline(x).p).length; return "if ".length + w(m.scrutinee) + " then ".length + w(arm(TRUE)) + " else ".length + w(arm(FALSE)); };
+      try { w = n.kind === "match" ? ifWidth() : pieceText(inline(id).p).length; } finally { measuring = false; }
       widths.set(id, w);
     }
     return w + pieceText(lead).length > width;
