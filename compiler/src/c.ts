@@ -295,13 +295,41 @@ static void lab_oom(void) { fputs("out of memory\\n", stderr); exit(3); }
 #endif
 static ${TL}void *lab_unused[LAB_SIZES + 1];
 static ${TL}char *lab_block = 0, *lab_block_end = 0;
-static void *lab_new(size_t size, uint16_t type, uint8_t tag) {
+${threads ? `// Cells one thread frees that another made (G25b): the greenhouse's
+// moths, made on the pool's threads each tick and freed on the main one,
+// grew the main thread's lists while the pool's threads cut new blocks,
+// 270 MB at a night of 2,700 ticks against 5 MB on one thread. A list
+// grown past LAB_SPARE is put aside whole, and a thread with an empty
+// list takes one put aside before it cuts a block: 17 MB. Put aside in
+// smaller lists (4,096), the cells are still in the freeing thread's
+// cache and the night ran 15% slower; at 65,536 as fast as before.
+#define LAB_SPARE 65536
+#define LAB_SPARES 64
+static int64_t lab__blocks = 0; // blocks cut, for TERS_BRANCHES=say
+static ${TL}uint32_t lab__unused_n[LAB_SIZES + 1];
+static void *lab__spare[LAB_SIZES + 1][LAB_SPARES];
+static int lab__spare_n[LAB_SIZES + 1];
+static pthread_mutex_t lab__spare_m = PTHREAD_MUTEX_INITIALIZER;
+static void lab__give(uint8_t k) {
+  pthread_mutex_lock(&lab__spare_m);
+  if (lab__spare_n[k] < LAB_SPARES) { lab__spare[k][lab__spare_n[k]] = lab_unused[k]; __atomic_store_n(&lab__spare_n[k], lab__spare_n[k] + 1, __ATOMIC_RELEASE); lab_unused[k] = 0; lab__unused_n[k] = 0; }
+  pthread_mutex_unlock(&lab__spare_m);
+}
+static int lab__take(size_t k) {
+  if (!__atomic_load_n(&lab__spare_n[k], __ATOMIC_ACQUIRE)) return 0;
+  pthread_mutex_lock(&lab__spare_m);
+  int n = lab__spare_n[k];
+  if (n) { lab_unused[k] = lab__spare[k][n - 1]; __atomic_store_n(&lab__spare_n[k], n - 1, __ATOMIC_RELEASE); lab__unused_n[k] = LAB_SPARE + 1; }
+  pthread_mutex_unlock(&lab__spare_m);
+  return n != 0;
+}
+` : ""}static void *lab_new(size_t size, uint16_t type, uint8_t tag) {
   size_t k = (size + 7) >> 3;
   lab_cell *c;
   if (k > LAB_SIZES) { c = malloc(size); k = 0; }
-  else if (lab_unused[k]) { c = lab_unused[k]; lab_unused[k] = *(void **)c; }
+  else if (lab_unused[k]${threads ? " || lab__take(k)" : ""}) { c = lab_unused[k]; lab_unused[k] = *(void **)c;${threads ? " lab__unused_n[k]--;" : ""} }
   else {
-    if (lab_block_end - lab_block < (ptrdiff_t)(8 * k)) { lab_block = malloc(1 << 18); lab_block_end = lab_block ? lab_block + (1 << 18) : 0; }
+    if (lab_block_end - lab_block < (ptrdiff_t)(8 * k)) { lab_block = malloc(1 << 18); lab_block_end = lab_block ? lab_block + (1 << 18) : 0;${threads ? " __atomic_fetch_add(&lab__blocks, 1, __ATOMIC_RELAXED);" : ""} }
     c = (lab_cell *)lab_block; lab_block += 8 * k;
   }
   if (!c) lab_oom();
@@ -322,7 +350,7 @@ static inline void lab_free(lab_cell *c) {
   lab_live--;
 #if LAB_SIZES
   uint8_t k = c->size;
-  if (k) { *(void **)c = lab_unused[k]; lab_unused[k] = c; return; }
+  if (k) { *(void **)c = lab_unused[k]; lab_unused[k] = c;${threads ? " if (++lab__unused_n[k] > LAB_SPARE) lab__give(k);" : ""} return; }
 #endif
   free(c);
 }
@@ -439,7 +467,10 @@ static int lab__hseen(lab_cell *c) {
 static void lab__hold(lab_cell *c) {
   if (!c || !c->rc) return;
   if (c->rc & LAB_SHARED) { c->rc++; return; }
-  if (lab__hseen(c)) return;
+  // Held by one reference, this one, it is met once: no need to note it
+  // as seen (G25b: the greenhouse's 2,000 moths' new cells each tick, put
+  // in the set and the set cleared for each job, 4% of a tick).
+  if (c->rc != 1 && lab__hseen(c)) return;
   if (lab__hd_n == lab__hd_cap) { lab__hd_cap = lab__hd_cap ? 2 * lab__hd_cap : 64; lab__hd = realloc(lab__hd, lab__hd_cap * sizeof *lab__hd); if (!lab__hd) lab_oom(); }
   lab__hd[lab__hd_n++] = c;
 }
@@ -501,7 +532,7 @@ static void lab__win_start(int *argc, char ***argv) {
 #endif`;
 const POOL_C = `static _Thread_local int lab_in_par = 0, lab_on_pool = 0;
 static int64_t lab_par_items = 0;
-static void lab_par_say(void) { fprintf(stderr, "items on threads: %lld\\n", (long long)__atomic_load_n(&lab_par_items, __ATOMIC_RELAXED)); }
+static void lab_par_say(void) { fprintf(stderr, "items on threads: %lld\\nblocks cut: %lld\\n", (long long)__atomic_load_n(&lab_par_items, __ATOMIC_RELAXED), (long long)__atomic_load_n(&lab__blocks, __ATOMIC_RELAXED)); }
 static pthread_mutex_t lab_pool_m = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t lab_pool_go = PTHREAD_COND_INITIALIZER, lab_pool_done = PTHREAD_COND_INITIALIZER;
 static void (*lab_pool_fn)(void *);
