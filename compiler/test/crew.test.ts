@@ -5,12 +5,15 @@
 // hand-written ideal must print the same and exit the same way.
 
 import { test } from "node:test";
+import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { folder, plan, program, ways } from "../gaps/crew.ts";
 import { lowerCore } from "../src/core-js.ts";
 import { kids, type SExpr } from "../src/scalar.ts";
+import { skip } from "./c-harness.ts";
 
 const w = await ways();
 const all = (args: string[], files: Record<string, string>, slow = false) => {
@@ -70,4 +73,18 @@ test("crew: no function calling itself copies an array's columns", () => {
     if (!has(f.body, (x) => x.k === "call" && x.fn === i)) continue;
     assert.ok(!has(f.body, (x) => x.k === "rt" && /^array\.c(front|copy)\./.test(x.fn)), f.name);
   }
+});
+
+// `start crew` makes each worker steps of Work, whose rests the scheduler
+// runs later: made on C's threads, each worker's fiber was the pool
+// thread's, and `ters native` crashed or printed half its run.
+test("crew through ters native, on threads, prints what the ideal prints", { skip }, () => {
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), dir = mkdtempSync(join(tmpdir(), "crew-"));
+  const text = plan(50);
+  writeFileSync(join(dir, "plan.txt"), text);
+  const built = spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "p")], { encoding: "utf8" });
+  assert.equal(built.status, 0, built.stderr);
+  const want = w.ideal(["plan.txt"], { "plan.txt": text });
+  const ran = spawnSync(join(dir, "p"), ["plan.txt"], { cwd: dir, encoding: "utf8", env: { ...process.env, TERS_WORKERS: "4" } });
+  assert.deepEqual({ out: ran.stdout, code: ran.status }, { out: want.out.join("\n") + "\n", code: want.code });
 });
