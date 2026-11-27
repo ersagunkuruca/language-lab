@@ -17,7 +17,9 @@ import { withMapTree } from "../src/lang/map-tree.ts";
 import { CONS, NIL, PAIR_V, S, SET_TYPE, SHOW_ANY } from "../src/lang/std.ts";
 import { merge, type Id } from "../src/model.ts";
 
-const lib = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
+// A prelude definition by name, as the library's build finds them: the
+// ones the prelude keeps to itself too (`Pool shape`, G4).
+const lib = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name) ?? Object.keys(LIBRARY.names).find((d) => LIBRARY.names[d] === name && LIBRARY.code.nodes[d]?.kind === "def")!;
 const first = (xs: Iterable<Value>): Value | undefined => { for (const x of xs) return x; return undefined; };
 
 // A word count over n words drawn from a small vocabulary, then removals
