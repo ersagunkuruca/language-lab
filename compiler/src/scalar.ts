@@ -943,7 +943,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         const carried = { ...info, typeOf }, v = verdictOf("fused steps", code, carried);
         lastFused = { fused: fusedSteps.fused, carried: !v.problems };
         info = v.problems ? infer(code, names, undefined, recheck) : carried;
-      } else info = infer(code, names, undefined, recheck);
+      } else { lastFused = { fused: fusedSteps.fused, carried: false }; info = infer(code, names, undefined, recheck); }
     }
     // A fold's costly work on each item shared out as a map, where a target
     // shares a list's maps out: JavaScript (fold-items.ts, C42e); C shares

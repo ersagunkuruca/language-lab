@@ -22,11 +22,12 @@
 import { children, mapIds, freshId, subtree, isCall, type Code, type Id, type Node, copyNodes, dropNode } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
-import { ARRAY_OPS, CONS, LIST } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, CONS, LIST, NIL, TRUE, FALSE } from "../../ters/src/lang/std.ts";
 import { SIGS } from "../../ters/src/lang/std.ts";
 import { DIVERGE, Subst, type Type } from "../../ters/src/lang/types.ts";
 
 const MAPS = new Set([preludeDef("map"), preludeDef("array map")].filter((x): x is Id => !!x));
+const WITHIN = preludeDef("within reach"), REACHES = preludeDef("reaches");
 
 // `types`: the types of the nodes the rewrites made, carried from the
 // check given (I203, the compiler redesign's stage 2), or null where one
@@ -49,12 +50,14 @@ function candidate(code: Code, info: Info, made: Map<Id, Type> | null): (() => {
   const reached = new Set(code.defs.flatMap((d) => subtree(code, d)));
   for (const id of reached) {
     const n = nodes[id];
+    if (n?.kind === "fold" && within(code, info, n.scrutinee) && guardable(code, n)) return () => ({ code: guarded(code, id), types: null });
     if (!isCall(n) || !n.args || n.args.length !== 1) continue;
     const f = nodes[n.fn];
     if (f?.kind !== "ref") continue;
     const consumer = folds(code, info, f.target);
     if (!consumer) continue;
     const m = nodes[n.args[0]];
+    if (!consumer.items && within(code, info, n.args[0])) return () => rewrite(code, info, null, id, consumer, n.args[0], null);
     if (!isCall(m) || !m.args || m.args.length !== 2) continue;
     const mf = nodes[m.fn];
     if (mf?.kind !== "ref" || !MAPS.has(mf.target)) continue;
@@ -161,9 +164,9 @@ function folds(code: Code, info: Info, def: Id): Consumer | null {
 // The types of what it made go into `made` (null: not carried): the
 // consumer's at the call's instance of it; the fold's input and the rest
 // its arm binds are xs's, and each item is given to g first.
-function rewrite(code: Code, info: Info, made: Map<Id, Type> | null, at: Id, c: Consumer, xs: Id, g: Id): { code: Code; types: Map<Id, Type> | null } {
+function rewrite(code: Code, info: Info, made: Map<Id, Type> | null, at: Id, c: Consumer, xs: Id, g: Id | null): { code: Code; types: Map<Id, Type> | null } {
   const nodes: Record<Id, Node> = copyNodes(code.nodes);
-  const typed = made && typer(code, info, made, at, c, xs, g);
+  const typed = made && g !== null ? typer(code, info, made, at, c, xs, g) : null;
   // The consumer's fold copied, every id inside fresh.
   const ids = new Map<Id, Id>();
   for (const x of subtree(code, c.fold)) ids.set(x, freshId());
@@ -178,9 +181,9 @@ function rewrite(code: Code, info: Info, made: Map<Id, Type> | null, at: Id, c: 
   } else { nodes[fold.scrutinee] = { ...code.nodes[xs], id: fold.scrutinee } as Node; typed?.set(fold.scrutinee, typed.of(xs)); }
   // The item arm: a fresh item, and its old binder g of it, as a let
   // (a function written there, applied).
-  for (const a of fold.arms) {
+  for (const a of g === null ? [] : fold.arms) {
     const arm = nodes[a] as Extract<Node, { kind: "arm" }>;
-    if (arm.variant !== CONS || !arm.binds[0]) continue;
+    if (arm.variant !== CONS || !arm.binds[0] || g === null) continue;
     const item = freshId(), ref = freshId(), gref = freshId(), applied = freshId(), lam = freshId();
     nodes[item] = { id: item, kind: "binder" };
     nodes[ref] = { id: ref, kind: "ref", target: item };
@@ -254,4 +257,56 @@ function typer(code: Code, info: Info, made: Map<Id, Type>, at: Id, c: Consumer,
     },
     done: () => (ok ? out : null),
   };
+}
+
+// A fold over the items that reach a place (G15b, LIGHTS.md), made one
+// fold over the list: `fold within reach(xs, place, reach, here)` is a
+// fold over xs whose item arm, where the item doesn't reach, gives the
+// folded rest as it is. No list of the items that reach is made, so a
+// shader's loop over the lights it captured reads them in place
+// (scalar.ts shaderFold). First, a consumer given them (`sum(within
+// reach(...))`) has its fold put in place, as for a map above.
+//
+// The same: within reach keeps an item iff `reaches` says so, in order;
+// the place and reach given only compute, and here is a name or a
+// literal, so reading them per item is reading them once.
+function within(code: Code, info: Info, id: Id): boolean {
+  const n = code.nodes[id];
+  if (!WITHIN || !REACHES || !isCall(n) || n.args?.length !== 4) return false;
+  const f = code.nodes[n.fn];
+  if (f?.kind !== "ref" || f.target !== WITHIN) return false;
+  const [, place, reach, here] = n.args;
+  const plain = (x: Id) => { const k = code.nodes[x]?.kind; return k === "ref" || k === "lambda"; };
+  const h = code.nodes[here]?.kind;
+  return plain(place) && plain(reach) && onlyComputes(code, info, place) && onlyComputes(code, info, reach) && (h === "ref" || h === "lit")
+    && !(h === "ref" && code.nodes[(code.nodes[here] as { target: Id }).target]?.kind === "def" && info.typeOf.get(here) && info.subst.zonk(info.typeOf.get(here)!).t === "fn");
+}
+// One arm for nil and one for the items, which names the folded rest and
+// never reads the rest itself.
+function guardable(code: Code, fold: Extract<Node, { kind: "fold" }>): boolean {
+  const arms = fold.arms.map((a) => code.nodes[a]);
+  if (arms.length !== 2 || arms.some((a) => a?.kind !== "arm")) return false;
+  const cons = arms.find((a) => (a as { variant: Id }).variant === CONS) as Extract<Node, { kind: "arm" }> | undefined;
+  if (!cons || !arms.some((a) => (a as { variant: Id }).variant === NIL) || !cons.results[1]) return false;
+  return !cons.binds[1] || !subtree(code, cons.body).some((x) => { const r = code.nodes[x]; return r.kind === "ref" && r.target === cons.binds[1]; });
+}
+function guarded(code: Code, at: Id): Code {
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
+  const fold = nodes[at] as Extract<Node, { kind: "fold" }>;
+  const call = code.nodes[fold.scrutinee] as Extract<Node, { kind: "call" }>;
+  const [xs, place, reach, here] = call.args!;
+  const cons = nodes[fold.arms.find((a) => (nodes[a] as { variant: Id }).variant === CONS)!] as Extract<Node, { kind: "arm" }>;
+  const fresh = (n: Omit<Node, "id">): Id => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; };
+  // The item named, so reaches can be given it.
+  const item = cons.binds[0] ?? fresh({ kind: "binder" } as Omit<Node, "id">);
+  const test = fresh({ kind: "call", fn: fresh({ kind: "ref", target: REACHES! } as Omit<Node, "id">), args: [fresh({ kind: "ref", target: item } as Omit<Node, "id">), place, reach, here] } as Omit<Node, "id">);
+  const yes = fresh({ kind: "arm", variant: TRUE, binds: [], results: [], body: cons.body } as Omit<Node, "id">);
+  const no = fresh({ kind: "arm", variant: FALSE, binds: [], results: [], body: fresh({ kind: "ref", target: cons.results[1]! } as Omit<Node, "id">) } as Omit<Node, "id">);
+  const body = fresh({ kind: "match", scrutinee: test, arms: [yes, no], otherwise: null } as Omit<Node, "id">);
+  nodes[cons.id] = { ...cons, binds: [item, ...cons.binds.slice(1)], body };
+  nodes[at] = { ...fold, scrutinee: xs };
+  // The within reach call and its function's ref go; its inputs are moved.
+  dropNode(nodes, call.fn);
+  dropNode(nodes, call.id);
+  return { ...code, nodes };
 }

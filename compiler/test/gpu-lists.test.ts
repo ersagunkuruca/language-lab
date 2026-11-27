@@ -134,3 +134,14 @@ test("a draw's captured List is read on the GPU: its sum is the number written (
   const got = await pixels([glass("list-read", "[0.1, 0.05, 0.25]", "sum(ls)", true), glass("list-written", "[0.1, 0.05, 0.25]", "0.4 + 0.0 · sum(ls)", true)]);
   if (got) same(got[0], got[1]);
 });
+
+// A fold over the lamps that reach a place (G15b1): one loop over the
+// captured list, each lamp tested where it is (fuse-steps.ts), never a list
+// of those that reach. 0.1 and 0.05 are within 0.1 of 0.12, 0.25 isn't.
+test("a draw's sum over the lamps within reach is a loop over its captured List: the number written (G15b1)", { skip: !exe && "no Chromium" }, async () => {
+  const reach = "sum(map(within reach(ls, (x) => x, (x) => 0.1, 0.12), (x) => x · 2.0))";
+  const html = readFileSync(glass("within", "[0.1, 0.05, 0.25]", reach, true), "utf8");
+  assert.match(html, /var<storage, read> lab_list0: array<u32>;/);
+  const got = await pixels([glass("within-read", "[0.1, 0.05, 0.25]", reach, true), glass("within-written", "[0.1, 0.05, 0.25]", "0.3 + 0.0 · sum(ls)", true)]);
+  if (got) same(got[0], got[1]);
+});

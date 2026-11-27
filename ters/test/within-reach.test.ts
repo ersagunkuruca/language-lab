@@ -13,7 +13,8 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { SHOW_ANY } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
-import { compiledDefs } from "../../compiler/src/core-js.ts";
+import { compiledDefs, lowerCore } from "../../compiler/src/core-js.ts";
+import { lastFused } from "../../compiler/src/scalar.ts";
 
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
@@ -34,10 +35,15 @@ test("within reach: the lights that reach a place, in order, each by its own rea
   def("far off", () => within(k.call(P.v.spot, k.lit(50), k.lit(50))));
   // On a line, places are Float64s.
   def("on a line", () => k.call(SHOW_ANY, k.call(lib("within reach"), k.list(k.lit(0), k.lit(2), k.lit(5)), k.fn(["x"], (x) => x), k.fn(["x"], () => k.lit(2)), k.lit(3))));
+  // Summed: one fold over the lights, each tested where it is
+  // (compiler/src/fuse-steps.ts), compiled; the same number.
+  def("glow at the middle", () => k.call(SHOW_ANY, k.call(lib("sum"), k.call(lib("map"), k.call(lib("within reach"), lights(), k.fn(["l"], at), k.fn(["l"], reach), k.call(P.v.spot, k.lit(0), k.lit(0))), k.fn(["l"], reach)))));
+  const glowAt = k.def("glow at");
+  k.define(glowAt, k.fn(["here"], (h) => k.call(lib("sum"), k.call(lib("map"), k.call(lib("within reach"), lights(), k.fn(["l"], at), k.fn(["l"], reach), h), k.fn(["l"], reach)))));
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  const NAMES = ["at the middle", "at the second", "far off", "on a line"];
+  const NAMES = ["at the middle", "at the second", "far off", "on a line", "glow at the middle"];
   const r = makeRunner(code, info, { print: () => {}, names });
   const evaluated = NAMES.map((n) => r.value(code.defs.find((d) => names[d] === n)!));
   assert.deepEqual(evaluated, [
@@ -45,7 +51,12 @@ test("within reach: the lights that reach a place, in order, each by its own rea
     "[light(0, 0, 5), light(3, 4, 1)]",
     "[]",
     "[2, 5]",
+    "6",
   ]);
+  // No list of the lights that reach is made: the sum's fold and within
+  // reach are one fold (lastFused), for a place known only as it runs.
+  lowerCore(code, info, names, [glowAt]);
+  assert.ok((lastFused?.fused ?? 0) >= 2, JSON.stringify(lastFused));
   const defs = compiledDefs(code, info, names, NAMES) as unknown as Record<string, unknown>;
   assert.deepEqual(NAMES.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), evaluated);
 });
