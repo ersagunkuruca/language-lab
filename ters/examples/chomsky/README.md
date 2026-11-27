@@ -11,7 +11,7 @@ A grammar is a value: `grammar(name, start, rules)`, each rule a list of
 symbols rewritten to another, written as text such as
 `"S → aSb | ab"` (capital letters are variables). The program builds four,
 one at each level, and for each prints its level and its words up to a
-length (8):
+length (6):
 
 | grammar | rules | level |
 |---|---|---|
