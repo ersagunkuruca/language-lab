@@ -153,7 +153,10 @@ then systems at once (G5).
   of 2000 moths, one thread: compiled JavaScript 3.98 → 3.02 s, wasi
   2.69 → 2.31 s, native 1.06 → 0.95 s, as fast as the greenhouse split
   into three pools by hand; see GAPS.md game round 2.
-- **G5.** Systems at once from their field reads and writes.
+- **G5** (closed measured 2026-11-27). Systems at once from their field
+  reads and writes. In the greenhouse the plants' system is 1% of a tick
+  and the moths' flight 90%, so no two systems side by side can buy 10%;
+  the flight's own items over the threads is G25.
 
 ## Credits
 
