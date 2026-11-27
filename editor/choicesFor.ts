@@ -10,6 +10,7 @@ import { LIBRARY } from "../ters/src/lang/library.ts";
 import { representationsIn } from "../ters/src/lang/represent.ts";
 import { lowerCore } from "../compiler/src/core-js.ts";
 import { gpuMaps } from "../compiler/src/gpu-maps.ts";
+import { keptOnGpu } from "../compiler/src/gpu-resident.ts";
 import { represented, type Program } from "../ters/cli/represented.ts";
 import { choiceLines, HELD, placeLines, scheduleLines } from "../ters/cli/choices.ts";
 import { infer, programOptions } from "./typed.ts";
@@ -42,7 +43,7 @@ export function choicesFor(code: Code, names: Names, main: Id, holds: readonly [
     // Each site with a kernel, and those whose kernel is only close (G12).
     const kernels = Object.entries(ir.awayMaps ? gpuMaps(ir, "all") : {});
     const sites = (close: boolean) => new Set(kernels.filter(([, k]) => !!k.close === close).map(([s]) => Number(s)));
-    places = placeLines(ir, sites(false), p.names, undefined, main, sites(true));
+    places = placeLines(ir, sites(false), p.names, undefined, main, sites(true), ir.awayMaps ? keptOnGpu(ir, gpuMaps(ir), new Set()).resident.fields : []);
   } catch { /* main doesn't lower: it runs in the evaluator, on the main thread */ }
   const of = new Map(held), idOf = (l: string) => l.slice(0, l.indexOf(" "));
   // A held placement's entry is the compiler's with the held row in it;

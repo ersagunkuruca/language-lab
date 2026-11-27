@@ -23,11 +23,14 @@ import type { Id } from "../../ters/src/model.ts";
 import type { CoreIR, LType, RType, SExpr } from "./scalar.ts";
 import { kids } from "./scalar.ts";
 import type { GpuMap } from "./gpu-maps.ts";
+import { gpuDraws, type DrawSite } from "./gpu-draws.ts";
 
 // A list field kept on the GPU, by its record type's key and its place,
 // with the field's node (`at`, its id in the program) and names.
 export interface ResidentField { key: string; i: number; at: Id; type: string; field: string }
-export interface Resident { fields: ResidentField[]; sites: number[] }
+// `sites`: the maps' sites whose answers stay; `draws`: the draws' sites
+// given the field's lists as their instances.
+export interface Resident { fields: ResidentField[]; sites: number[]; draws: number[] }
 
 // Where an expression is: its parent, and which of the parent's kids it is.
 interface At { e: SExpr; up: At | null; kid: number; fn: number }
@@ -49,7 +52,7 @@ const isList = (t: LType) => typeof t === "object" && ("item" in t || ("cases" i
 let onCpu: ReadonlySet<Id> = new Set();
 export function holdOnCpu(fields: Iterable<Id>) { onCpu = new Set(fields); }
 export function residentLists(ir: CoreIR, kernels: Record<number, GpuMap>, held: ReadonlySet<Id> = onCpu): Resident {
-  const out: Resident = { fields: [], sites: [] };
+  const out: Resident = { fields: [], sites: [], draws: [] };
   if (!ir.awayMaps?.length) return out;
   // Every expression with where it is, and each function's locals' uses
   // and the calls of it.
@@ -99,7 +102,7 @@ export function residentLists(ir: CoreIR, kernels: Record<number, GpuMap>, held:
       if (!isList(f.t) || variant?.kind !== "variant") return;
       const at = variant.fields[i];
       if (!at || held.has(at)) return;
-      const sites = new Set<number>();
+      const sites = new Set<number>(), draws = new Set<number>();
       // Whether a value at `a` goes only where a list on the GPU may go;
       // `answers`: a map's answers (true) or a read of the field (false).
       const known = new Map<string, boolean>();
@@ -123,7 +126,7 @@ export function residentLists(ir: CoreIR, kernels: Record<number, GpuMap>, held:
           case "call": return local(e.fn, a.kid, answers);
           case "rt":
             if (!answers && e.fn === "map.worth" && a.kid === 0) return true;
-            if (!answers && /builtin\.frame\.draw$/.test(e.fn) && a.kid === 1) return true;
+            if (!answers && /builtin\.frame\.draw$/.test(e.fn) && a.kid === 1 && e.args[4]?.k === "num") { draws.add(e.args[4].v); return true; }
             return false;
           case "world": {
             const s = siteOf(e);
@@ -170,8 +173,23 @@ export function residentLists(ir: CoreIR, kernels: Record<number, GpuMap>, held:
       if (!sites.size) return;
       out.fields.push({ key: r.key, i, at, type: r.name, field: f.name });
       for (const s of sites) if (!out.sites.includes(s)) out.sites.push(s);
+      for (const d of draws) if (!out.draws.includes(d)) out.draws.push(d);
     });
   }
   out.sites.sort((a, b) => a - b);
+  out.draws.sort((a, b) => a - b);
   return out;
+}
+
+// What a page keeps on the GPU (G13b): the resident lists, and its draws,
+// those given a kept list laid out as its kernel's answers are, so the
+// kernel's buffer is the draw's instances as it is. Where a draw's
+// instance isn't the kernel's answer leaf for leaf, nothing is kept.
+export function keptOnGpu(ir: CoreIR, kernels: Record<number, GpuMap>, held: ReadonlySet<Id> = onCpu): { resident: Resident; draws: Record<number, DrawSite> } {
+  const resident = residentLists(ir, kernels, held), none = { fields: [], sites: [], draws: [] };
+  if (!resident.fields.length) return { resident: none, draws: ir.drawSites ? gpuDraws(ir).sites : {} };
+  const draws = gpuDraws(ir, new Set(resident.draws)).sites;
+  const same = (a: { path: number[]; kind: string }[], b: { path: number[]; kind: string }[]) => a.length === b.length && a.every((x, j) => x.kind === b[j].kind && x.path.join() === b[j].path.join());
+  const ok = resident.sites.every((s) => kernels[s]?.words && resident.draws.every((d) => draws[d] && same(draws[d].instance, kernels[s].words!.out) && same(kernels[s].words!.item, kernels[s].words!.out)));
+  return ok ? { resident, draws } : { resident: none, draws: ir.drawSites ? gpuDraws(ir).sites : {} };
 }

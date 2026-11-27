@@ -15,6 +15,14 @@ person who holds it (`held … : GPU close; …` in the program's
 `.decisions`) has the map run on the GPU wherever the browser has
 WebGPU, its answers maybe differing from the CPU's in the last bits.
 
+**Lists kept on the GPU between ticks (G13b, 2026-11-27,
+[GPU-DATA.md](GPU-DATA.md)).** A record's list that only a page's
+kernel and a draw read (rain-page's `Pane.drops`) stays in a GPU buffer
+from one tick to the next while the frames draw with WebGPU: its
+placement entry says `GPU between ticks; among CPU, GPU between ticks`,
+and a person who holds it on the CPU has it sent up and read back as
+before.
+
 Status: design note, C61's first step (2026-11-06). Built since: a
 together's pure branches on worker threads on Node (C41, 2026-11-09,
 compiler/src/branches-rt.ts, examples/area), and a `map` of a function

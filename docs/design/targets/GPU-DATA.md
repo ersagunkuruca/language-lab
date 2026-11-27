@@ -76,20 +76,31 @@ the item it still has. With the items on the GPU it has none. So:
 So every answer is the evaluator's, bit for bit (G12's exactness, and
 G12c's `GPU close` where a person held it so).
 
+As built in G13b, a tick always reads back each item's steps (n floats,
+80 KB for rain-page's drops against 480 KB of answers and steps). Where
+one was given back, the answers come back too and the tick's list is an
+ordinary one, sent up again by the next kernel or draw that takes it. The
+4-byte count, for a map that surely ends, is left for G13c.
+
 ## Steps
 
 - **G13a** (done, gpu-resident.ts): find the lists that can stay, per
   record field (a pass beside pool-shapes.ts).
-- **G13b**: `GpuItems` in branches-rt.ts. A map gives one and takes one,
-  with the given-back count waited for and the fix-up on the CPU. The
-  program's decisions say so as a placement entry (`Pane's drops: GPU
-  between ticks; among CPU, GPU between ticks`), so a person can hold one
-  on the CPU. The entry waits for this step so it never names a place the
-  list isn't kept.
-- **G13c**: a draw takes a `GpuItems` as its instances (gpu-frame.ts). The
-  kernel's word layout is a draw's instance layout when the vertex reads
-  every leaf. Otherwise the draw reads the leaves it needs by their place
-  in the item.
+- **G13b** (done, gpu-device.ts, gpu-resident.ts `keptOnGpu`,
+  branches-rt.ts, gpu-frame.ts): one device for a page's kernels and
+  frames; `GpuItems` from a resident map's kernel, taken by the next
+  tick's kernel and bound by the draw as its instances. The draw is
+  compiled with every leaf of an instance, in the kernel's order, so the
+  kernel's buffer is its instances as it is (a draw whose instance isn't
+  the kernel's answer leaf for leaf keeps the list on the CPU). Lists stay
+  only while the frames draw with WebGPU. The program's decisions say so
+  as a placement entry (`Pane's drops: GPU between ticks; among CPU, GPU
+  between ticks`), and a person can hold one on the CPU.
+- **G13c**: what a kept list costs where it isn't kept: a tick whose map
+  stays on the CPU still sends every leaf of each drop to the draw (5
+  words, not the 3 the vertex reads). A draw reading the leaves it needs by
+  their place in the item takes both layouts. And the 4-byte count of
+  given-back items, in place of the steps, where the map surely ends.
 - **G13d**: rain-page measured: CPU time a tick and bytes moved, against a
   hand-written WebGPU rain.
 

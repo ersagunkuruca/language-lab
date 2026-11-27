@@ -99,6 +99,9 @@ export function equal(a: Value, b: Value, same = sameNumber): boolean {
     // The same value on both sides is equal to itself, whatever is inside
     // (a cell written back with what it holds, C85).
     if (x === y) continue;
+    // A list kept on the GPU (gpu-device.ts GpuItems, G13b): each tick's is
+    // a new one, equal only to itself.
+    if ((x as { onGpu?: boolean }).onGpu || (y as { onGpu?: boolean }).onGpu) return false;
     // A map or set stored as a hash table (C63b, C63d; table.ts) has no
     // tag or fields: two are equal when they hold the same keys, each with
     // an equal value. Versions of one table share its JS Map, so x's

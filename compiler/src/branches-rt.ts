@@ -29,7 +29,7 @@ import { PairMap, Table } from "../../ters/src/lang/table.ts";
 import { counted, OutOfSteps, setStepsLeft, stepsLeft, toList } from "../../ters/src/lang/run-values.ts";
 import { add, type Int } from "../../ters/src/lang/int.ts";
 import { Pending } from "../../ters/src/lang/cells.ts";
-import { pageDevice } from "../../ters/src/lang/gpu-device.ts";
+import { framesOnGpu, GpuItems, isGpuItems, pageDevice } from "../../ters/src/lang/gpu-device.ts";
 
 type Fn = (...xs: unknown[]) => unknown;
 type Closure = Fn & { caps: unknown[]; code: Fn };
@@ -749,6 +749,8 @@ const RUNS = 32, perItem: number[] = [];
 // take a millisecond by the last measure, counted no further than that.
 export function mapWorth(xs: unknown, site: number, always?: boolean): boolean {
   // A list the runtime reads (an array, or cons cells): anything else stays compiled.
+  // A list kept on the GPU goes to its kernel (G13b).
+  if (isGpuItems(xs)) return true;
   if (!(canShare() || web) || !(xs instanceof ArrayView || (xs as { tag?: unknown })?.tag === CONS || (xs as { tag?: unknown })?.tag === NIL)) return false;
   const est = perItem[site];
   if (est === undefined || always) return true;
@@ -972,8 +974,24 @@ const webUnit = (m: WebJob, f: unknown, x: unknown): unknown => (m.how === "coun
 // `on`: where the page's choices hold it (L280h): its workers from the
 // first items, or the GPU where this site has a kernel and the browser
 // WebGPU, whatever either took the last time.
+// A list kept on the GPU read back (G13b), then given on.
+function backThen(g: GpuItems, then: (list: unknown) => unknown): unknown {
+  let got: unknown[] = [];
+  const p = new Pending(g.items().then((xs) => { got = xs; }), "the GPU's items", false);
+  p.resume = () => [then(toList(got as never[]))];
+  p.hold = true;
+  throw p;
+}
 export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: AwayHow, z: unknown, join: Fn | undefined, k: (v: unknown) => unknown, on?: "workers" | "GPU", cut = RUNS): unknown {
   const unbudgeted = fuel === Infinity || fuel === undefined;
+  // A list kept on the GPU (G13b): its kernel takes its buffer, its
+  // answers kept there too while the frames draw with WebGPU; where that
+  // can't be, its items come back and the map is as any other's.
+  if (isGpuItems(xs)) {
+    const m = gpuSites[site], c = m?.words && how === "map" ? capWords(f, m.words.caps) : null;
+    if (c) return gpuMap(xs, c, f, site, (vs) => k(toList(vs as never[])), (its) => k(mapInOrder(toList(its as never[]), f, false)), undefined, m.resident && framesOnGpu() ? k : undefined);
+    return backThen(xs, (list) => mapAway(list, f, fuel, site, how, z, join, k, on, cut));
+  }
   const inTurn = () => (isFold(how) ? foldInOrder(xs, f, z as Int, how, join) : mapInOrder(xs, f, how === "keep"));
   if (canShare()) return k(!unbudgeted ? inTurn() : isFold(how) ? foldPure(xs, f, z as Int, how, site, join, false, cut) : mapPure(xs, f, site, how === "keep", false, cut));
   const w = web;
@@ -986,7 +1004,7 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
   if (on === "GPU" ? !!gpuSites[site] && !!(globalThis as { navigator?: { gpu?: unknown } }).navigator?.gpu : on !== "workers" && gpuWorth(site, items.length)) {
     const m = gpuSites[site], ids = how === "with" ? m.hows?.map((h) => IDENTITY[h]) : isFold(how) ? [IDENTITY[how]] : [];
     const a = m.words ? wordsOf(items, m.words.item) : int32s(items), c = m.words ? capWords(f, m.words.caps) : ids && capsOf(f, m, ids);
-    if (a && c) return gpuMap(items, a, c, xs, f, site, isFold(how) ? (vs) => k((vs as Int[]).reduce(both(how, join), z as Int)) : (vs) => k(sameKind(xs, vs)), () => k(inTurn()), how === "with" ? z : undefined);
+    if (a && c) return gpuMap({ items, words: a }, c, f, site, isFold(how) ? (vs) => k((vs as Int[]).reduce(both(how, join), z as Int)) : (vs) => k(sameKind(xs, vs)), () => k(inTurn()), how === "with" ? z : undefined, m.resident && how === "map" && framesOnGpu() ? k : undefined);
   }
   // Held on the workers: started now, for these items.
   if (on === "workers") w.workers ??= startWeb(w);
@@ -1011,7 +1029,7 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
 // and what an item took there and on the CPU, to keep the quicker.
 // `words` (G12): a map or keep of records, each leaf a 4-byte word.
 type Leaf = { path: number[]; kind: "f32" | "i32" | "bool" };
-interface GpuMap { how: "map" | "keep" | "add" | "max" | "min" | "with"; result: "int" | "bool" | "words"; wgsl: string; caps: ("int" | "bool")[]; hows?: ("add" | "max" | "min")[]; words?: { item: Leaf[]; caps: Leaf[][]; out: Leaf[] } }
+interface GpuMap { how: "map" | "keep" | "add" | "max" | "min" | "with"; result: "int" | "bool" | "words"; wgsl: string; caps: ("int" | "bool")[]; hows?: ("add" | "max" | "min")[]; words?: { item: Leaf[]; caps: Leaf[][]; out: Leaf[] }; resident?: true }
 // A fold's kernel is its item's arm, given the rest's Int as the join's
 // identity, first among what it captured (C42f, gpu-maps.ts); a record
 // of Ints's each field's (C42g).
@@ -1125,11 +1143,16 @@ function gpuWorth(site: number, n: number): boolean {
 // GPU gave back worked out here, in order; the steps spent from the
 // handler's, the run out of them where in order their sum passes it.
 // A record's fields (C42g, like: a record of the type) come k to an item.
-function gpuMap(items: unknown[], xs32: Int32Array | Uint32Array, caps: Int32Array | Uint32Array, xs: unknown, f: Fn, site: number, done: (vs: unknown[]) => unknown, inTurn: () => unknown, like?: unknown): unknown {
+// `given`: the items, as values and as words, or a list kept on the GPU
+// (G13b), its buffer the kernel's items as it is. With `kept`, the
+// answers stay on the GPU as such a list, given to kept, where none was
+// given back: then only each item's steps come back.
+function gpuMap(given: { items: unknown[]; words: Int32Array | Uint32Array } | GpuItems, caps: Int32Array | Uint32Array, f: Fn, site: number, done: (vs: unknown[]) => unknown, inTurn: (items: unknown[]) => unknown, like?: unknown, kept?: (g: GpuItems) => unknown): unknown {
   // Each item's budget at most 2²⁴, which an f32 counts down exactly; one
   // that takes more is given back.
-  const m = gpuSites[site], left = stepsLeft(), budget = Math.min(left ?? 16777216, 16777216), n = items.length, t0 = performance.now(), k = m.words?.out.length ?? m.hows?.length ?? 1;
-  let out: Int32Array | undefined, spent: Float32Array | undefined;
+  const held = isGpuItems(given) ? given : null, m = gpuSites[site], left = stepsLeft(), budget = Math.min(left ?? 16777216, 16777216), n = held ? held.n : (given as { items: unknown[] }).items.length, t0 = performance.now(), k = m.words?.out.length ?? m.hows?.length ?? 1;
+  let items: unknown[] | null = held ? null : (given as { items: unknown[] }).items;
+  let out: Int32Array | undefined, spent: Float32Array | undefined, stayed: GpuItems | undefined;
   // Each item's words in, each answer's out (a record's leaves, G12).
   const answered = (async () => {
     const g = await gpuOf();
@@ -1138,59 +1161,101 @@ function gpuMap(items: unknown[], xs32: Int32Array | Uint32Array, caps: Int32Arr
     dev.pushErrorScope("validation");
     if (!g.pipes.has(site)) g.pipes.set(site, dev.createComputePipelineAsync({ layout: "auto", compute: { module: dev.createShaderModule({ code: m.wgsl }), entryPoint: "lab_main" } }));
     const pipe = await g.pipes.get(site)! as { getBindGroupLayout(i: number): unknown };
-    const bytes = Math.max(4, n * 4), outBytes = bytes * k;
-    const ins = dev.createBuffer({ size: Math.max(4, xs32.byteLength), usage: STORAGE | COPY_DST }), outs = dev.createBuffer({ size: outBytes, usage: STORAGE | COPY_SRC }), steps = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC | COPY_DST });
+    const bytes = Math.max(4, n * 4), outBytes = bytes * k, stay = !!kept && !!m.words;
+    let ins: GpuBuf;
+    if (held) ins = held.buffer as GpuBuf;
+    else { const w = (given as { words: Int32Array | Uint32Array }).words; ins = dev.createBuffer({ size: Math.max(4, w.byteLength), usage: STORAGE | COPY_DST }); dev.queue.writeBuffer(ins, 0, w); }
+    const outs = dev.createBuffer({ size: outBytes, usage: STORAGE | COPY_SRC }), steps = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC | COPY_DST });
     const capped = dev.createBuffer({ size: caps.byteLength, usage: STORAGE | COPY_DST });
     dev.queue.writeBuffer(capped, 0, caps);
-    const job = dev.createBuffer({ size: 16, usage: UNIFORM | COPY_DST }), back = dev.createBuffer({ size: outBytes + bytes, usage: MAP_READ | COPY_DST });
+    // Kept on the GPU, only the steps come back, then the answers only
+    // where an item was given back.
+    const job = dev.createBuffer({ size: 16, usage: UNIFORM | COPY_DST }), back = dev.createBuffer({ size: (stay ? 0 : outBytes) + bytes, usage: MAP_READ | COPY_DST });
     const head = new ArrayBuffer(16);
     new Float32Array(head, 0, 1)[0] = budget; new Uint32Array(head, 4, 1)[0] = n;
     // Each item's steps −1 till the kernel writes them: one it never ran
     // is worked out here.
-    dev.queue.writeBuffer(ins, 0, xs32); dev.queue.writeBuffer(job, 0, new Uint8Array(head)); dev.queue.writeBuffer(steps, 0, new Float32Array(Math.max(1, n)).fill(-1));
+    dev.queue.writeBuffer(job, 0, new Uint8Array(head)); dev.queue.writeBuffer(steps, 0, new Float32Array(Math.max(1, n)).fill(-1));
     const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: ((m.words ? m.words.caps.some((c) => c.length) : m.caps.length) ? [ins, outs, steps, job, capped] : [ins, outs, steps, job]).map((b, binding) => ({ binding, resource: { buffer: b } })) });
     const enc = dev.createCommandEncoder(), p = enc.beginComputePass(), groups = Math.ceil(n / 64);
     p.setPipeline(pipe); p.setBindGroup(0, bg); p.dispatchWorkgroups(Math.min(groups, 65535), Math.ceil(groups / 65535)); p.end();
-    enc.copyBufferToBuffer(outs, 0, back, 0, outBytes); enc.copyBufferToBuffer(steps, 0, back, outBytes, bytes);
+    if (!stay) enc.copyBufferToBuffer(outs, 0, back, 0, outBytes);
+    enc.copyBufferToBuffer(steps, 0, back, stay ? 0 : outBytes, bytes);
     dev.queue.submit([enc.finish()]);
+    const mine = [steps, job, capped, back, ...(held ? [] : [ins])];
     const wrong = await dev.popErrorScope();
-    if (wrong) { for (const b of [ins, outs, steps, job, capped, back]) b.destroy(); return; }
+    if (wrong) { for (const b of [...mine, outs]) b.destroy(); if (held) items = await held.items(); return; }
     await back.mapAsync(MAP_READ);
     const all = back.getMappedRange().slice(0);
     back.unmap();
-    for (const b of [ins, outs, steps, job, capped, back]) b.destroy();
-    out = new Int32Array(all, 0, n * k); spent = new Float32Array(all, outBytes, n);
+    for (const b of mine) b.destroy();
+    spent = new Float32Array(all, stay ? 0 : outBytes, n);
+    if (!stay) { out = new Int32Array(all, 0, n * k); if (held) items = await held.items(); return; }
+    let gave = false;
+    for (let i = 0; i < n && !gave; i++) gave = spent[i] < 0;
+    // Kept: the answers as a list on the GPU, made of the first item's
+    // kind when read back.
+    const first = held ? null : items![0];
+    stayed = new GpuItems(outs, n, k, async () => readItems(outs, n, k, m.words!.out, first ?? (await held!.items())[0]));
+    if (!gave) return;
+    // An item given back: the answers and the items come back, and every
+    // answer is put together here, as without a list kept.
+    out = new Int32Array(await bufferWords(outs, outBytes));
+    if (held) items = await held.items();
+    stayed = undefined;
   })().catch(() => undefined);
   const finish = (): unknown => {
     // No GPU after all: in turn, and never again here.
-    if (!out || !spent) { gpuSites = { ...gpuSites }; delete gpuSites[site]; return inTurn(); }
+    if (!spent || (!out && !stayed)) { gpuSites = { ...gpuSites }; delete gpuSites[site]; return inTurn(items ?? []); }
     gpuMapsRun++;
     let used = 0;
-    const kept: unknown[] = [];
+    if (stayed) {
+      if (left !== null) { for (let i = 0; i < n; i++) used += spent[i]; if (used > left) { setStepsLeft(-1); throw new OutOfSteps(); } setStepsLeft(left - used); }
+      gpuPerItem[site] = (performance.now() - t0) / Math.max(1, n);
+      return kept!(stayed);
+    }
+    const its = items!, words = out!;
+    const answers: unknown[] = [];
     for (let i = 0; i < n; i++) {
       let v: unknown;
       if (spent[i] < 0) {
         // Given back: worked out here, from the steps left.
-        if (left === null) v = f(items[i]);
+        if (left === null) v = f(its[i]);
         else {
           const u = { n: 0 };
-          try { v = counted(left - used, () => f(items[i]), u); } catch (e) { if (e instanceof OutOfSteps) { setStepsLeft(-1); throw e; } setStepsLeft(left - used - u.n); throw e; }
+          try { v = counted(left - used, () => f(its[i]), u); } catch (e) { if (e instanceof OutOfSteps) { setStepsLeft(-1); throw e; } setStepsLeft(left - used - u.n); throw e; }
           used += u.n;
         }
       } else {
         if (left !== null) { used += spent[i]; if (used > left) { setStepsLeft(-1); throw new OutOfSteps(); } }
-        v = m.how === "keep" ? out[i * k] === 1 : m.words ? madeLike(items[i], m.words.out, new Uint32Array(out.buffer, out.byteOffset), i * k) : like !== undefined ? recordLike(like, Array.from(out.subarray(i * k, i * k + k))) : out[i];
+        v = m.how === "keep" ? words[i * k] === 1 : m.words ? madeLike(its[i], m.words.out, new Uint32Array(words.buffer, words.byteOffset), i * k) : like !== undefined ? recordLike(like, Array.from(words.subarray(i * k, i * k + k))) : words[i];
       }
-      if (m.how === "keep") { if (v) kept.push(items[i]); } else kept.push(v);
+      if (m.how === "keep") { if (v) answers.push(its[i]); } else answers.push(v);
     }
     if (left !== null) setStepsLeft(left - used);
     gpuPerItem[site] = (performance.now() - t0) / Math.max(1, n);
-    return done(kept);
+    return done(answers);
   };
   const p = new Pending(answered, "the GPU's run", false);
   p.resume = () => [finish()];
   p.hold = true;
   throw p;
+}
+// A buffer's words, mapped back.
+async function bufferWords(b: GpuBuf, bytes: number): Promise<ArrayBuffer> {
+  const { dev } = (await gpuOf())!;
+  const back = dev.createBuffer({ size: bytes, usage: MAP_READ | COPY_DST }), enc = dev.createCommandEncoder();
+  enc.copyBufferToBuffer(b, 0, back, 0, bytes);
+  dev.queue.submit([enc.finish()]);
+  await back.mapAsync(MAP_READ);
+  const all = back.getMappedRange().slice(0);
+  back.unmap(); back.destroy();
+  return all;
+}
+// A kept list's items, each made like `like` from its words.
+async function readItems(b: GpuBuf, n: number, k: number, leaves: Leaf[], like: unknown): Promise<unknown[]> {
+  const words = new Uint32Array(await bufferWords(b, Math.max(4, n * 4) * k));
+  return Array.from({ length: n }, (_, i) => madeLike(like, leaves, words, i * k));
 }
 
 // A count or an all of a search on the page's workers (C61 c′4), as
