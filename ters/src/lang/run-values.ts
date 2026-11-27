@@ -7,6 +7,7 @@ import { deadline, OutOfSteps } from "./over.ts";
 import type { Id } from "../model.ts";
 import { ArrayView, arrayOf, itemsIn } from "./array-view.ts";
 import { Table } from "./table.ts";
+import { ItemsList } from "./bytes.ts";
 import { Cells, ITEM_OPS, NoValue, changeAt, itemPathOf, listEdits, pathValue, stepsOf } from "./cells.ts";
 import { CELL_OPS, CONS, FALSE, FILE_INFO_V, FILE_KIND_V, INSTANT_V, NIL, TRUE, UNIT_V } from "./std-ids.ts";
 
@@ -19,6 +20,9 @@ export const bool = (b: boolean): Data => ({ tag: b ? TRUE : FALSE, fields: [] }
 export const unit: Data = { tag: UNIT_V, fields: [] };
 export const toList = (xs: Value[]): Data => xs.reduceRight<Data>((tail, x) => ({ tag: CONS, fields: [x, tail] }), { tag: NIL, fields: [] });
 export function fromList(v: Value): Value[] {
+  // A list read from an array's items (compiled code's `items of array`):
+  // its items copied at once, not a cons cell made for each (C354).
+  if (v instanceof ItemsList) return v.items() as Value[];
   const out: Value[] = [];
   for (let d = v as Data; d.tag === CONS; d = d.fields[1] as Data) out.push(d.fields[0]);
   return out;
