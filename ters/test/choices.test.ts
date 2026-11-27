@@ -39,9 +39,9 @@ test("numbers' Nat is an int, with the jobs main uses on it, those in a loop mar
 });
 
 // Its pool in slots (L280f), its keys with it, so they have no entry.
-test("greenhouse-page's Set is a hash table, its pool in slots; the same each time", () => {
+test("greenhouse-page's Set is a hash table, its pool in tables (G4); the same each time", () => {
   const lines = reps(choices("greenhouse-page"));
-  assert.deepEqual(lines.map((l) => l.split(";")[0]), ["std.pool representation: Pool as slots", "std.set representation: Set as hash table"]);
+  assert.deepEqual(lines.map((l) => l.split(";")[0]), ["std.pool representation: Pool as tables", "std.set representation: Set as hash table"]);
   assert.deepEqual(reps(choices("greenhouse-page")), lines);
 });
 
@@ -172,7 +172,7 @@ test("divisors' lists held as trees are made so and said; where a list can't be 
   const stored = choices("divisors", heldOf([held])).filter((l) => l.startsWith("std.list "));
   assert.equal(`held ${stored[0]}`, held);
   assert.deepEqual(heldWarnings([held], now), ["held   std.list: tree of List, where the compiler would pick array of List"]);
-  assert.throws(() => choices("break-page", new Map([["std.list", "array of List"]])), /List can't be held as array of List here: some list the program reaches can't be one/);
+  assert.throws(() => choices("queens", new Map([["std.list", "array of List"]])), /List can't be held as array of List here: some list the program reaches can't be one/);
   assert.throws(() => choices("backwards", new Map([["std.list", "tree of List"]])), /runs something on lists backwards/);
   assert.throws(() => choices("conjugate", new Map([["std.list", "array of List"]])), /runs something on lists backwards/);
 });
