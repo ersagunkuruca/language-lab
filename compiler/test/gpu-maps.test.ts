@@ -180,6 +180,17 @@ test("rain-page's map of drops gets a WebGPU kernel of words: its drops as recor
   assert.match(html, /if \(x > 16777216i \|\| x < -16777216i\) \{ lab_fuel = -1\.0; \}/);
 });
 
+// rain-page as written, ticked on every frame (G12d): its drops are lists,
+// not trees, since the definitions holding them pick by their own jobs
+// (the attributes main appends are main's), so the slide has its kernel.
+test("rain-page as written sends its slide to the GPU's kernel (G12d)", () => {
+  const program = join(dir, "rain-as-written"), out = join(dir, "rain-as-written.html");
+  cpSync(join(import.meta.dirname, "../../ters/examples/rain-page"), program, { recursive: true });
+  const r = spawnSync(process.execPath, [lab, "build-web", program, "-o", out], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(readFileSync(out, "utf8"), /pageGpu\(\{0:\{how:"map",result:"words",/);
+});
+
 // A map whose arithmetic is only close gets a kernel only where the
 // program's decisions hold it on the GPU so (G12): its answers may differ
 // from the CPU's in the last bits, a person's choice, never the compiler's.

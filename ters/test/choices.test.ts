@@ -399,9 +399,9 @@ test("tally measured with 3000 words: its Map's update at counted, 505 entries a
 });
 
 // A page measured (L280d): flock-page given 4 frames of a clock at 60 a
-// second, which fly its 2,000 birds twice; dice given again the clicks a
-// logged run of it was given (`--replay`). Then picked from those.
-test("pages measured: flock-page's frames and dice's logged clicks, its List counted", () => {
+// second, which fly its 2,000 birds twice; compass given again the clicks
+// a logged run of it was given (`--replay`). Then picked from those.
+test("pages measured: flock-page's frames and compass's logged clicks, its List counted", () => {
   const dir = mkdtempSync(join(tmpdir(), "choices-")), ters = fileURLToPath(new URL("../cli/ters.ts", import.meta.url));
   const run = (...args: string[]) => { const r = spawnSync(process.execPath, [ters, ...args], { encoding: "utf8", cwd: dir }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
   const measured = (at: string) => readFileSync(`${at}.decisions`, "utf8").split("\n").filter((l) => l.includes(" measured: "));
@@ -412,14 +412,18 @@ test("pages measured: flock-page's frames and dice's logged clicks, its List cou
     assert.deepEqual(measured(flock), ["std.list measured: List: append 12 times, cons 4 times, item at 24288 times, length 4 times, map 2 times, match 26288 times; up to 4001 items; from a run with 4 frames", "std.set measured: Set: has item 8 times; from a run with 4 frames"]);
     assert.match(readFileSync(`${flock}.decisions`, "utf8"), /\nstd\.list representation: List as array of List from /);
     assert.deepEqual(run("check", flock).split("\n").filter((l) => /^(stale|new) /.test(l)), []);
-    const dice = join(dir, "dice"), p = loadProgram(root + "dice"), info = infer(p.code, p.pres.names, undefined, p.options), log: LogEntry[] = [];
-    cpSync(root + "dice", dice, { recursive: true });
+    // compass's buttons, clicked: since G12d its lists are arrays, picked
+    // by its own definitions' jobs (dice's now stay as written, unpicked).
+    const compass = join(dir, "compass"), p = loadProgram(root + "compass"), info = infer(p.code, p.pres.names, undefined, p.options), log: LogEntry[] = [];
+    cpSync(root + "compass", compass, { recursive: true });
     const kept = new Map<string, string>(), store = { getItem: (k: string) => kept.get(k) ?? null, setItem: (k: string, v: string) => void kept.set(k, v), get length() { return kept.size; }, key: (i: number) => [...kept.keys()][i] ?? null };
-    const page = showPage({ code: p.code, info, names: p.pres.names, main: pageMain(p.own.defs, info, p.pres.names)!, program: "dice", console: { log() {}, error() {} }, frame: () => {}, doc: fakeDoc(), store, log });
-    for (let i = 0; i < 3; i++) (page.root as FakeEl).find("hundred").fire("click");
-    writeFileSync(join(dir, "dice.log.json"), logText(log));
-    run("decisions", dice, "--replay", join(dir, "dice.log.json"), "--measure");
-    assert.deepEqual(measured(dice), ["std.list measured: List: cons 368 times, map 11 times, match 84 times; up to 100 items; from a run with the events of its log"]);
+    const page = showPage({ code: p.code, info, names: p.pres.names, main: pageMain(p.own.defs, info, p.pres.names)!, program: "compass", console: { log() {}, error() {} }, frame: () => {}, doc: fakeDoc(), store, log });
+    const buttons: FakeEl[] = [], walk = (e: FakeEl) => { if (e.tag === "button") buttons.push(e); for (const k of e.kids) if (k instanceof FakeEl) walk(k); };
+    walk(page.root as FakeEl);
+    for (let i = 0; i < 3; i++) buttons[0].fire("click");
+    writeFileSync(join(dir, "compass.log.json"), logText(log));
+    run("decisions", compass, "--replay", join(dir, "compass.log.json"), "--measure");
+    assert.deepEqual(measured(compass), ["std.list measured: List: append 12 times, cons 217 times, map 2 times, match 90 times; up to 22 items; from a run with the events of its log"]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
