@@ -29,6 +29,7 @@ import { PairMap, Table } from "../../ters/src/lang/table.ts";
 import { counted, OutOfSteps, setStepsLeft, stepsLeft, toList } from "../../ters/src/lang/run-values.ts";
 import { add, type Int } from "../../ters/src/lang/int.ts";
 import { Pending } from "../../ters/src/lang/cells.ts";
+import { pageDevice } from "../../ters/src/lang/gpu-device.ts";
 
 type Fn = (...xs: unknown[]) => unknown;
 type Closure = Fn & { caps: unknown[]; code: Fn };
@@ -1026,10 +1027,9 @@ type Gpu = { dev: GPUDeviceLike; pipes: Map<number, Promise<unknown>> };
 type GPUDeviceLike = { pushErrorScope(f: string): void; popErrorScope(): Promise<unknown>; createBuffer(d: object): GpuBuf; createShaderModule(d: object): unknown; createComputePipelineAsync(d: object): Promise<{ getBindGroupLayout(i: number): unknown }>; createBindGroup(d: object): unknown; createCommandEncoder(): { beginComputePass(): { setPipeline(p: unknown): void; setBindGroup(i: number, g: unknown): void; dispatchWorkgroups(x: number, y: number): void; end(): void }; copyBufferToBuffer(a: GpuBuf, ao: number, b: GpuBuf, bo: number, n: number): void; finish(): unknown }; queue: { writeBuffer(b: GpuBuf, o: number, d: ArrayBufferView): void; submit(c: unknown[]): void } };
 type GpuBuf = { mapAsync(m: number): Promise<void>; getMappedRange(): ArrayBuffer; unmap(): void; destroy(): void };
 let gpu: Promise<Gpu | null> | undefined;
+// The page's one device, its frames' too (gpu-device.ts, G13).
 const gpuOf = (): Promise<Gpu | null> => (gpu ??= (async () => {
-  const nav = (globalThis as { navigator?: { gpu?: { requestAdapter(): Promise<{ requestDevice(): Promise<GPUDeviceLike> } | null> } } }).navigator;
-  const ad = await nav?.gpu?.requestAdapter().catch(() => null);
-  const dev = await ad?.requestDevice().catch(() => null);
+  const dev = await pageDevice<GPUDeviceLike>();
   return dev ? { dev, pipes: new Map() } : null;
 })());
 // WebGPU's usage flags, as numbers (GPUBufferUsage, GPUMapMode).

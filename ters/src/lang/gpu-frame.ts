@@ -18,6 +18,7 @@
 import { fromList, type Data, type Value } from "./run-values.ts";
 import { FRAME_V, TRUE } from "./std-ids.ts";
 import { copied, cssColour } from "./raster.ts";
+import { pageDevice } from "./gpu-device.ts";
 
 export type Word = "f32" | "i32" | "bool";
 export interface Leaf { path: number[]; kind: Word }
@@ -117,11 +118,9 @@ export class GpuFrames {
   static async open(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<GpuFrames | null> {
     const gpu = (globalThis.navigator as Navigator | undefined)?.gpu;
     if (!gpu) return null;
-    const adapter = await gpu.requestAdapter();
-    if (!adapter) return null;
-    const device = await adapter.requestDevice();
-    // A shader or pipeline the device refused says why on the console.
-    device.addEventListener("uncapturederror", (e) => console.error(`WebGPU: ${(e as GPUUncapturedErrorEvent).error.message}`));
+    // The page's one device, its maps' too (G13).
+    const device = await pageDevice<GPUDevice>();
+    if (!device) return null;
     const context = canvas.getContext("webgpu") as GPUCanvasContext | null;
     if (!context) return null;
     const format = gpu.getPreferredCanvasFormat();

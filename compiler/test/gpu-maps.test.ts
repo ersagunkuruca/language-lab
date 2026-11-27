@@ -239,3 +239,37 @@ test("rain-page's drops slid on the GPU are the CPU's, bit for bit (G12)", { ski
     assert.ok(gpu.reads > 0, "ticks went to the GPU");
   } finally { await browser.close(); }
 });
+
+// One device for the page (G13, gpu-device.ts): rain-page as written slides
+// its drops with a kernel and draws them, both on the device the page
+// asked for once, so a buffer the map makes the draw can bind.
+test("rain-page as written asks for one WebGPU device, for its kernel and its frames (G13)", { skip: !exe && "no Chromium" }, async () => {
+  const { chromium } = await import("../../ters/node_modules/playwright-core/index.mjs");
+  const browser = await chromium.launch({ executablePath: exe, args: ["--enable-unsafe-webgpu", "--enable-features=Vulkan", "--use-vulkan=swiftshader", "--use-webgpu-adapter=swiftshader"] });
+  const program = join(dir, "rain-one-device"), out = join(dir, "rain-one-device.html");
+  cpSync(join(import.meta.dirname, "../../ters/examples/rain-page"), program, { recursive: true });
+  const r = spawnSync(process.execPath, [lab, "build-web", program, "-o", out], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  try {
+    const page = await browser.newPage();
+    await page.addInitScript(() => {
+      const w = window as unknown as { devices: number; reads: number; GPUAdapter?: { prototype: { requestDevice(...a: unknown[]): unknown } }; GPUBuffer?: { prototype: { getMappedRange(...a: unknown[]): unknown } } };
+      w.devices = 0; w.reads = 0;
+      // The clock 100 times the real one, so a tick's map counts as worth the GPU.
+      const now = performance.now.bind(performance);
+      performance.now = () => now() * 100;
+      const a = w.GPUAdapter?.prototype, b = w.GPUBuffer?.prototype;
+      if (a) { const ask = a.requestDevice; a.requestDevice = function (...x: unknown[]) { w.devices++; return ask.apply(this, x); }; }
+      // Headless Chromium on SwiftShader destroys the device once a canvas
+      // presents a frame, so the canvas has no WebGPU context here: the
+      // frames still ask for the device first, and draw on the CPU.
+      const ctx = HTMLCanvasElement.prototype.getContext as (this: HTMLCanvasElement, t: string, ...x: unknown[]) => unknown;
+      (HTMLCanvasElement.prototype as unknown as { getContext: typeof ctx }).getContext = function (t, ...x) { return t === "webgpu" ? null : ctx.call(this, t, ...x); };
+      if (b) { const read = b.getMappedRange; b.getMappedRange = function (...x: unknown[]) { w.reads++; return read.apply(this, x); }; }
+    });
+    await page.goto(`file://${out}`);
+    if (!(await page.evaluate(() => !!(navigator as { gpu?: unknown }).gpu))) return;
+    await page.waitForFunction(() => (window as unknown as { reads: number }).reads > 0, undefined, { timeout: 20000 });
+    assert.equal(await page.evaluate(() => (window as unknown as { devices: number }).devices), 1);
+  } finally { await browser.close(); }
+});
