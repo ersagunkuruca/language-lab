@@ -759,13 +759,19 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // stops the run, and the machine runs the call again from the fuel there
   // was, so it runs out where the machine does.
   let directFuel: Fuel | null = null;
-  const spendDirect = () => { if (directFuel) { if (--directFuel.left < 0) throw NEED; } else spendStep(); };
+  // The fuel a direct run spent the last of, if one did.
+  let ranOut: Fuel | null = null;
+  const spendDirect = () => { if (directFuel) { if (--directFuel.left < 0) { ranOut = directFuel; throw NEED; } } else spendStep(); };
   const underFuel = <T,>(fuel: Fuel, f: () => T): T => {
     const left = fuel.left, was = directFuel, around = ambient;
-    directFuel = fuel; ambient = fuel;
+    directFuel = fuel; ambient = fuel; ranOut = null;
     // (A failure, which spends as the machine would only from the same
-    // place, runs again on the machine too.)
-    try { return f(); } catch (e) { fuel.left = left; throw e === FAILED ? NEED : e; } finally { directFuel = was; ambient = around; }
+    // place, runs again on the machine too.) A run that spent the last of
+    // this fuel keeps it spent: the machine would run out at the same step,
+    // as a direct run does nothing that acts, and running it again from
+    // the first call at each call the machine made cost a step each time
+    // (L295: a call made last from a match arm, 4,000 steps 6 s).
+    try { return f(); } catch (e) { if (!(e === NEED && ranOut === fuel)) fuel.left = left; throw e === FAILED ? NEED : e; } finally { directFuel = was; ambient = around; }
   };
   // Of the searches, those whose spending doesn't hang on the order they
   // look in (every answer is looked for), run directly under fuel too.
@@ -1303,6 +1309,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
             if (e === FAILED) return this.fail();
             if (e instanceof ResumeAt) { rt.entered?.(copyOf?.get(e.c.lambda) ?? e.c.lambda, e.args, e.c.lambda); return this.eval(e.c.node.body, bind(e.c.scope, e.c.node.params, e.args)); }
             if (e !== NEED && !(e instanceof RangeError)) throw e;
+            if (fuel && fuel.left < 0) return this.outOfFuel();
           }
         }
         rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
