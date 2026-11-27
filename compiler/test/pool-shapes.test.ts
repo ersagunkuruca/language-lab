@@ -24,6 +24,9 @@ test("the greenhouse's systems are told the shapes they touch (G4)", () => {
   // Three Optional parts, so eight shapes; a system touching one part
   // (a moth's flight) is told the four that have it.
   assert.ok(r.told.filter((c) => c.kind !== "empty").every((c) => c.shapes.length === 4), JSON.stringify(r.told));
+  // The moths kept from the pool's items by whether they have a velocity,
+  // told the shapes that have one: all kept, so no keep is left.
+  assert.ok(r.told.some((c) => c.kind === "items" && c.all), JSON.stringify(r.told));
   assert.deepEqual(r.info.errors, p.info.errors);
 });
 
