@@ -48,7 +48,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { availableParallelism } from "node:os";
-import { fullLimitFor, limitFor, printMap, readMap, recordOne, type TestMap } from "./test-map.ts";
+import { fetchMap, fullLimitFor, limitFor, printMap, readMap, recordOne, type TestMap } from "./test-map.ts";
 import { changeFrom, cover, haveCommit, reached, reachedTests, type Change } from "./select.ts";
 import { intervalDays, isDue, streakAfter } from "./schedule.ts";
 import { bisect } from "./bisect.ts";
@@ -137,14 +137,7 @@ const byImports = (t: string) => {
 const mapFile = argv.includes("--map") ? argv[argv.indexOf("--map") + 1] : undefined;
 function loadMap(): TestMap | undefined {
   if (mapFile) { const m = readMap(mapFile); return Object.keys(m.tests).length ? m : undefined; }
-  const kept = join(top, ".lab", "test-map.json");
-  try {
-    execFileSync("git", ["fetch", "-q", "--depth=1", "origin", "+refs/heads/test-map:refs/remotes/origin/test-map"], { cwd: top, stdio: "ignore", timeout: 60_000 });
-    const text = execFileSync("git", ["show", "refs/remotes/origin/test-map:map.json"], { cwd: top, encoding: "utf8", maxBuffer: 1 << 30 });
-    mkdirSync(dirname(kept), { recursive: true });
-    writeFileSync(kept, text);
-  } catch {}
-  const map = readMap(kept);
+  const map = fetchMap(top);
   return Object.keys(map.tests).length ? map : undefined;
 }
 const map = all || setup || timing || argv.includes("--no-map") ? undefined : loadMap();
