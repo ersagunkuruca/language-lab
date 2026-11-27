@@ -174,6 +174,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
   const looks = (e: SExpr): boolean => (e.k === "rt" && LOOKS_INSIDE.test(e.fn) && !printedPlan(e.fn)) || kids(e).some(looks);
   const carries = ir.funcs.some((f) => looks(f.body));
   const rts = new Map<string, string>();
+  const noInlineInts = envSet("NO_INLINE_INTS");
   const rtName = (n: string) => { if (!rts.has(n)) rts.set(n, `rt${rts.size}`); return rts.get(n)!; };
   // A runtime function that gives no answer as FAIL rather than throwing
   // it (core-rt.ts tableFn's atv): named rv…, so an attempt holding it
@@ -596,6 +597,19 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
           const xs = exs(e.args, pre, d);
           // A loop's count or position's step, a number (kept-arrays.ts).
           if (counted?.plain.has(e)) return `(${xs[0]} ${e.fn === "int.add" ? "+" : "-"} ${xs[1]})`;
+          // An Int's sum, difference or product whose range isn't known
+          // (int-ranges.ts): the small case written out, so the engine does
+          // it inline, and int.ts's past 2^28 (C359).
+          {
+            const op = e.fn === "int.add" ? "+" : e.fn === "int.sub" ? "-" : e.fn === "int.mul" ? "*" : null;
+            const lit = (x: string) => /^\(?-?\d+\)?$/.test(x);
+            if (op && xs.length === 2 && !noInlineInts && xs.every((x) => lit(x) || /^[lt]\d+$/.test(x))) {
+              const t = temp();
+              pre.push(`${d}let ${t};`);
+              const num = xs.filter((x) => !lit(x)).map((x) => `typeof ${x} === "number" && `).join("");
+              return `(${num}(${t} = ${xs[0]} ${op} ${xs[1]}) > -${2 ** 28} && ${t} < ${2 ** 28} ? ${op === "*" ? `${t} + 0` : t} : ${rtName(e.fn)}(${xs.join(", ")}))`;
+            }
+          }
           // The fuel is this module's own (C137c21).
           if (e.fn === "fuel.get") return fuel ? "fuel" : "Infinity";
           // One of an answer's values (core-rt.ts pick), read where it is used.
