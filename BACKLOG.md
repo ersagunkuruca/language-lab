@@ -32,7 +32,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | L Language and library | "Speed up the interpreter on real programs" | no open row (round 2 stopped 2026-11-23, Ersagun: fix the failed compile instead, E320) |
 | G Game | "Build a game to test Ters against engines" | stage 1: done (C265, C267 done, C283 and C284 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
-| T Testing | "Learn from Ephyra for our bug finding" | T18d1 (lessons from Ephyra, Ersagun 2026-11-27) |
+| T Testing | "Learn from Ephyra for our bug finding" | no open row (T18a-g done 2026-11-27; findings C366 and I387 are rows for their lanes) |
 
 ## Inbox
 
@@ -50,7 +50,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| T18d1 | #3492's bug put back is caught by no test: int-args numbering its new locals after the locals' end (`next = f.locals.length` for `next = top + 1` in compiler/src/int-args.ts) leaves edits.test, carried-reps.test and stable-ids.test green on 11-27. Find whether the passes before still leave unused locals (then a test for the printed names after a second check is missing) or no longer do (then the entry's trigger is gone and the row closes measured); add it to ters/test/injections/ once a test catches it | T18d (#3545) | P3 | S | |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md))
 

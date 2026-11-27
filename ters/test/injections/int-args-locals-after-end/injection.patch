@@ -1,0 +1,13 @@
+diff --git a/compiler/src/int-args.ts b/compiler/src/int-args.ts
+index 1795e861..8651b539 100644
+--- a/compiler/src/int-args.ts
++++ b/compiler/src/int-args.ts
+@@ -26,7 +26,7 @@ export function intArgs(ir: CoreIR): number {
+     // printed names would differ (carried-reps' `routes`, stable-ids).
+     let top = f.params.length - 1;
+     mapLocals(f.body, (i) => { if (i > top) top = i; return i; });
+-    next = top + 1;
++    next = f.locals.length;
+     // Its own copy: a function copied from another may share its locals,
+     // and the other's past `top` are its own (mnist's `row max`).
+     f.locals = [...f.locals];

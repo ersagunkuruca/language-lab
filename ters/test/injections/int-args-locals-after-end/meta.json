@@ -1,0 +1,7 @@
+{
+  "bug": "#3492",
+  "what": "int-args numbers its new locals after the locals' end, past unused ones passes before left, so a compile that left fewer prints other names (carried-reps' routes, stable-ids)",
+  "tests": [
+    "compiler/test/int-args.test.ts"
+  ]
+}
