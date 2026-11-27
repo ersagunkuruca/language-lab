@@ -785,6 +785,11 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     directDepth++;
     try {
       while (true) {
+        // A page's deadline, where no step is spent: a definition that
+        // ends (no steps to count) still asks it every so many calls, as
+        // the machine does (a view of length(reverse(range(20000000)))
+        // ran on the editor's thread until the tab ran out of memory).
+        if ((++machineTicks & 4095) === 0 && pageOver()) throw new OutOfSteps();
         const l = lamOf(c);
         l.n++;
         rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
