@@ -31,7 +31,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | L Language and library | "Speed up the interpreter on real programs" | no open row (round 2 stopped 2026-11-23, Ersagun: fix the failed compile instead, E320) |
 | G Game | "Build a game to test Ters against engines" | stage 1: done (C265, C267 done, C283 and C284 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
-| T Testing | "Learn from Ephyra for our bug finding" | T18a, then T18b, T18c, T18d (lessons from Ephyra, Ersagun 2026-11-27) |
+| T Testing | "Learn from Ephyra for our bug finding" | T18b, then T18c, T18d (lessons from Ephyra, Ersagun 2026-11-27) |
 | L Language and library | "Explore grammars and machines across the Chomsky hierarchy" | L293a, then L293b to L293f (exploratory, Ersagun 2026-11-27) |
 
 ## Inbox
@@ -48,7 +48,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| T18a | C101's reach: from the test map, the lines of `compiler/src` and `ters/src/lang` that `compiler/test/fuzz.test.ts` runs (65% and 45% on 11-27, by functions entered) and the files it never enters, printed by one command; each bigger-program round reports it | [EPHYRA-LESSONS-2026-11-27](docs/reports/EPHYRA-LESSONS-2026-11-27.md) | P2 | S | ▶ |
 | T18b | A moving seed: the Nightly runs C101 at the night's seed as well as seed 1; a seed that fails is kept in a file every later run replays first | [EPHYRA-LESSONS-2026-11-27](docs/reports/EPHYRA-LESSONS-2026-11-27.md) | P2 | S |  |
 | T18c | A shrinker for C101: a failing generated definition is cut down by deletions that keep it typed (a part in place of its parent, a let dropped), rerunning only the engine that differed and keeping only cuts that differ the same way | [EPHYRA-LESSONS-2026-11-27](docs/reports/EPHYRA-LESSONS-2026-11-27.md) | P2 | M |  |
 | T18d | Fix injections: past fixes reversed as patches (first the 11-27 main-red breakers); the Nightly checks each makes some test fail, and that `affected.ts` on the injected tree picks that test (a selection hole otherwise) | [EPHYRA-LESSONS-2026-11-27](docs/reports/EPHYRA-LESSONS-2026-11-27.md) | P2 | M |  |
