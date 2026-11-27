@@ -211,8 +211,12 @@ else {
     // checks.test.ts, checks-*.test.ts), quickest first, up to two minutes
     // in all; the rest run after the merge in Check main, which records
     // them. By imports they were most of the suite for any core change.
+    // A reached test named for a changed file runs too, though others run
+    // its lines: it is the one written for that file's own uses (#3503's
+    // map-tree.ts changed lines library-built ran, and map-tree.test,
+    // calling the trees with the prelude's exports only, went red on main).
     const stems = new Set(code.filter((f) => /\.(ts|js)$/.test(f) && !/\.test\./.test(f)).map((f) => f.split("/").pop()!.replace(/\.(ts|js)$/, "")));
-    const named = unmapped.filter((t) => { const n = t.split("/").pop()!.replace(/\.test\.(ts|js)$/, ""); return [...stems].some((s) => n === s || n.startsWith(s + "-")); }).sort((a, b) => secondsOf(a) - secondsOf(b));
+    const named = [...new Set([...unmapped, ...reach.keys()])].filter((t) => { const n = t.split("/").pop()!.replace(/\.test\.(ts|js)$/, ""); return [...stems].some((s) => n === s || n.startsWith(s + "-")); }).sort((a, b) => secondsOf(a) - secondsOf(b));
     const sample: string[] = [];
     let budget = 120;
     for (const t of named) if (secondsOf(t) <= budget) { sample.push(t); budget -= secondsOf(t); }
