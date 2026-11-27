@@ -27,6 +27,9 @@ export function intArgs(ir: CoreIR): number {
     let top = f.params.length - 1;
     mapLocals(f.body, (i) => { if (i > top) top = i; return i; });
     next = top + 1;
+    // Its own copy: a function copied from another may share its locals,
+    // and the other's past `top` are its own (mnist's `row max`).
+    f.locals = [...f.locals];
     f.body = walk(f, f.body);
   }
   return n;
