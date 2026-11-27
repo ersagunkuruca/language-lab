@@ -36,6 +36,8 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "array length of": "@oq7cmip86uql4l57vvvt6lchaa",
  "list tree of list": "@b553mah4ocs7975ee8hlq561ho",
  "empty tree": "@lk05v4r73jribg05qiim03a90j",
+ // Items added to a set's tree: a page's view adds only new items (memo-calls.ts addedMemoFuncs, C354d).
+ "set tree added all": "@61omkgl1l6udn9v1n09ad1bvhr",
  // At most so many items, for a count written as a number (represent.ts freshUses, C234).
  "take": "@3ejt3neud5q32mrols3nn7tu58",
  // Appends onto what a loop carries, an array's own (C234).

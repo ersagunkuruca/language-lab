@@ -23,7 +23,7 @@ import { keepingWhole } from "../../ters/src/lang/check-cache.ts";
 import { keysOver } from "../../ters/src/lang/def-keys.ts";
 import { overLiterals } from "../../ters/src/lang/literals-again.ts";
 import { shareCalls } from "./share-calls.ts";
-import { listMemoFuncs, MEMO_SIZE, memoFuncs } from "./memo-calls.ts";
+import { addedMemoFuncs, listMemoFuncs, MEMO_SIZE, memoFuncs } from "./memo-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
 import { knownClosures } from "./known-closures.ts";
 import { itemPaths } from "./item-paths.ts";
@@ -267,6 +267,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
   const memo = envSet("NO_MEMO") ? new Set<number>() : memoFuncs(ir, new Set(deep.keys()));
   const LISTWISE = new Set([PRELUDE_DEFS.keep, PRELUDE_DEFS.map, PRELUDE_DEFS["flat map"]]);
   const listMemo = envSet("NO_MEMO") || envSet("NO_LIST_MEMO") ? new Set<number>() : listMemoFuncs(ir, new Set(deep.keys()), (d) => LISTWISE.has(typedOriginalOf(originalOf(d))));
+  const addedMemo = envSet("NO_MEMO") || envSet("NO_LIST_MEMO") ? new Set<number>() : addedMemoFuncs(ir, new Set(deep.keys()), (d) => typedOriginalOf(originalOf(d)) === PRELUDE_DEFS["set tree added all"]);
   const parts = ir.funcs.map((f, i) => {
     if (only && !only.has(i)) return [];
     // An array of numbers sorted (C355): JavaScript's own sort, the same
@@ -318,6 +319,32 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
   const r = ${names[i]}$m(l0, l1);
   if (r !== R.FAIL) { ${m}.push({ x: R.keptList(l0), code, caps, r: R.keptList(r) }); if (${m}.length > ${MEMO_SIZE}) ${m}.shift(); }
   return R.keptList(r);
+}`,
+        func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$m(`), ...plainCopy()];
+    }
+    // Items added to a set tree (map-tree.ts `set tree added all`), its
+    // answers kept with the list and the tree they were added to: called
+    // again with that list with items pushed onto its end, the new items
+    // are added to the last answer, the same set (memo-calls.ts
+    // addedMemoFuncs, C354).
+    if (addedMemo.has(i)) {
+      const m = `${names[i]}$A`;
+      return [`const ${m} = [];`,
+        `function ${names[i]}(l0, l1) {
+  for (let j = ${m}.length - 1; j >= 0; j--) {
+    const e = ${m}[j];
+    if (!Object.is(e.t, l1)) continue;
+    if (e.x === l0) return e.r;
+    const rest = R.listAfter(e.x, l0);
+    if (rest === undefined) continue;
+    const r = ${names[i]}$m(rest, e.r);
+    if (r === R.FAIL) return r;
+    e.x = R.keptList(l0); e.r = r;
+    return r;
+  }
+  const r = ${names[i]}$m(l0, l1);
+  if (r !== R.FAIL) { ${m}.push({ x: R.keptList(l0), t: l1, r }); if (${m}.length > ${MEMO_SIZE}) ${m}.shift(); }
+  return r;
 }`,
         func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$m(`), ...plainCopy()];
     }

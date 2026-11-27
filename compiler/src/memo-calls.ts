@@ -86,6 +86,27 @@ export function listMemoFuncs(ir: CoreIR, deep: ReadonlySet<number>, listwise: (
   return out;
 }
 
+// The trees module's `set tree added all` (by its function, as above),
+// given a list and a tree, its answer kept with both (C354d): called again
+// with that tree and the list with items put on its end, it adds only the
+// new items to the last answer. Adding a set's items is the same set
+// whichever order they go in, so a page's tags (as set(flat map(cards, …)))
+// add one card's.
+export function addedMemoFuncs(ir: CoreIR, deep: ReadonlySet<number>, added: (def: string) => boolean): Set<number> {
+  const out = new Set<number>();
+  const reads = (e: SExpr): boolean => (e.k === "rt" && (e.fn.startsWith("readPaths:") || e.fn.startsWith(CELL_READ))) || kids(e).some(reads);
+  if (!ir.funcs.some((f) => reads(f.body))) return out;
+  const { lenient, writtenLists } = analysed(ir, deep);
+  ir.funcs.forEach((f, i) => {
+    if (!added(f.def) || !lenient[i] || deep.has(i) || f.multi || f.params.length !== 2) return;
+    const [xs, t] = f.params;
+    const list = (t: LType) => (isData(t) && t.cases.length === 2 && t.cases.every((c) => c.variant === NIL || c.variant === CONS) && !writtenLists.has(t.key)) || isArray(t);
+    if (!list(xs) || !isData(t) || !isData(f.result) || t.key !== f.result.key || writtenLists.has(t.key)) return;
+    out.add(i);
+  });
+  return out;
+}
+
 const SPLITS = /^(split\.hold|choose\.split|split\.give)$/;
 
 function analysed(ir: CoreIR, deep: ReadonlySet<number>): { memo: Set<number>; lenient: boolean[]; writtenLists: Set<string>; writtenArrays: Set<number> } {
