@@ -39,7 +39,7 @@ length (6):
 - **The unrestricted level** (`searched`): a rule may shrink a form, so no
   length bounds the search, and the checker gives `searched` the `Diverge`
   effect. `found within` runs it under `with fuel`, which turns that into
-  `Choice`: a word is found, or nothing is known after so many rounds.
+  `Choice`: a word is found, or nothing is known after 40 rounds. The budget is a number written down, since compiled code fixes it when it is built.
 
 - **Finite automata** (`automaton of`, L293b): a regular grammar's
   automaton has a state per variable and one where the word is done.
@@ -77,10 +77,10 @@ So the line between decidable and semi-decidable shows in the types:
 ```
 words up to : (Grammar, Int) -> List (List Symbol)
 searched    : (Grammar, List Symbol, Set (List Symbol), Set (List Symbol)) -[Diverge]-> Answer
-found within: (Grammar, List Symbol, Float64) -> Answer
+found within: (Grammar, List Symbol) -> Answer
 ran         : (Turing machine, Snapshot) -[Diverge]-> Bool
 bounded accepts: (Turing machine, List Symbol) -> Bool
-accepts within : (Turing machine, List Symbol, Float64) -> Answer
+accepts within : (Turing machine, List Symbol) -> Answer
 main        : (List Text) -[Console]-> Unit
 ```
 

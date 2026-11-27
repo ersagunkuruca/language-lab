@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { cpSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
 import { Session } from "../mcp/session.ts";
 
 const session = () => {
@@ -32,22 +33,27 @@ test("chomsky: each grammar's level and its words up to 6", () => {
   assert.match(out, /exit 0/);
 });
 
+test("chomsky: compiles through the core IR (with fuel's budgets written down)", () => {
+  const r = spawnSync(process.execPath, ["cli/ters.ts", "compile", "examples/chomsky", "-o", join(mkdtempSync(join(tmpdir(), "ters-chomsky-js-")), "chomsky.mjs")], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+});
+
 test("chomsky: deciding is total up to context sensitive; the unrestricted search is Diverge, under fuel it isn't", () => {
   const defs = session().defs();
   const typeOf = (name: string) => new RegExp(`^\\w+  ${name} : (.*)$`, "m").exec(defs)?.[1];
   assert.equal(typeOf("words up to"), "(Grammar, Int) -> List (List Symbol)");
   assert.match(typeOf("searched")!, /-\[Diverge\]->/);
-  assert.equal(typeOf("found within"), "(Grammar, List Symbol, Float64) -> Answer");
+  assert.equal(typeOf("found within"), "(Grammar, List Symbol) -> Answer");
   assert.equal(typeOf("main"), "(List Text) -[Console]-> Unit");
 });
 
 test("chomsky: a word not derived is decided no below, and not found within the rounds above", () => {
   const s = session();
   const g = (name: string) => `item at(keep(grammars, (x) => x.name = "${name}"), 0, grammar("", "", nil))`;
-  assert.match(s.eval(`shown answer(in language(${g("aⁿbⁿcⁿ")}, form of("aabbcc"), 40.0))`), /"yes"/);
-  assert.match(s.eval(`shown answer(in language(${g("aⁿbⁿcⁿ")}, form of("aabbc"), 40.0))`), /"no"/);
-  assert.match(s.eval(`shown answer(in language(${g("a^(2^n)")}, form of("aaaa"), 40.0))`), /"yes"/);
-  assert.match(s.eval(`shown answer(in language(${g("a^(2^n)")}, form of("aaa"), 12.0))`), /"not found in 12 steps"/);
+  assert.match(s.eval(`shown answer(in language(${g("aⁿbⁿcⁿ")}, form of("aabbcc")))`), /"yes"/);
+  assert.match(s.eval(`shown answer(in language(${g("aⁿbⁿcⁿ")}, form of("aabbc")))`), /"no"/);
+  assert.match(s.eval(`shown answer(in language(${g("a^(2^n)")}, form of("aaaa")))`), /"yes"/);
+  assert.match(s.eval(`shown answer(in language(${g("a^(2^n)")}, form of("aaa")))`), /"not found in 40 steps"/);
 });
 
 test("chomsky: a regular grammar's automaton, its deterministic one and the grammar read back agree", () => {
@@ -89,11 +95,11 @@ test("chomsky: the linear bounded automaton decides, the Turing machine only rec
   const s = session();
   assert.match(s.eval(`bounded accepts(equal counts machine, form of("aabbcc"))`), /= true /);
   assert.match(s.eval(`bounded accepts(equal counts machine, form of("abcabc"))`), /= false /);
-  assert.match(s.eval(`shown answer(accepts within(doubling machine, form of("aaaa"), 300.0))`), /"yes"/);
-  assert.match(s.eval(`shown answer(accepts within(doubling machine, form of("aaa"), 100.0))`), /"not found in 100 steps"/);
+  assert.match(s.eval(`shown answer(accepts within(doubling machine, form of("aaaa")))`), /"yes"/);
+  assert.match(s.eval(`shown answer(accepts within(doubling machine, form of("aaa")))`), /"not found in 300 steps"/);
   const defs = s.defs();
   const typeOf = (name: string) => new RegExp(`^\\w+  ${name} : (.*)$`, "m").exec(defs)?.[1];
   assert.equal(typeOf("ran"), "(Turing machine, Snapshot) -[Diverge]-> Bool");
   assert.equal(typeOf("bounded accepts"), "(Turing machine, List Symbol) -> Bool");
-  assert.equal(typeOf("accepts within"), "(Turing machine, List Symbol, Float64) -> Answer");
+  assert.equal(typeOf("accepts within"), "(Turing machine, List Symbol) -> Answer");
 });
