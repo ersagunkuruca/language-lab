@@ -201,9 +201,6 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
 
   const node = (id: Id) => code.nodes[id];
   const isBool = (n: NodeOf<"match">) => n.arms.length === 2 && n.arms.every((a) => [TRUE, FALSE].includes((node(a) as NodeOf<"arm">).variant));
-  const isIfNode = (id: Id) => { const n = node(id); return n?.kind === "match" && isBool(n); };
-  // The ifs drawn as an else if of the one before (E322).
-  const chained = new Set<Id>();
   const isLet = (n: Node): boolean => isCall(n) && node(n.fn).kind === "lambda";
   // A step done for what it does, that nothing reads, is just the step.
   const unreadStep = (p: Id, body: Id) => base(p) === "_" || (!names[p] && !subtree(code, body).some((x) => (node(x) as { target?: Id }).target === p));
@@ -543,8 +540,7 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
     if (n.kind === "match" && isBool(n)) {
       const arm = (v: Id) => node(n.arms.find((a) => (node(a) as NodeOf<"arm">).variant === v)!) as NodeOf<"arm">;
       const t = arm(TRUE), f = arm(FALSE);
-      // An else if of a chain is one row per test, as its first if (E322).
-      if (!chained.has(id) && !tall(n.scrutinee) && !tall(t.body) && !tall(f.body) && !wide(id, lead)) {
+      if (!tall(n.scrutinee) && !tall(t.body) && !tall(f.body) && !wide(id, lead)) {
         return [ln(...lead, part("blk", [kw("if "), ...inline(n.scrutinee).p, part("arm", [kw(" then "), ...inline(t.body).p], t.id), part("arm", [kw(" else "), ...inline(f.body).p], f.id)], id))];
       }
       // A tall condition goes under the if, deeper than then and else, so
@@ -562,20 +558,8 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
       }
       // A branch with steps before its value gets then/else on a line of
       // its own, so the steps are inside the branch, not before the word.
-      // An else if chain is flat (E322): each else at the first if's indent,
-      //   if c1
-      //     then a
-      //   else if c2
-      //     then b
-      //   else c
-      // as a match on values is one row per case (machine's instruction of
-      // was a 21-deep staircase).
-      const elseIf = isIfNode(f.body);
-      if (elseIf) chained.add(f.body);
-      const branch = (a: NodeOf<"arm">, w: string, pad = 2) => grp(hasSteps(a.body) && !(pane && isLet(node(a.body))) ? [ln(kw(w)), grp(block(a.body, []))] : block(a.body, [kw(`${w} `)]), pad, a.id, "arm");
-      // In the pane an else if's box sits on its else's line, not inset by
-      // a box's padding (page.html .blk.chained).
-      return hold([...head, branch(t, "then"), branch(f, "else", elseIf || chained.has(id) ? 0 : 2)], chained.has(id) ? "blk chained" : "blk");
+      const branch = (a: NodeOf<"arm">, w: string) => grp(hasSteps(a.body) && !(pane && isLet(node(a.body))) ? [ln(kw(w)), grp(block(a.body, []))] : block(a.body, [kw(`${w} `)]), 2, a.id, "arm");
+      return hold([...head, branch(t, "then"), branch(f, "else")]);
     }
     // A match with one case on a type with one case always matches: it is
     // taking the value apart, drawn as a let, pair(x, y) = centre.
