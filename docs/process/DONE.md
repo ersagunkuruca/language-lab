@@ -40,7 +40,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| I388 | chomsky in the editor's picker, after calc, with its length (6) as Run's argument: its 94 definitions draw and Run main prints the seven grammars (QA-2026-11-27 M1) | #PR |
+| I388 | chomsky in the editor's picker, after calc, with its length (6) as Run's argument: its 94 definitions draw and Run main prints the seven grammars (QA-2026-11-27 M1) | #3560 |
 | E322 | An `else if` chain shows flat in the text and in Blocks: each `else` at the first `if`'s indent, one row per test (render.ts `chained`; in the pane an else if's box isn't inset by its padding). Machine's `simplified`, algebra's `simplify` and folders' `key` were staircases, one indent deeper per test (11-27). blocks.test.ts | #3551 |
 | I383 | Comment statuses say "Comment saved." and, on Undo, "the comments changed back" (were "… on the node itself, not on a line." and "the notes") (QA-2026-11-26b L2) | #3428 |
 | I382 | A node widens for its comment's first line, up to 180 px, past which the row is cut (a value's 30 px said "n…"); values, gets, calls, cases and matches. graph-steps.test (QA-2026-11-26b L1) | #3427 |
