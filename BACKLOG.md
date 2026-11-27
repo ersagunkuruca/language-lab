@@ -28,7 +28,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L271c (the fill's push); L266 parked 11-26 (Ersagun) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| L Language and library | "Explore grammars and machines across the Chomsky hierarchy" | L293f, then L293e if it earns it (exploratory, Ersagun 2026-11-27) |
+| L Language and library | "Explore grammars and machines across the Chomsky hierarchy" | L293e only if Ersagun wants it; findings L295 to L297 are rows for the Language lane (Ersagun 2026-11-27) |
 | L Language and library | "Speed up the interpreter on real programs" | no open row (round 2 stopped 2026-11-23, Ersagun: fix the failed compile instead, E320) |
 | G Game | "Build a game to test Ters against engines" | stage 1: done (C265, C267 done, C283 and C284 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
@@ -201,6 +201,9 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L295 | **Bug (speed).** Under `with fuel`, a recursive call made from a match arm costs more at each step: `spin2(x) = if x = −1 then true else match first where([1], (i) => i = −1)` with `none → spin2(x + 1)`, run as `first(with fuel(n, () => spin2(0)), else false)`, takes 1.1 s at n = 1,000 and 6.5 s at 4,000 (the same loop with `if` alone 0.6 and 1.4 s). chomsky's `accepts within` (a Turing machine under fuel): 1,000 steps 5 s, 2,000 steps 19 s | [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) "Findings" (L293f) | P2 | M |  |
+| L296 | A parameter's type in text, or a count the checker reads at a generic number: a count down with nothing Int-only in its body stays generic, so the counting check (L46, Int only) leaves it `Diverge`; chomsky's driver writes `quotient(rounds, 1) < 0` and deletes it, four times. The same cause makes `m.start` pick another record type's `start` field. Which way is Ersagun's call | [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) "Findings" (L293f) | P2 | M |  |
+| L297 | Text reading: a two-word type in a field's type needs brackets (`List (Push move)`), and steps inside a fold's or match's arm weren't found to read, so chomsky used helpers | [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) "Findings" (L293f) | P3 | S |  |
 
 ### Ersagun's current asks
 
@@ -245,8 +248,7 @@ Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L293e | Conversions up the hierarchy in chomsky, if L293a-d earn them: a PDA to a grammar, a Turing machine to an unrestricted grammar, each checked by the words both give | Ersagun 2026-11-27 ("OK let's try that and see where it goes"), [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) | P1 | L |  |
-| L293f | Chomsky findings: the language gaps the example wrote around, as rows, and the calls for Ersagun. Found so far: (1) text can't write a parameter's type, so a count stays generic and Diverge until a use only an Int has settles its literals (the chomsky driver writes `quotient(rounds, 1) < 0` and removes it); (2) for the same reason `m.start` read in text, with two record types having a field `start`, took the wrong type (Automaton's field renamed `initial`); (3) a type of two words can't be written in a field's type unbracketed (`List Push move` isn't read; `List (Push move)` is); (4) no way found to write a let inside a fold's or match's arm in text (`(k = …; □ …)` isn't read), so a helper took its place | Ersagun 2026-11-27 ("OK let's try that and see where it goes"), [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) | P1 | S |  |
+| L293e | Conversions up the hierarchy in chomsky, held: L293f found they add no new idea about the language (Ersagun's call): a PDA to a grammar, a Turing machine to an unrestricted grammar, each checked by the words both give | Ersagun 2026-11-27 ("OK let's try that and see where it goes"), [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) | P3 | L | ⏸ |
 
 ### Physics and planning ([PHYSICS-AND-PLANNING.md](docs/design/physics/PHYSICS-AND-PLANNING.md))
 
