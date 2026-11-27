@@ -53,7 +53,7 @@ test("chomsky: a word not derived is decided no below, and not found within the 
 test("chomsky: a regular grammar's automaton, its deterministic one and the grammar read back agree", () => {
   const out = session().run("main", ["6"]);
   assert.match(out, /third from last is a: regular\n/);
-  assert.match(out, /  automaton: 4 states, at most 1 way\(s\) through a word; deterministic: 8 states\n/);
+  assert.match(out, /  automaton: 4 states, most ways through one word: 1; deterministic: 8 states\n/);
   const agree = out.match(/the grammar read back from the automaton: .*/g)!;
   assert.equal(agree.length, 2);
   for (const line of agree) assert.match(line, /: the same, the same, the same$/);
