@@ -272,12 +272,15 @@ test("a key a page listens for on a game's element doesn't scroll the page; in a
   assert.equal(stopped(field, "ArrowLeft"), 0, "in a field the arrows move the caret");
 });
 
-test("a first draw past its time runs again once with more time, and one past that too stays stopped (I371)", async () => {
+test("a first draw past its time runs again once, and one past that too stays stopped (I371)", async () => {
   const call = (f: Value, ...a: Value[]) => (f as (...a: Value[]) => Value)(...a);
-  // A view that takes `ms` of steps: past a 20 ms limit, within 80 ms.
-  const slow = (ms: number) => () => { const end = performance.now() + ms; while (performance.now() < end) spendStep(); return "drawn"; };
-  const text = (ms: number) => ({ tag: HTML_V.text, fields: [slow(ms) as never] }) as Data;
-  const page = { tag: HTML_V.element, fields: ["div", toList([]), toList([text(40), text(400)])] } as Data;
+  // A view that takes `ms` of steps, then `again` ms once its first run
+  // made what it makes once (a page's constants): past a 20 ms limit, then
+  // within it. It runs again with the same time: with more, a view that
+  // never ends held the editor's thread longer (thread-probe).
+  const slow = (ms: number, again = ms) => { let first = true; return () => { const end = performance.now() + (first ? ms : again); first = false; while (performance.now() < end) spendStep(); return "drawn"; }; };
+  const text = (ms: number, again?: number) => ({ tag: HTML_V.text, fields: [slow(ms, again) as never] }) as Data;
+  const page = { tag: HTML_V.element, fields: ["div", toList([]), toList([text(40, 2), text(400)])] } as Data;
   const e = mountHtml(page, { cells: new Cells(), doc: fakeDoc(), call, within: 20 }) as FakeEl;
   const shown = () => e.kids.map((c) => c.textContent);
   assert.deepEqual(shown(), [STUCK, STUCK]);

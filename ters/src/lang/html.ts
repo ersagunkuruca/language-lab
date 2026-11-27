@@ -119,9 +119,6 @@ export function replayEvent(root: Node_, name: string, path: number[], at: Given
 // What a part of the page shows when its update ran out of steps: a
 // formula that never ends is typed Diverge, and this is the page handling it.
 export const STUCK = "didn't finish";
-// How many times the time a first draw that ran past it gets when it runs
-// again (I371).
-const AGAIN_TIMES = 4;
 // A frame's work past which the preview waits as long again (everyFrame).
 const HALVED_FROM_MS = 8;
 
@@ -257,9 +254,9 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
   // handler that stops reads it against its count before, since an update
   // run after it stopped (its cells' flush) can start a budget of its own.
   let timedOut = 0;
-  const budget = <T>(f: () => T, times = 1): T => {
+  const budget = <T>(f: () => T): T => {
     if (!m.within) return withSteps(steps, f);
-    const end = performance.now() + m.within * times;
+    const end = performance.now() + m.within;
     return withSteps(steps, f, () => performance.now() > end && ++timedOut > 0);
   };
   cells.around = (update) => budget(update);
@@ -272,14 +269,15 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
       // runs again when that lands (it read the cell that says so). One
       // that ran out of steps says so; it runs again when a cell it read
       // before stopping changes.
-      try { budget(run, AGAIN_TIMES ** tries); } catch (e) {
+      try { budget(run); } catch (e) {
         if (e instanceof OutOfSteps) {
           stuck();
           // A first draw past its time, not its steps, runs again once the
-          // page has drawn, with more time, once (I371): a slow machine,
-          // or the work a page does once when it starts (its constants,
-          // made the first time a view reads them), passed the time on
-          // the editor's thread, and nothing it read was going to change.
+          // page has drawn, once (I371): the work a page does once when it
+          // starts (its constants, made the first time a view reads them)
+          // passed the time on the editor's thread, and nothing it read was
+          // going to change. Its time is the same: with 4x the time, a view
+          // that never ends held the editor's thread 4 s (thread-probe).
           if (first && timedOut !== timed && tries < 1) {
             tries++;
             const cell = (again ??= cells.cell(0, "again"));
