@@ -37,6 +37,7 @@
     { "program": "moths-page", "label": "Page: moths, a swarm round the lamps", "folders": ["moths-page"], "page": true },
     { "program": "greenhouse-page", "label": "Page: Night watch, a greenhouse game", "folders": ["greenhouse-page"], "page": true },
     { "program": "flock-page", "label": "Page: flock, 3D boids", "folders": ["flock-page"], "page": true },
+    { "program": "rain-page", "label": "Page: rain, drops on the greenhouse glass", "folders": ["rain-page"], "page": true },
     { "program": "mnist-page", "label": "Page: digits, a network learning MNIST", "folders": ["mnist-page"], "page": true },
     { "program": "sheet", "label": "Bigger program: sheet, a spreadsheet", "folders": ["sheet"], "run": { "args": ["budget.txt"], "names": ["sheet"], "files": ["budget.txt"] } },
     { "program": "board", "label": "Bigger program: board, a task board page", "folders": ["compiler/gaps/board"] },
