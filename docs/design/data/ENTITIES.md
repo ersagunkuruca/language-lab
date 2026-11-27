@@ -138,8 +138,21 @@ then systems at once (G5).
 - **G1b.** Columns with presence: an `Optional` field of a record kept as
   columns stored as a bit per slot and a column of values, read in place
   by a match on it (columns.ts, C and JS first).
-- **G4.** Archetype tables, chosen by the planner when a measured program
-  pays for them.
+- **G4** (done). Archetype tables. compiler/src/pool-shapes.ts runs each
+  system's function on what each shape of item says (its `Optional`
+  parts there or not, the rest unknown) and tells the call the shapes it
+  touches: `updated in pool shaped`, `kept in pool shaped`, `pool items
+  shaped` (prelude, each meaning the word it was written as), and
+  `updated in pool keeping shapes` where the function surely gives every
+  item its own shape back. Only functions that surely finish and do
+  nothing else are told. A pool with such calls is stored as "tables"
+  (map-tree.ts): a slots table per shape, a key finding its table by the
+  slot it names, a changed shape moving the item after the walk. Tables
+  are picked only where a shaped call is (the ladder can't see the part
+  of n a shaped walk skips, so the costs tie). The greenhouse, 600 ticks
+  of 2000 moths, one thread: compiled JavaScript 3.98 → 3.02 s, wasi
+  2.69 → 2.31 s, native 1.06 → 0.95 s, as fast as the greenhouse split
+  into three pools by hand; see GAPS.md game round 2.
 - **G5.** Systems at once from their field reads and writes.
 
 ## Credits

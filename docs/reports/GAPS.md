@@ -4768,6 +4768,30 @@ big-capable Ints (`wrapped cell` 17%, `cell key` 9%), which is FL2,
 C267. The greenhouse's night is 18% shorter natively (its moths' nine
 cells and its wave adding fuse too); moths' barely moves.
 
+### Archetype tables (G4, 2026-11-27)
+
+The greenhouse's systems each touch one kind of Thing: the moths fly,
+the plants are nibbled and die. Each system's function is run on what
+each shape of Thing says (compiler/src/pool-shapes.ts), and the call is
+told the shapes it touches; the pool is then a table per shape
+(map-tree.ts "tables"), and a told walk visits only its tables. Same
+lines on every target. The bound was the greenhouse split into three
+pools by hand (compiled JS 20% faster, native 14%).
+
+| 600 ticks, 2,000 moths, median of 5 | slots | tables |
+|---|---|---|
+| `ters native`, one thread | 1.06 s | 0.95 s |
+| `ters wasi` | 2.69 s | 2.31 s |
+| `ters compile`, one thread | 3.98 s | 3.02 s |
+| `ters compile` | 4.02 s | 3.18 s |
+
+Two things made the tables slower than slots at first. A table's slots
+read out of the list of tables and put back left the old list holding
+them, so each removal copied its table; each change now walks the tables
+once, taking the slots out as it goes. And `items = pool items(w.things)`
+was still walked whole after both of its uses were told their shapes; a
+let's pool items no longer read is now nil.
+
 ## Round 20: strings, the instrument app's signal code (2026-11-22, C262)
 
 `compiler/gaps/strings` is the bigger-program round on the instrument app

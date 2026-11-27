@@ -54,6 +54,17 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "first by key": "@oo937jjod1tpn9v8v72s2nt1ve",
  // One pair of axes' products, every item's sum (contracted), which C works several sums at once (C306).
  "strided products": "@f997trq640jda04gv9sf8mte6k",
+ // A pool's systems told which shapes of item they touch, so a pool stored as a table per shape walks only those (compiler/src/pool-shapes.ts, G4).
+ "empty pool": "@72l9amq9f5hssrffvbjf886nla",
+ "updated in pool": "@i2s51728ap7jn6705g66r170f2",
+ "kept in pool": "@kolb4t333sebqjr07brfv68qng",
+ "pool items": "@l2rmhls0bj2hgeuji6gc73k43j",
+ "Pool shape": "@g85mk8301e0gmghq3bpn733rin",
+ "empty pool shaped": "@5lrliatuthoqk9ol59csopo0th",
+ "pool items shaped": "@hebhtqnmb66pstc0akscfm009d",
+ "updated in pool shaped": "@ce3trnak21krduqd46qpr6rs08",
+ "updated in pool keeping shapes": "@sourjqqk9f7cleioikprjit5at",
+ "kept in pool shaped": "@39bkrvt7phn9gj5h61qdociqu7",
 };
 
 // A definition copied by a pass (library-reps.ts copies the library's list

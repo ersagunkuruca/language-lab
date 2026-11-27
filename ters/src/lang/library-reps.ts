@@ -14,6 +14,23 @@
 // by the tree's shape, so such a program keeps the definition.
 
 import { COPIED_FROM, NODE_COPIED_FROM, originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM } from "./prelude-ids.ts";
+// These types and every type their fields name, through those (a pool's
+// tables, each of whose tables holds slots).
+function typesWithin(code: Code, types: Id[]): Id[] {
+  const seen = new Set<Id>(), todo = [...types];
+  while (todo.length) {
+    const t = todo.pop()!;
+    if (seen.has(t)) continue;
+    seen.add(t);
+    const td = code.nodes[(code.nodes[t] as NodeOf<"def"> | undefined)?.body ?? ""];
+    if (td?.kind !== "typedef") continue;
+    const named = (n: Id): void => { const x = code.nodes[n]; if (x?.kind === "tref") { todo.push(x.target); x.args.forEach(named); } else if (x?.kind === "tfun") [...x.params, x.result].forEach(named); };
+    for (const v of td.variants) for (const f of (code.nodes[v] as NodeOf<"variant">).fields) named((code.nodes[f] as NodeOf<"field">).type);
+  }
+  return [...seen];
+}
+// The pool's jobs told their shapes (compiler/src/pool-shapes.ts, G4).
+const SHAPED_JOBS = new Set(["updated in pool shaped", "updated in pool keeping shapes", "kept in pool shaped", "pool items shaped"].map((n) => PRELUDE_DEFS[n]));
 import { stableIds } from "../stable-ids.ts";
 import { bindsOf, children, ownerOfTypeParts, dependencies, dependenciesOfAll, layerOf, onLayer, freshId, idsMadeBy, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call, copyNodes, nodeEntries, withNodes, ownNodeIds, sameValue, litOrigin, idsPlace, moveIdsTo, nodesOver, changedOwn, derivedFrom } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -32,7 +49,7 @@ import { COMPANIONS, TOGETHER } from "./together.ts";
 import { keyGroups, trefGroup, type Groups } from "./map-groups.ts";
 import { ownLibraryHolders } from "./own-holders.ts";
 import { keptMap } from "../kept.ts";
-import { ARRAY_OPS, CELL_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS, TABLE_OPS } from "./std.ts";
+import { ARRAY_OPS, CELL_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, POOL, S, SET, SET_TYPE, SHOW_ANY, SIGS, TABLE_OPS } from "./std.ts";
 import { ARRAY, INT, STRING, Subst, type Type } from "./types.ts";
 import type { Pins } from "./signatures.ts";
 
@@ -336,7 +353,8 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
       const insiders = [...(info.options?.insiders ?? []), ...r.insiders];
       // A chosen row's own type that holds lists (a pool's slots) made the
       // program's own, so its lists are stored as the program's are.
-      const held = r.reps.some((x) => TOGETHER[x.of]) ? ownLibraryHolders(r.code, { ...checked, options: { ...checked.options, insiders } }, r.names, main, defs, r.reps.map((x) => x.type)) : null;
+      // With the types it holds (a pool's tables hold slots, G4).
+      const held = r.reps.some((x) => TOGETHER[x.of]) ? ownLibraryHolders(r.code, { ...checked, options: { ...checked.options, insiders } }, r.names, main, defs, typesWithin(r.code, r.reps.map((x) => x.type))) : null;
       // Those pins are dropped for the lists' choice on what this made, so
       // it checks those definitions by their bodies.
       const next = held ? { code: held.code, info: held.info, names: held.names, defs: held.own } : { code: r.code, info: { ...checked, options: { ...checked.options, insiders, ...(unpinnedNow() ? { pins: unpinnedNow()! } : {}) } }, names: r.names, defs };
@@ -573,7 +591,12 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       }
     }
     for (;;) {
-      const tree = choose(code, main, [spec, ...left], options.sound && ty === LIST ? (r) => r.name === "array of List" : undefined, [...asked.flatMap((r) => Object.keys(r.impl)), ...replaced(), ...edges], options.measured?.get(ty)).rep;
+      // A pool whose systems were told their shapes (compiler/src/pool-shapes.ts,
+      // G4) as a table per shape: the ladder can't write the part of n a
+      // shaped job walks there, so its costs tie with the slots'.
+      const opaque = [...asked.flatMap((r) => Object.keys(r.impl)), ...replaced(), ...edges];
+      const shapedPool = ty === POOL && uses(code, main, [spec, ...left], true, opaque).some((j) => SHAPED_JOBS.has(j));
+      const tree = choose(code, main, [spec, ...left], options.sound && ty === LIST ? (r) => r.name === "array of List" : shapedPool ? (r) => r.name === "tables" : undefined, opaque, options.measured?.get(ty)).rep;
       if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue types;
       // Lists as trees for the whole, where parts of it would have arrays
       // (machine's step loop): those parts as arrays, the rest as written,
