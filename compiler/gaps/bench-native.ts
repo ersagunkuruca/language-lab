@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { book as ledgerBook } from "./ledger.ts";
 import { book as chaptersBook } from "./chapters.ts";
+import { wasiImportsSource } from "../src/wasi-imports.ts";
 
 const root = join(import.meta.dirname, "../.."), lab = join(root, "ters/cli/ters.ts");
 const dir = mkdtempSync(join(tmpdir(), "bench-native-"));
@@ -42,7 +43,6 @@ int main(int argc, char **argv) {
 execFileSync(cc, ["-O2", "-o", join(dir, "rusage"), join(dir, "rusage.c")]);
 writeFileSync(join(dir, "wasi.mjs"), `import { readFileSync } from "node:fs";
 import { WASI } from "node:wasi"; ${wasiImportsSource}
-import { wasiImportsSource } from "../src/wasi-imports.ts";
 const [file, ...args] = process.argv.slice(2);
 const wasi = new WASI({ version: "preview1", args: [file, ...args], preopens: { ".": "." }, returnOnExit: true });
 const m = await WebAssembly.instantiate(await WebAssembly.compile(readFileSync(file)), wasiImports(wasi));
