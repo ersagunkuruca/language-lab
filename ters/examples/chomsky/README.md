@@ -9,13 +9,14 @@ ters run examples/chomsky [length]
 
 A grammar is a value: `grammar(name, start, rules)`, each rule a list of
 symbols rewritten to another, written as text such as
-`"S → aSb | ab"` (capital letters are variables). The program builds four,
-one at each level, and for each prints its level and its words up to a
+`"S → aSb | ab"` (capital letters are variables). The program builds five,
+one at each level and a second regular one, and for each prints its level and its words up to a
 length (6):
 
 | grammar | rules | level |
 |---|---|---|
 | a⁺b* | S → aS \| a \| aB; B → bB \| b | regular |
+| third from last is a | S → aS \| bS \| aA; A → aB \| bB; B → a \| b | regular |
 | aⁿbⁿ | S → aSb \| ab | context free |
 | aⁿbⁿcⁿ | S → aSBc \| abc; cB → Bc; bB → bb | context sensitive |
 | a^(2^n) | S → ACaB; Ca → aaC; CB → DB \| E; aD → Da; AD → AC; aE → Ea; AE → ε | unrestricted |
@@ -37,6 +38,15 @@ length (6):
   length bounds the search, and the checker gives `searched` the `Diverge`
   effect. `found within` runs it under `with fuel`, which turns that into
   `Choice`: a word is found, or nothing is known after so many rounds.
+
+- **Finite automata** (`automaton of`, L293b): a regular grammar's
+  automaton has a state per variable and one where the word is done.
+  Its run (`state after`) is a Choice too, one answer per way through a
+  word, so `count` of them (`accepting paths`) says how ambiguous it is.
+  The subset construction (`deterministic`) makes a state of each set of
+  states it can be in; "third from last is a" goes from 4 states to 8.
+  The automaton read back as a grammar (`grammar of automaton`) gives the
+  same words, and the program checks all four agree.
 
 So the line between decidable and semi-decidable shows in the types:
 

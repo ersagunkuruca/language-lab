@@ -1,6 +1,8 @@
-// examples/chomsky (L293a): grammars as data, one at each level of
+// examples/chomsky (L293a, L293b): grammars as data, one at each level of
 // Chomsky's hierarchy, each classed and its words listed; deciding a word
 // is total where no rule shrinks a form, and searched under fuel above.
+// A regular grammar's automaton, its deterministic one and the grammar
+// read back from it give the same words.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -38,9 +40,26 @@ test("chomsky: deciding is total up to context sensitive; the unrestricted searc
 
 test("chomsky: a word not derived is decided no below, and not found within the rounds above", () => {
   const s = session();
-  const g = (i: number) => `item at(grammars, ${i}, grammar("", "", nil))`;
-  assert.match(s.eval(`shown answer(in language(${g(2)}, form of("aabbcc"), 40.0))`), /"yes"/);
-  assert.match(s.eval(`shown answer(in language(${g(2)}, form of("aabbc"), 40.0))`), /"no"/);
-  assert.match(s.eval(`shown answer(in language(${g(3)}, form of("aaaa"), 40.0))`), /"yes"/);
-  assert.match(s.eval(`shown answer(in language(${g(3)}, form of("aaa"), 12.0))`), /"not found in 12 rounds"/);
+  const g = (name: string) => `item at(keep(grammars, (x) => x.name = "${name}"), 0, grammar("", "", nil))`;
+  assert.match(s.eval(`shown answer(in language(${g("aⁿbⁿcⁿ")}, form of("aabbcc"), 40.0))`), /"yes"/);
+  assert.match(s.eval(`shown answer(in language(${g("aⁿbⁿcⁿ")}, form of("aabbc"), 40.0))`), /"no"/);
+  assert.match(s.eval(`shown answer(in language(${g("a^(2^n)")}, form of("aaaa"), 40.0))`), /"yes"/);
+  assert.match(s.eval(`shown answer(in language(${g("a^(2^n)")}, form of("aaa"), 12.0))`), /"not found in 12 rounds"/);
+});
+
+test("chomsky: a regular grammar's automaton, its deterministic one and the grammar read back agree", () => {
+  const out = session().run("main", ["6"]);
+  assert.match(out, /third from last is a: regular\n/);
+  assert.match(out, /  automaton: 4 states, at most 1 way\(s\) through a word; deterministic: 8 states\n/);
+  const agree = out.match(/the grammar read back from the automaton: .*/g)!;
+  assert.equal(agree.length, 2);
+  for (const line of agree) assert.match(line, /: the same, the same, the same$/);
+});
+
+test("chomsky: an automaton's run is a Choice, its ways through a word counted", () => {
+  const s = session();
+  const g = `item at(keep(grammars, (x) => x.name = "third from last is a"), 0, grammar("", "", nil))`;
+  assert.match(s.eval(`accepting paths(automaton of(${g}), form of("babb"))`), /= 1 /);
+  assert.match(s.eval(`accepting paths(automaton of(${g}), form of("bbab"))`), /= 0 /);
+  assert.match(s.eval(`accepting paths(deterministic(automaton of(${g})), form of("babb"))`), /= 1 /);
 });
