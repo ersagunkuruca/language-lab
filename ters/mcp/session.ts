@@ -902,6 +902,9 @@ export class Session {
     let t = text.trim();
     const arm = this.code.nodes[target];
     if (arm?.kind === "arm") { target = arm.body; t = t.replace(/^(then|else)\s+/, ""); }
+    // An else if of a chain is shown on a line of its own, `else if …`
+    // (E322): that line is the inner if's, and its else is the arm's word.
+    else if (/^else\s/.test(t) && this.code.nodes[parentOf(this.code, target)?.parent ?? ""]?.kind === "arm") t = t.replace(/^else\s+/, "");
     const def = this.defOf(target);
     if (!def || target === def) throw new Error("replace a part of a definition, not the definition");
     return this.apply(def, () => {
