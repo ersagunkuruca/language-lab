@@ -2,7 +2,10 @@
 // Chomsky's hierarchy, each classed and its words listed; deciding a word
 // is total where no rule shrinks a form, and searched under fuel above.
 // A regular grammar's automaton, its deterministic one and the grammar
-// read back from it give the same words.
+// read back from it give the same words. A context-free grammar's pushdown
+// automaton accepts its words, as many ways as it has parse trees (L293c).
+// A linear bounded automaton decides aⁿbⁿcⁿ; a Turing machine for a's in
+// powers of two runs under fuel (L293d).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -25,7 +28,7 @@ test("chomsky: each grammar's level and its words up to 6", () => {
   assert.match(out, /a\^\(2\^n\): unrestricted\n/);
   assert.match(out, /  words up to 6: ab aabb aaabbb\n/);
   assert.match(out, /  words up to 6: abc aabbcc\n/);
-  assert.match(out, /  words up to 6 found in 40 rounds each: aa aaaa\n/);
+  assert.match(out, /  words up to 6 found in 40 rounds each: a aa aaaa\n/);
   assert.match(out, /exit 0/);
 });
 
@@ -44,7 +47,7 @@ test("chomsky: a word not derived is decided no below, and not found within the 
   assert.match(s.eval(`shown answer(in language(${g("aⁿbⁿcⁿ")}, form of("aabbcc"), 40.0))`), /"yes"/);
   assert.match(s.eval(`shown answer(in language(${g("aⁿbⁿcⁿ")}, form of("aabbc"), 40.0))`), /"no"/);
   assert.match(s.eval(`shown answer(in language(${g("a^(2^n)")}, form of("aaaa"), 40.0))`), /"yes"/);
-  assert.match(s.eval(`shown answer(in language(${g("a^(2^n)")}, form of("aaa"), 12.0))`), /"not found in 12 rounds"/);
+  assert.match(s.eval(`shown answer(in language(${g("a^(2^n)")}, form of("aaa"), 12.0))`), /"not found in 12 steps"/);
 });
 
 test("chomsky: a regular grammar's automaton, its deterministic one and the grammar read back agree", () => {
@@ -62,4 +65,35 @@ test("chomsky: an automaton's run is a Choice, its ways through a word counted",
   assert.match(s.eval(`accepting paths(automaton of(${g}), form of("babb"))`), /= 1 /);
   assert.match(s.eval(`accepting paths(automaton of(${g}), form of("bbab"))`), /= 0 /);
   assert.match(s.eval(`accepting paths(deterministic(automaton of(${g})), form of("babb"))`), /= 1 /);
+});
+
+test("chomsky: a context-free grammar's pushdown automaton accepts its words, once for each parse tree", () => {
+  const out = session().run("main", ["6"]);
+  assert.match(out, /sums: context free\n(  .*\n)*  most parse trees of a word up to 6: 2 \(a\+a\+a\)\n/);
+  assert.match(out, /sums by precedence: context free\n(  .*\n)*  most parse trees of a word up to 6: 1 /);
+  const accepts = out.match(/moves; words up to 6 it accepts: .*/g)!;
+  assert.equal(accepts.length, 3);
+  for (const line of accepts) assert.match(line, /: the same$/);
+  const s = session();
+  const g = (name: string) => `item at(keep(grammars, (x) => x.name = "${name}"), 0, grammar("", "", nil))`;
+  const trees = (name: string, w: string) => s.eval(`ways to accept(pushdown of(${g(name)}), ${g(name)}, form of("${w}"))`);
+  assert.match(trees("sums", "a+a+a+a"), /= 5 /);
+  assert.match(trees("sums by precedence", "a+a+a+a"), /= 1 /);
+  assert.match(trees("sums", "a+a+"), /= 0 /);
+});
+
+test("chomsky: the linear bounded automaton decides, the Turing machine only recognises, and both agree with their grammars", () => {
+  const out = session().run("main", ["6"]);
+  assert.match(out, /  linear bounded automaton: 17 lines; words up to 6 it accepts: the same\n/);
+  assert.match(out, /  Turing machine: 16 lines; words up to 6 it accepts in 300 steps: the same\n/);
+  const s = session();
+  assert.match(s.eval(`bounded accepts(equal counts machine, form of("aabbcc"))`), /= true /);
+  assert.match(s.eval(`bounded accepts(equal counts machine, form of("abcabc"))`), /= false /);
+  assert.match(s.eval(`shown answer(accepts within(doubling machine, form of("aaaa"), 300.0))`), /"yes"/);
+  assert.match(s.eval(`shown answer(accepts within(doubling machine, form of("aaa"), 100.0))`), /"not found in 100 steps"/);
+  const defs = s.defs();
+  const typeOf = (name: string) => new RegExp(`^\\w+  ${name} : (.*)$`, "m").exec(defs)?.[1];
+  assert.equal(typeOf("ran"), "(Turing machine, Snapshot) -[Diverge]-> Bool");
+  assert.equal(typeOf("bounded accepts"), "(Turing machine, List Symbol) -> Bool");
+  assert.equal(typeOf("accepts within"), "(Turing machine, List Symbol, Float64) -> Answer");
 });

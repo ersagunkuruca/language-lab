@@ -9,8 +9,8 @@ ters run examples/chomsky [length]
 
 A grammar is a value: `grammar(name, start, rules)`, each rule a list of
 symbols rewritten to another, written as text such as
-`"S → aSb | ab"` (capital letters are variables). The program builds five,
-one at each level and a second regular one, and for each prints its level and its words up to a
+`"S → aSb | ab"` (capital letters are variables). The program builds seven,
+one at each level, a second regular one and two more context-free ones, and for each prints its level and its words up to a
 length (6):
 
 | grammar | rules | level |
@@ -18,8 +18,10 @@ length (6):
 | a⁺b* | S → aS \| a \| aB; B → bB \| b | regular |
 | third from last is a | S → aS \| bS \| aA; A → aB \| bB; B → a \| b | regular |
 | aⁿbⁿ | S → aSb \| ab | context free |
+| sums | E → E+E \| E*E \| a | context free |
+| sums by precedence | E → E+T \| T; T → T*F \| F; F → a | context free |
 | aⁿbⁿcⁿ | S → aSBc \| abc; cB → Bc; bB → bb | context sensitive |
-| a^(2^n) | S → ACaB; Ca → aaC; CB → DB \| E; aD → Da; AD → AC; aE → Ea; AE → ε | unrestricted |
+| a^(2^n) | S → a \| ACaB; Ca → aaC; CB → DB \| E; aD → Da; AD → AC; aE → Ea; AE → ε | unrestricted |
 
 ## How it goes
 
@@ -48,12 +50,37 @@ length (6):
   The automaton read back as a grammar (`grammar of automaton`) gives the
   same words, and the program checks all four agree.
 
+- **Pushdown automata** (`pushdown of`, L293c): a context-free grammar's
+  automaton has one state; a variable on top of the stack is replaced by
+  one of its right sides, and a terminal on top is taken off when the
+  word has it next. A run is a Choice again, and its runs are the
+  grammar's leftmost derivations, so `count` of them (`ways to accept`)
+  is how many parse trees a word has: a+a+a+a has 5 in "sums" (each way
+  to bracket it) and 1 in "sums by precedence". A stack longer than
+  what is left of the word is given up, which is right when no rule
+  shrinks a form, and a budget of moves makes the search end.
+
+- **Turing machines** (`Turing machine`, L293d): a table from a state
+  and the symbol under the head to a state, a symbol to write and a
+  move. `ran` runs one until it stops, which may be never: `Diverge`. A
+  linear bounded automaton keeps its head between end markers, so it has
+  finitely many configurations, and a run longer than that has repeated
+  one and never stops; `bounded accepts` counts down from that number,
+  so it decides, with no `Diverge`. `equal counts machine` is one for
+  aⁿbⁿcⁿ, and `doubling machine`, after Sipser's machine for 0^(2^n),
+  runs right for ever where his rejects, so it only recognises its
+  language; `accepts within` runs it under `with fuel`. Each agrees with
+  its grammar on the words up to the length.
+
 So the line between decidable and semi-decidable shows in the types:
 
 ```
 words up to : (Grammar, Int) -> List (List Symbol)
 searched    : (Grammar, List Symbol, Set (List Symbol), Set (List Symbol)) -[Diverge]-> Answer
 found within: (Grammar, List Symbol, Float64) -> Answer
+ran         : (Turing machine, Snapshot) -[Diverge]-> Bool
+bounded accepts: (Turing machine, List Symbol) -> Bool
+accepts within : (Turing machine, List Symbol, Float64) -> Answer
 main        : (List Text) -[Console]-> Unit
 ```
 
@@ -69,5 +96,8 @@ same, and so does docs/language/CREDITS.md.
 - Adapted: the a^(2^n) grammar is the example in John Hopcroft and
   Jeffrey Ullman, *Introduction to Automata Theory, Languages, and
   Computation* (1979).
+- Adapted: the Turing machine for a's in powers of two follows the one
+  for 0^(2^n) in Michael Sipser, *Introduction to the Theory of
+  Computation* (1997), Example 3.7, rejecting by running for ever.
 - Influence: JFLAP (Susan H. Rodger, Duke University), where grammars and
   machines are objects you convert between and test against each other.
