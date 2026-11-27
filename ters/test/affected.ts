@@ -157,6 +157,17 @@ const secondsOf = (t: string) => map?.tests[t]?.seconds ?? times[t] ?? 10;
 // Before a merge, a test over this many seconds stays out of the cover
 // unless the change edits it: what only it runs is left to Check main.
 const LONG = 60;
+// The tests that broke main on 2026-11-27 run before every merge of code,
+// however long they take and whatever the map says they reach (Ersagun
+// 2026-11-27): choices.test (6 minutes) read examples' choices that a
+// change to how pools and lists are held moved, module-decisions.test a
+// count of calls, map-tree.test the prelude's trees, kept-items.test the
+// greenhouse's keeps, the mnist tests the native products.
+const BREAKERS = ["ters/test/choices.test.ts", "compiler/test/kept-items.test.ts", "ters/test/module-decisions.test.ts", "ters/test/map-tree.test.ts", "compiler/test/mnist.test.ts", "ters/test/mnist-page.test.ts"];
+const breakers = code.length ? BREAKERS.filter((t) => tests.includes(t)) : [];
+// Before a merge, seconds of wall time for the tests a change reaches
+// beyond the cover, at as many files at once as there are cores.
+const BUDGET = 600;
 let chosen: string[];
 let deferred: string[] = [];
 let reasons = new Map<string, string[]>();
@@ -183,7 +194,7 @@ else if (map && (sinceMap || due)) {
   chosen = [...why.keys()].sort();
   reasons = why;
 }
-else if (!map) chosen = tests.filter(byImports);
+else if (!map) chosen = [...new Set([...tests.filter(byImports), ...(full ? [] : breakers)])].sort();
 else {
   const from = git("merge-base", base, head ?? "HEAD");
   const change = changeFrom(top, from, head);
@@ -220,7 +231,17 @@ else {
     const sample: string[] = [];
     let budget = 120;
     for (const t of named) if (secondsOf(t) <= budget) { sample.push(t); budget -= secondsOf(t); }
-    chosen = [...new Set([...cover(candidates, secondsOf), ...own, ...sample])].sort();
+    // Then every other test it reaches, by a line it ran or a file it
+    // read (Ersagun 2026-11-27, after main was red 7.5 of 14 hours from
+    // tests the cover had left out: kept-items ran G25a's changed lines as
+    // pool-shapes.test did, and only it read the lamps' keep). Quickest
+    // first while the whole run fits in ten minutes on this machine's
+    // cores; the ones left run after the merge, in Check main.
+    const first = [...new Set([...cover(candidates, secondsOf), ...own, ...sample, ...breakers])];
+    let room = BUDGET * availableParallelism() - first.reduce((n, t) => n + secondsOf(t), 0);
+    const more = [...candidates.keys()].filter((t) => !first.includes(t)).sort((a, b) => secondsOf(a) - secondsOf(b) || a.localeCompare(b));
+    for (const t of more) { if (secondsOf(t) > room) break; first.push(t); room -= secondsOf(t); }
+    chosen = first.sort();
     deferred = exact.filter((t) => !chosen.includes(t));
   }
 }
@@ -243,7 +264,7 @@ const frames = all || setup || code.some((f) => framesInputs.has(f));
 const SLOW_CAP = 5;
 const slowPath = join(top, "ters/test/slow.json");
 const slow: Record<string, number> = existsSync(slowPath) ? (JSON.parse(readFileSync(slowPath, "utf8")) as { files: Record<string, number> }).files : {};
-const left = full || map ? [] : chosen.filter((t) => t in slow && !code.includes(t));
+const left = full || map ? [] : chosen.filter((t) => t in slow && !code.includes(t) && !breakers.includes(t));
 let fast = chosen.filter((t) => !left.includes(t));
 if (browserOnly) fast = [];
 if (shard) {
@@ -358,7 +379,7 @@ console.log(all ? `everything, every sweep in full${shard ? `: share ${shard[0]}
 for (const r of runs) console.log(`  ${r.what}`);
 if (!browser && (page || gpu || sound)) console.log("  (the browser tests it reaches run tonight, or now with --browser)");
 if (left.length) console.log(`  (${left.length} slow file${left.length === 1 ? "" : "s"} it reaches run after the merge, in Check main, or now with --full)`);
-if (map && !all && !setup) console.log(`  by the test map: ${chosen.length} file${chosen.length === 1 ? "" : "s"} run${chosen.length === 1 ? "s" : ""} every changed line${deferred.length ? `; ${deferred.length} more it reaches (by the map, or by imports for tests not recorded yet) run after the merge, in Check main, or now with --full` : ""}`);
+if (map && !all && !setup) console.log(`  by the test map: ${chosen.length} file${chosen.length === 1 ? "" : "s"} run${chosen.length === 1 ? "s" : ""} every changed line${breakers.length ? ", main's breakers," : ""} and what else fits${deferred.length ? `; ${deferred.length} more it reaches (by the map, or by imports for tests not recorded yet) run after the merge, in Check main, or now with --full` : ""}`);
 if (listOnly && argv.includes("--why")) for (const t of chosen) console.log(`    ${t} (${secondsOf(t)} s): ${(reasons.get(t) ?? ["new or edited"]).slice(0, 4).join(", ")}${(reasons.get(t)?.length ?? 0) > 4 ? ", …" : ""}`);
 if (!runs.length) console.log("  nothing to test");
 if (listOnly) process.exit(0);
