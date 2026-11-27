@@ -1,0 +1,4 @@
+{
+  "about": "Seeds of compiler/test/fuzz.test.ts (C101) kept because a run found a difference at them (T18b). Each: the seed, the date found, the row that fixes it. fuzz.test.ts runs seed 1 and each of these; remove one once its row is done and the definition it showed has its own test.",
+  "seeds": []
+}

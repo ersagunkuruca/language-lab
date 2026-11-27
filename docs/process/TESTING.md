@@ -490,3 +490,5 @@ generated tests with [Ephyra](https://github.com/datadog-labs/ephyra)'s. Rows T1
 T18g. T18a: `node ters/test/reach.ts [test]` prints, from the test map, how much of
 `compiler/src` and `ters/src/lang` a test runs next to all tests, by file, and the
 files it never enters (default: the generated programs, 65% and 45% on 11-27).
+T18b: the Nightly's `seed` job runs the generated programs at the night's seed; a seed that
+finds a difference goes into `compiler/test/fuzz-seeds.json`, replayed by every run.
