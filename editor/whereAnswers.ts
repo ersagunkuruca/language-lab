@@ -17,8 +17,12 @@ import { dropNode, nodeIds } from "../ters/src/model.ts";
 export type Answer = [gpu: string | null, native: string | null];
 
 export function whereAnswers(code: Code, info: Info, names: Names, only: Id[]): [Id, ...Answer][] {
-  const refused = (o: object): Map<Id, string> => {
-    try { return new Map(lowerScalar(code, info, names, only, o).refused); } catch (err) { return new Map(only.map((d) => [d, (err as Error).message])); }
+  // A lowering that throws (defunc.ts on a closure it can't make a record
+  // of) is asked again of each definition alone, so each answer is its
+  // own whichever others were asked with it.
+  const refused = (o: object, ds = only): Map<Id, string> => {
+    try { return new Map(lowerScalar(code, info, names, ds, o).refused); }
+    catch (err) { return ds.length > 1 ? new Map(ds.flatMap((d) => [...refused(o, [d])])) : new Map(ds.map((d) => [d, (err as Error).message])); }
   };
   // The native answer after the GPU's reuses its first steps (I315).
   const gpu = refused({ records: true, shader: true }), native = refused({ data: true, bake: false });

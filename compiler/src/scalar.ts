@@ -1249,6 +1249,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // value, a closure of nothing: one that gives what was written, or the
     // formula.
     if (opts.cells && t.id === CELL) { const a = t.args[0] && stype(t.args[0], inside); return a ? cellBox(a) : null; }
+    // A List in a shader (G15a2, LIGHTS.md) is held as an Array: a shader
+    // has no heap for its cells. One the shader is given (a draw's capture)
+    // is the page's array; a fold reads it by position.
+    if (opts.shader && !opts.data && t.id === LIST) return stype({ t: "con", id: ARRAY, args: t.args }, inside);
     if ((opts.data || opts.shader) && t.id === ARRAY) {
       const key = `${t.id}<${t.args.map(show).join(",")}>`;
       if (arrays.has(key)) return arrays.get(key)!;
@@ -1727,7 +1731,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           // job's inputs; there is no List to make or read.
           const at = target === ARRAY_OPS.of || target === ARRAY_OPS.empty || target === ARRAY_OPS.push ? id : n.args[0], a = stype(zonk(at));
           if (!a || !isArray(a)) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(at))}`);
-          if (target === ARRAY_OPS.items) throw new Refused("takes an array's items as a List (a shader has no lists)");
+          // A shader holds a List as an Array (G15a2): an array's items are
+          // that array.
+          if (target === ARRAY_OPS.items) return expr(n.args[0], env, f, tail);
           // The two ends (C30d) at fixed sizes (C66): the first item is
           // item 0, no answer when empty; the rest is one shorter (the empty
           // array's is itself), a push at the front one longer.
@@ -2385,6 +2391,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         return { k: "if", cond: expr(n.scrutinee, env, f, false), then: expr(arm(TRUE), env, f, tail), else: expr(arm(FALSE), env, f, tail), t };
       }
       case "fold": {
+        if (!opts.data && opts.shader) { const st = stype(zonk(n.scrutinee)); if (st && isArray(st)) return shaderFold(n, id, st, env, f, tail); }
         if (!opts.data) throw new Refused("folds over data (needs a heap)");
         return fold(n, id, env, f, tail);
       }
@@ -5212,6 +5219,41 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // Called: the array, 0, its length, the inputs, op's identity.
     const al = f.locals.push(array) - 1, a: SExpr = { k: "local", i: al };
     return { k: "let", i: al, value: s0.args[0], body: { k: "call", fn: gi, args: [a, { k: "int", v: 0n }, { k: "rt", fn: `array.length.a${array.index}`, args: [a] }, ...inputs.map((y) => expr(y, env, f, false)), { k: "bool", v: op !== "or" }, ...free.map((b): SExpr => ({ k: "local", i: env.get(b)! }))], tail } };
+  }
+  // A fold over a List held as an array in a shader (G15a2): as
+  // arrayItems, a loop over the items by position from the last back, the
+  // folded rest so far carried, so the result is the fold's in its order.
+  // In the shader's own arithmetic (32-bit Ints); each position read is inside.
+  function shaderFold(n: NodeOf<"fold">, id: Id, array: AType, env: Map<Id, number>, f: SFunc, tail: boolean): SExpr {
+    const result = stype(zonk(id));
+    if (!result) throw new Refused(`has a fold whose value is ${OTHER}`);
+    const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
+    const nil = arms.find((a) => a.variant === NIL), cons = arms.find((a) => a.variant === CONS);
+    if (!nil || !cons || arms.length !== 2) throw new Refused("folds over a list without one arm for nil and one for cons");
+    if (cons.binds[1] && refsIn(cons.body).includes(cons.binds[1]!)) throw new Refused("folds over a list reading the rest of it as a list (a shader holds a list as an array)");
+    const free = [...new Set(arms.flatMap((a) => refsIn(a.body)))].filter((b) => env.has(b));
+    const caps = free.map((b) => f.locals[env.get(b)!]);
+    const params: LType[] = [array, "int32", result, ...caps];
+    const g: SFunc = { def: cons.id, name: `${f.name}.fold.items`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const gi = funcs.push(g) - 1;
+    let inner = new Map(free.map((b, j) => [b, 3 + j]));
+    const k = g.locals.push("int32") - 1, x = g.locals.push(array.item) - 1;
+    if (cons.binds[0]) inner = new Map(inner).set(cons.binds[0]!, x);
+    if (cons.results[1]) inner = new Map(inner).set(cons.results[1]!, 2);
+    const a: SExpr = { k: "local", i: 0 }, left: SExpr = { k: "local", i: 1 };
+    g.body = {
+      k: "if", t: result, cond: { k: "op", op: "ieq", args: [left, { k: "int", v: 0n }] }, then: { k: "local", i: 2 },
+      else: {
+        k: "let", i: k, value: { k: "op", op: "isub", args: [left, { k: "int", v: 1n }] },
+        body: {
+          k: "let", i: x, value: { k: "rt", fn: `array.get.a${array.index}`, args: [a, { k: "local", i: k }] },
+          body: { k: "call", fn: gi, args: [a, { k: "local", i: k }, expr(cons.body, inner, g, false), ...free.map((_, j): SExpr => ({ k: "local", i: 3 + j }))], tail: true },
+        },
+      },
+    };
+    if (fails(g.body, funcs)) g.partial = true;
+    const al = f.locals.push(array) - 1, xs: SExpr = { k: "local", i: al };
+    return { k: "let", i: al, value: expr(n.scrutinee, env, f, false), body: { k: "call", fn: gi, args: [xs, { k: "rt", fn: `array.length.a${array.index}`, args: [xs] }, expr(nil.body, env, f, false), ...free.map((b): SExpr => ({ k: "local", i: env.get(b)! }))], tail } };
   }
   // A fold over `items of array(a)` whose arms don't use the rest of the
   // list itself, as `characters` above: no list and no stack, the items

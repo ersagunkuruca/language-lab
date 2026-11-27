@@ -1,7 +1,7 @@
 # rain-page: Rain
 
 Rain on the greenhouse glass at night: 20,000 drops sliding down it, the
-greenhouse dark behind with a lamp glowing. Drag across the glass to wipe
+greenhouse dark behind with three lamps glowing. Drag across the glass to wipe
 the drops away; new ones run in from the top. Closer looks at the glass's
 middle two, then four times as close, then at the whole glass again; at
 four times most drops are outside the picture, which is what culling
@@ -24,6 +24,12 @@ five words, and the page runs it there once the GPU is the quicker
 (G12d: its drops are lists, so its map is sent away). On SwiftShader's
 WebGPU, which runs on the CPU, it never is. Each tick still reads the
 drops back. Keeping the drops on the GPU between ticks is G13.
+
+The lamps are a list of three records, made each tick as they flicker,
+and the glass's fragment function sums their glow over the list (G15a,
+LIGHTS.md). The list goes to the GPU as a storage buffer, its length then
+each lamp's three numbers, and the sum is a loop over it in WGSL, in the
+list's order, so one shader serves any number of lamps.
 
 Credits: random numbers by the ZX81's generator (Sinclair Research, 1981);
 a fixed step after Glenn Fiedler's Fix Your Timestep (2004).

@@ -395,7 +395,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
       kids(e).forEach(walk);
       // Every array the printer will need the size of.
       if ((e.k === "if" || e.k === "budget") && isArray(e.t)) szOf(locals, e);
-      if (e.k === "rt" && /^array\.(push|pushFront|rest|length|at)\./.test(e.fn)) szOf(locals, e.args[0]);
+      if (e.k === "rt" && /^array\.(push|pushFront|rest|length|at|get)\./.test(e.fn)) szOf(locals, e.args[0]);
       // Every instance a call runs. Calling itself as the last step is a
       // loop, which reuses its inputs, so their sizes must stay the same.
       if (e.k === "call") {
@@ -772,8 +772,16 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
             pre.push(`${d}let ${a} = ${bare(ex(e.args[0], pre, d))};`);
             return n ? `${tname(at, n - 1)}(${Array.from({ length: n - 1 }, (_, j) => `${a}[${j + 1}]`).join(", ")})` : a;
           }
-          const r = op === "length" || op === "at" ? givenOf(e.args[0]) : null;
+          const r = op === "length" || op === "at" || op === "get" ? givenOf(e.args[0]) : null;
           if (r !== null && op === "length") return opts.given!.length(r);
+          // A position known to be inside (a fold's, G15a2): read, no flag.
+          if (op === "get") {
+            const k = temp();
+            if (r !== null) { pre.push(`${d}let ${k} = ${bare(ex(e.args[1], pre, d))};`); return `${opts.given!.at(r)}(max(${k}, 0i))`; }
+            const n = szOf(L, e.args[0]), a = temp();
+            pre.push(`${d}var ${a} = ${bare(ex(e.args[0], pre, d))};`, `${d}let ${k} = ${bare(ex(e.args[1], pre, d))};`);
+            return n ? `${a}[clamp(${k}, 0i, ${n - 1}i)]` : `${tname(at.item)}()`;
+          }
           if (r !== null) {
             // Past the end, no answer, as at a size known here.
             const k = temp(), n = temp();
