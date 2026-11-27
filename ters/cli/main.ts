@@ -708,7 +708,7 @@ const writtenChoices = withModulesHeld(readFrom ? readChoices(readFileSync(readF
 const heldHere = (() => { try { return heldOf(writtenChoices); } catch (e) { fail((e as Error).message); } })();
 // And the placements held on the main thread (L280h), for every lowering.
 const placesHeld = heldPlaces(writtenChoices), holdsPlaces = Object.values(placesHeld).some((xs) => xs.length);
-const onMainThread = async (h: HeldPlaces) => { const s = await import("../../compiler/src/scalar.ts"); s.keepOnMainThread(h.js, h.c); s.shareAlways(h.workers, h.threads, h.page, h.runs, h.cRuns, h.pool); s.holdNeighbours(h.near); };
+const onMainThread = async (h: HeldPlaces) => { const s = await import("../../compiler/src/scalar.ts"); s.keepOnMainThread(h.js, h.c); s.shareAlways(h.workers, h.threads, h.page, h.runs, h.cRuns, h.pool); s.holdNeighbours(h.near); (await import("../../compiler/src/gpu-maps.ts")).allowClose(h.close); };
 if (holdsPlaces) await onMainThread(placesHeld);
 const answered = answeredHere(load(path)), measuredHere = (() => { try { return measuredOf(answered, writtenChoices); } catch (e) { fail((e as Error).message); } })();
 const loaded = { ...answered, ...(heldHere.size ? { held: heldHere } : {}), ...(measuredHere.size ? { measured: measuredHere } : {}) };
@@ -749,7 +749,10 @@ async function places(q: { code: Code; info: Info; names: Names }, root: Id): Pr
   const { lowerCore: lower } = await import("../../compiler/src/core-js.ts"), { gpuMaps } = await import("../../compiler/src/gpu-maps.ts");
   let ir: ReturnType<typeof lower>;
   try { ir = lower(q.code, q.info, q.names, [root]); } catch { return []; }
-  return [...placeLines(ir, new Set(Object.keys(ir.awayMaps ? gpuMaps(ir) : {}).map(Number)), q.names, undefined, root), ...nearLines(ir, q.names)];
+  // Each site with a kernel, and those whose kernel is only close (G12).
+  const kernels = Object.entries(ir.awayMaps ? gpuMaps(ir, "all") : {});
+  const sites = (close: boolean) => new Set(kernels.filter(([, k]) => !!k.close === close).map(([s]) => Number(s)));
+  return [...placeLines(ir, sites(false), q.names, undefined, root, sites(true)), ...nearLines(ir, q.names)];
 }
 // And where a command-line program's work runs in C (`ters native`): on
 // its threads, the program stored as C stores it.
