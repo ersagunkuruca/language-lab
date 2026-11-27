@@ -78,12 +78,14 @@ G12c's `GPU close` where a person held it so).
 
 ## Steps
 
-- **G13a**: find the lists that can stay, per record field (a pass beside
-  pool-shapes.ts), and say so in the program's decisions as a placement
-  entry (`… drops: GPU; among CPU, GPU`), so a person can hold one on the
-  CPU.
+- **G13a** (done, gpu-resident.ts): find the lists that can stay, per
+  record field (a pass beside pool-shapes.ts).
 - **G13b**: `GpuItems` in branches-rt.ts. A map gives one and takes one,
-  with the given-back count waited for and the fix-up on the CPU.
+  with the given-back count waited for and the fix-up on the CPU. The
+  program's decisions say so as a placement entry (`Pane's drops: GPU
+  between ticks; among CPU, GPU between ticks`), so a person can hold one
+  on the CPU. The entry waits for this step so it never names a place the
+  list isn't kept.
 - **G13c**: a draw takes a `GpuItems` as its instances (gpu-frame.ts). The
   kernel's word layout is a draw's instance layout when the vertex reads
   every leaf. Otherwise the draw reads the leaves it needs by their place
