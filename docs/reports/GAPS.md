@@ -4817,6 +4817,12 @@ too, with the pool's columns and items by shape made to cross, each tick
 copies the 2,000 moths to every worker and their answers back, 7 ms
 against the flight's 3.4 ms in turn.
 
+G25a: the moths were kept from the pool's items each tick by whether
+they have a velocity, a keep that, told only the shapes with one, keeps
+them all; it is now dropped (pool-shapes.ts). Native 1.15 → 0.90 s on one
+thread and 0.73 → 0.65 s on four (median of 9 on a busier machine than
+the table's), compiled JS 3.34 → 3.21 s.
+
 ## Round 20: strings, the instrument app's signal code (2026-11-22, C262)
 
 `compiler/gaps/strings` is the bigger-program round on the instrument app

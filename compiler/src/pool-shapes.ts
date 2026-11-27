@@ -49,10 +49,10 @@ const MOST_PARTS = 6;
 // The record types a pool holds, with their Optional parts.
 interface Shaped { type: Id; variant: Id; fields: Id[]; parts: number[] }
 // A call told its shapes: where it is, what it becomes.
-interface Told { at: Id; kind: "updated" | "kept" | "items" | "empty"; type: Id; pool?: Id; fn?: Id; shapes: number[]; keep?: Id; copy?: boolean; alike?: boolean }
+interface Told { at: Id; kind: "updated" | "kept" | "items" | "empty"; type: Id; pool?: Id; fn?: Id; shapes: number[]; keep?: Id; copy?: boolean; alike?: boolean; all?: boolean }
 
 // `told`: the calls told their shapes, by kind, each with its shapes.
-export function poolShapes(code: Code, info: Info, names: Names, own: Id[], opts: Options): { code: Code; info: Info; names: Names; made: Id[]; told: { kind: Told["kind"]; shapes: number[]; alike: boolean }[] } | null {
+export function poolShapes(code: Code, info: Info, names: Names, own: Id[], opts: Options): { code: Code; info: Info; names: Names; made: Id[]; told: { kind: Told["kind"]; shapes: number[]; alike: boolean; all: boolean }[] } | null {
   if (!UPDATED || !KEPT || !ITEMS || !KEEP || !EMPTY || !UPDATED_S || !KEPT_S || !ITEMS_S || !EMPTY_S || !POOL_SHAPE || !UPDATED_A) return null;
   const nodeAt = (id: Id): Node | undefined => code.nodes[id] ?? PRELUDE.code.nodes[id];
   const shapeVariant = (nodeAt((nodeAt(POOL_SHAPE) as NodeOf<"def">).body!) as NodeOf<"typedef">).variants[0];
@@ -170,18 +170,21 @@ export function poolShapes(code: Code, info: Info, names: Names, own: Id[], opts
   };
   // The shapes for which `skip` doesn't hold of what f gives, and whether
   // f surely gives each of those an item of its own shape back.
-  const shapesWhere = (sh: Shaped, f: Id, skip: (v: V) => boolean): { shapes: number[]; alike: boolean } | null => {
+  // `all`: a test surely true for every shape it is told (keep's: it keeps
+  // them all).
+  const shapesWhere = (sh: Shaped, f: Id, skip: (v: V) => boolean): { shapes: number[]; alike: boolean; all: boolean } | null => {
     const lam = lambdaOf(f);
     if (!lam || !pure(f)) return null;
     const shapes: number[] = [];
-    let alike = true;
+    let alike = true, all = true;
     for (let s = 0; s < 1 << sh.parts.length; s++) {
       const v = run(sh, s, lam.body, new Map([[lam.params[0], { k: "item" } as V]]), 0);
       if (skip(v)) continue;
       shapes.push(s);
       if (!(v.k === "item" || (v.k === "made" && v.parts.every((x, j) => x === ((s & (1 << j)) !== 0))))) alike = false;
+      if (!(v.k === "bool" && v.v)) all = false;
     }
-    return { shapes, alike };
+    return { shapes, alike, all };
   };
 
   // ---- The calls.
@@ -265,8 +268,8 @@ export function poolShapes(code: Code, info: Info, names: Names, own: Id[], opts
       if (bound !== undefined && !readsOnly(inner.args[0])) continue;
       const sh = itemOf(zonk(inner.args[0]));
       if (!sh) continue;
-      const shapes = shapesWhere(sh, n.args[1], (v) => v.k === "bool" && !v.v)?.shapes;
-      if (shapes) told.push({ at: bound !== undefined ? given!.id : inner.id, kind: "items", type: sh.type, pool: inner.args[0], shapes, keep: id, copy: bound !== undefined });
+      const w = shapesWhere(sh, n.args[1], (v) => v.k === "bool" && !v.v);
+      if (w) told.push({ at: bound !== undefined ? given!.id : inner.id, kind: "items", type: sh.type, pool: inner.args[0], shapes: w.shapes, keep: id, copy: bound !== undefined, all: w.all });
     }
   }
   // Worth it only where some call leaves a shape out.
@@ -307,11 +310,11 @@ export function poolShapes(code: Code, info: Info, names: Names, own: Id[], opts
     made.push(f, v);
     shapeOf.set(ty, v);
   }
-  const said: { kind: Told["kind"]; shapes: number[]; alike: boolean }[] = [];
+  const said: { kind: Told["kind"]; shapes: number[]; alike: boolean; all: boolean }[] = [];
   for (const c of told) {
     const v = shapeOf.get(c.type);
     if (!v) continue;
-    said.push({ kind: c.kind, shapes: c.shapes, alike: !!c.alike });
+    said.push({ kind: c.kind, shapes: c.shapes, alike: !!c.alike, all: c.keep !== undefined && !!c.all });
     if (c.kind === "empty") { nodes[c.at] = { id: c.at, kind: "call", fn: ref(EMPTY_S), args: [ref(v)] } as Node; continue; }
     const shapes = list(c.shapes.map(int));
     // An update that surely gives each item its own shape back needn't look for items to move.
@@ -319,6 +322,15 @@ export function poolShapes(code: Code, info: Info, names: Names, own: Id[], opts
     // A let's name given to keep: the pool read again here, the let kept for its other uses.
     const pool = c.copy ? copied(c.pool!) : c.pool!;
     if (!c.copy) dropNode(nodes, (code.nodes[c.at] as NodeOf<"call">).fn);
+    // A keep whose test every told shape passes keeps them all: the shaped
+    // items in its place (the greenhouse's moths, kept from the shapes
+    // with a velocity by whether they have one).
+    if (c.keep !== undefined && c.all) {
+      const k = code.nodes[c.keep] as NodeOf<"call"> & { args: Id[] };
+      for (const x of [k.fn, c.at, ...subtree(code, k.args[1])]) dropNode(nodes, x);
+      nodes[c.keep] = { id: c.keep, kind: "call", fn: ref(to), args: [pool, ref(v), shapes] } as Node;
+      continue;
+    }
     nodes[c.at] = { id: c.at, kind: "call", fn: ref(to), args: c.kind === "items" ? [pool, ref(v), shapes] : [pool, ref(v), shapes, c.fn!] } as Node;
   }
   // A let's pool items no longer read (each use told its shapes): nil in
