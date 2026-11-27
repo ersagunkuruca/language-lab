@@ -60,10 +60,12 @@ matter.
 A program says which lights reach a place with a library function, as it
 says which items are near with `neighbours` (L280g):
 
-`within(items, place of, reach of, here) : List a`: the items whose place
-is within their reach of here, in the list's order.
+`within reach(items, place of, reach of, here) : List a`: the items whose
+place is within their reach of here, in the list's order. (`within` is
+already the timer's: an action's value if it finishes within some
+milliseconds.)
 
-As written, that is a `keep` over every item. The compiler may find the
+As written, it walks every item, keeping those that reach. The compiler may find the
 same lights another way, which gives the same list: a grid over the
 places' space, each cell holding the indices of the lights whose reach
 touches it, in order, built each frame by a compute pass; a fragment
@@ -117,8 +119,10 @@ Ersagun measures on a real GPU later, as with G13d.
   and 42 ms at 4x, against 439 and 40 with the one lamp written in: the
   loop of three costs little, as expected. Each drop's shine facing the
   lamps waits for G15b, where the fireflies light the drops.
-- **G15b1**: `within` in std, as a keep, with reference.ts and LIBRARY.md
-  (offered-needs-reference); rain-page's fireflies, lit forward, measured.
+- **G15b1**: `within reach` in std (done: written as its own walk, not a
+  `keep`, so the functions it is given carry no Choice; reference.ts,
+  LIBRARY.md, within-reach.test); rain-page's fireflies, lit forward,
+  measured.
 - **G15b2**: the grid, a compute pass, and its `way` entry in the
   decisions, built only if G15b1's numbers say it pays.
 - **G15c**: shadow maps, waiting for a page with depth.
@@ -129,6 +133,6 @@ Ersagun measures on a real GPU later, as with G13d.
   with only the lights that reach, keeps that.
 - **A light type in std.** A light is the program's own record: what it
   carries and how it lights a place are the fragment function's to say.
-  Only `within`, which says nothing about light, is in std.
+  Only `within reach`, which says nothing about light, is in std.
 - **Bounds a person writes.** A light's reach is one of its fields, read
   by `reach of`, as neighbours' reach is. It isn't a hint beside the code.
