@@ -161,8 +161,8 @@ export function packsOf(sites: Record<number, DrawSite>): string {
 }
 
 // `whole`: the draws whose instances may be a list kept on the GPU (G13,
-// gpu-resident.ts), laid out as a kernel's answers are: every leaf of an
-// instance crosses, read or not.
+// gpu-resident.ts), laid out as a kernel's answers are, every leaf of an
+// instance: such a site says that layout as `kept`.
 export function gpuDraws(ir: CoreIR, whole: ReadonlySet<number> = new Set()): { sites: Record<number, DrawSite>; refused: Map<number, string> } {
   const sites: Record<number, DrawSite> = {}, refused = new Map<number, string>();
   for (const d of ir.drawSites ?? []) {
@@ -229,7 +229,7 @@ function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]
   const allInstance = unread ? [] : leavesOf(it), allCorner = leavesOf(ct), capLeaves = capLs.map((t, i) => (textures.includes(i) ? [] : leavesOf(t)));
   // Only what the vertex function reads of an instance and of a corner
   // crosses (G8): the rest is 0 in the shader.
-  const instance = allInstance && (whole ? allInstance : reached(allInstance, readPaths(l.funcs, vi, 0))), corner = allCorner && reached(allCorner, readPaths(l.funcs, vi, 1));
+  const instance = allInstance && reached(allInstance, readPaths(l.funcs, vi, 0)), corner = allCorner && reached(allCorner, readPaths(l.funcs, vi, 1));
   if (!instance) throw new Error("its instances aren't records of Float64s, Ints and Bools");
   if (!corner) throw new Error("its mesh's corners aren't records of Float64s, Ints and Bools");
   if (capLeaves.some((x) => !x)) throw new Error("reads a value that isn't Float64s, Ints, Bools or records of them");
@@ -265,6 +265,11 @@ fn lab_sampled(t: f32, u: f32, v: f32) -> vec4f {
 ${textures.slice(1).map((_, j) => `  if (t == ${j + 1}.0) { return textureSampleLevel(lab_tex${j + 1}, lab_sampler, vec2f(u, v), 0.0); }\n`).join("")}  return textureSampleLevel(lab_tex0, lab_sampler, vec2f(u, v), 0.0);
 }` : "";
   const nI = instance.length, nC = corner.length;
+  // A list kept on the GPU holds every leaf of an instance (G13c): bound,
+  // the vertex reads the leaves it needs where they sit in it, by
+  // constants the pipeline sets; an ordinary list sends only those.
+  const kept = whole && !unread && nI ? { leaves: allInstance!, places: instance.map((x) => allInstance!.indexOf(x)) } : undefined;
+  const instWord = (j: number) => (kept ? `lab_inst[lab_ii * lab_iw + lab_i${j}]` : `lab_inst[lab_ii * ${nI}u + ${j}u]`);
   const fuel = sh.wgsl.includes("var<private> lab_fuel"), none = sh.wgsl.includes("var<private> lab_none");
   const start = `${fuel ? "  lab_fuel = 1.0e30;\n" : ""}${none ? "  lab_none = false;\n" : ""}`;
   // One varying per carried leaf.
@@ -280,7 +285,7 @@ ${textures.slice(1).map((_, j) => `  if (t == ${j + 1}.0) { return textureSample
   const wgsl = `${sh.wgsl}
 @group(0) @binding(0) var<uniform> lab_caps: array<vec4u, ${Math.max(1, Math.ceil(words / 4))}>;
 @group(0) @binding(1) var<storage, read> lab_inst: array<u32>;
-@group(0) @binding(2) var<storage, read> lab_corner: array<u32>;${sampling}
+@group(0) @binding(2) var<storage, read> lab_corner: array<u32>;${kept ? `\noverride lab_iw: u32 = ${nI}u;${instance.map((_, j) => `\noverride lab_i${j}: u32 = ${j}u;`).join("")}` : ""}${sampling}
 struct LabPlaced {
   @builtin(position) position: vec4f,
 ${vary.join("\n")}
@@ -288,7 +293,7 @@ ${vary.join("\n")}
 @vertex fn lab_vs(@builtin(vertex_index) lab_vi: u32, @builtin(instance_index) lab_ii: u32) -> LabPlaced {
   // Every binding read, so the layout made from the module has all three.
   _ = lab_caps[0]; _ = lab_inst[0]; _ = lab_corner[0];
-${start}  let p = ${vEntry}(${[unread ? "0.0" : rebuilt(it, structs, only(allInstance!, instance, (j) => `lab_inst[lab_ii * ${nI}u + ${j}u]`)), rebuilt(ct, structs, only(allCorner!, corner, (j) => `lab_corner[lab_vi * ${nC}u + ${j}u]`)), ...capsWgsl].join(", ")});
+${start}  let p = ${vEntry}(${[unread ? "0.0" : rebuilt(it, structs, only(allInstance!, instance, instWord)), rebuilt(ct, structs, only(allCorner!, corner, (j) => `lab_corner[lab_vi * ${nC}u + ${j}u]`)), ...capsWgsl].join(", ")});
   var o: LabPlaced;
   o.position = ${clip};
 ${carry.join("\n")}
@@ -299,5 +304,5 @@ ${textures.length ? `  // The sampler and every texture in the layout, read or n
 ${fuel || none ? `  if (${[fuel ? "lab_fuel < 0.0" : "", none ? "lab_none" : ""].filter(Boolean).join(" || ")}) { discard; }\n` : ""}  return vec4f(${k[0]}, ${k[1]}, ${k[2]}, ${colour === 4 ? k[3] : "1.0"});
 }
 `;
-  return { wgsl, caps: capLeaves as Leaf[][], instance, corner, colour, ...(textures.length ? { textures } : {}) };
+  return { wgsl, caps: capLeaves as Leaf[][], instance, corner, colour, ...(textures.length ? { textures } : {}), ...(kept ? { kept } : {}) };
 }

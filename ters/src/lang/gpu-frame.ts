@@ -33,6 +33,12 @@ export interface Site {
   // into caps, in binding order (binding 4 + k), with no words of their
   // own. Binding 3 is a linear sampler kept to the edges.
   textures?: number[];
+  // A draw whose instances may be a list kept on the GPU (G13c): that
+  // list's layout (every leaf of an instance, as the kernel answers) and
+  // where in it each leaf of `instance` sits. Such a list is bound as it
+  // is, the vertex reading those places; an ordinary one sends only
+  // `instance`'s leaves.
+  kept?: { leaves: Leaf[]; places: number[] };
 }
 // A compiled draw's site (its fields after the four: the site's key in
 // the page's table, and the captured values).
@@ -128,14 +134,14 @@ export class GpuFrames {
     return new GpuFrames(device, context, format, canvas);
   }
 
-  private pipeline(site: Site, depth: boolean, format: GPUTextureFormat): GPURenderPipeline {
-    const key = `${depth}\u0000${format}\u0000${site.wgsl}`;
+  private pipeline(site: Site, depth: boolean, format: GPUTextureFormat, kept = false): GPURenderPipeline {
+    const key = `${depth}\u0000${format}\u0000${kept}\u0000${site.wgsl}`;
     let p = this.pipelines.get(key);
     if (p) return p;
     const module = this.device.createShaderModule({ code: site.wgsl });
     p = this.device.createRenderPipeline({
       layout: "auto",
-      vertex: { module, entryPoint: "lab_vs" },
+      vertex: { module, entryPoint: "lab_vs", ...(kept && site.kept ? { constants: { lab_iw: site.kept.leaves.length, ...Object.fromEntries(site.kept.places.map((at, j) => [`lab_i${j}`, at])) } } : {}) },
       fragment: { module, entryPoint: "lab_fs", targets: [{ format, blend: { color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha" }, alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha" } } }] },
       primitive: { topology: "triangle-list" },
       ...(depth ? { depthStencil: { format: "depth24plus" as GPUTextureFormat, depthWriteEnabled: true, depthCompare: "less" as GPUCompareFunction } } : {}),
@@ -220,9 +226,9 @@ export class GpuFrames {
         // Instances: sent again only when the list isn't the last frame's,
         // and not at all when an earlier draw of this frame sent it.
         // A list kept on the GPU (G13b): the kernel's buffer, laid out as
-        // the site's instances are (gpu-resident.ts keptOnGpu), bound as it is.
+        // the site's `kept` says (gpu-resident.ts keptOnGpu), bound as it is.
         const kept = isGpuItems(list) ? list : null;
-        if (kept && kept.words !== site.instance.length) throw new Error("a list kept on the GPU isn't laid out as this draw's instances");
+        if (kept && kept.words !== site.kept?.leaves.length) throw new Error("a list kept on the GPU isn't laid out as this draw's instances");
         const its = kept ? [] : items(list), n = kept ? kept.n : its.length, leaves = JSON.stringify(site.instance), sent = sentNow.get(leaves);
         let instances: GPUBuffer;
         if (kept) instances = kept.buffer as GPUBuffer;
@@ -251,7 +257,7 @@ export class GpuFrames {
           slot.capsWere = said;
           drawn.bytes += u.b.byteLength;
         }
-        const pipeline = this.pipeline(site, depth, format);
+        const pipeline = this.pipeline(site, depth, format, !!kept);
         // The textures sampled, by the names of the targets captured.
         const sampled = (site.textures ?? []).map((i) => {
           const t = String(part(caps[i], 0));

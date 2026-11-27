@@ -32,12 +32,19 @@ test("rain-page's drops stay on the GPU between ticks: only the slide's kernel a
   // the kernel's order (G13b).
   assert.equal(r.draws.length, 1);
   assert.deepEqual(r.kept.resident.draws, r.draws);
-  for (const d of r.draws) assert.deepEqual(r.kept.draws[d].instance, r.out(r.sites[0]));
+  for (const d of r.draws) assert.deepEqual(r.kept.draws[d].kept?.leaves, r.out(r.sites[0]));
+  // An ordinary list of them sends only the leaves the vertex reads, and
+  // a kept one is read at their places (G13c).
+  for (const d of r.draws) {
+    const { instance, kept } = r.kept.draws[d];
+    assert.ok(instance.length < kept!.leaves.length);
+    assert.deepEqual(kept!.places.map((j) => kept!.leaves[j]), instance);
+  }
   // Held on the CPU, by the field's node: none stays.
   const cpu = resident("rain-page", new Set([r.fields[0].at]));
   assert.deepEqual([cpu.fields, cpu.kept.resident.fields], [[], []]);
   // and its draw sends only the leaves the vertex reads.
-  for (const d of r.draws) assert.ok(cpu.kept.draws[d].instance.length < r.kept.draws[d].instance.length);
+  for (const d of r.draws) assert.deepEqual([cpu.kept.draws[d].instance, cpu.kept.draws[d].kept], [r.kept.draws[d].instance, undefined]);
 });
 
 // moths-page has a kernel too, but its lists are read on the CPU as
