@@ -398,7 +398,10 @@ async function stepOrder() {
   const marks = await p.locator(".p-graph svg.canvas > g.world g:has(> rect.order) text.portl").evaluateAll((es) => es.map((e) => ({ n: Number(e.textContent), y: e.getBoundingClientRect().y })));
   const ys = marks.sort((a, b) => a.n - b.n).map((m) => m.y);
   if (marks.length < 7 || ys.some((y, i) => i && y <= ys[i - 1])) errors.push(`${where}: steps numbered ${JSON.stringify(marks)}`);
-  const prints = await p.locator(".p-graph svg.canvas > g.world g:has(> text:text-is('print')) > rect.cn").evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().x)));
+  // A column's nodes meet its right edge, nearer what they feed
+  // (graphLayout.ts): a print widened for its comment (I382) starts further
+  // left, so the column is read off their right edges.
+  const prints = await p.locator(".p-graph svg.canvas > g.world g:has(> text:text-is('print')) > rect.cn").evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().right)));
   if (new Set(prints).size !== 1) errors.push(`${where}: the prints aren't in one column: ${prints}`);
   const first = async () => (await p.locator(".p-text .body").innerText()).split("\n").find((l) => l.startsWith("print("));
   const was = await first();
