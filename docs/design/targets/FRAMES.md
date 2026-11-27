@@ -250,6 +250,8 @@ in it (G11a).
   compute kernels is stage 3 (G12 to G14). This stage's upload-only-what-
   changed is what stage 3 builds on.
 - **No culling.** Every instance is drawn. Culling follows compute (G14, [CULLING.md](CULLING.md)).
+- **No lists read by a draw yet.** A draw reads numbers and records it
+  captured, not lists, so it has no list of lights (G15, [LIGHTS.md](LIGHTS.md)).
 
 ## Steps
 
