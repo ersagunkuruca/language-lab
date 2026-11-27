@@ -35,7 +35,9 @@ import { vectorWidth } from "./wgsl.ts";
 // draw's do (gpu-draws.ts): a Float32 an f32, an Int an i32, a Bool 0 or 1.
 // `close` (G12): why its arithmetic is only close to the CPU's, a kernel
 // made only where the program's decisions hold its map on the GPU so.
-export interface GpuMap { how: "map" | "keep" | "add" | "max" | "min" | "with"; result: "int" | "bool" | "words"; wgsl: string; caps: ("int" | "bool")[]; hows?: ("add" | "max" | "min")[]; words?: { item: Leaf[]; caps: Leaf[][]; out: Leaf[] }; close?: string }
+export interface GpuMap { how: "map" | "keep" | "add" | "max" | "min" | "with"; result: "int" | "bool" | "words"; wgsl: string; caps: ("int" | "bool")[]; hows?: ("add" | "max" | "min")[]; words?: { item: Leaf[]; caps: Leaf[][]; out: Leaf[] }; close?: string; resident?: true }
+// `resident`: its answers stay on the GPU as the list they go into, a
+// draw's instances or the next tick's items (G13b, gpu-resident.ts).
 
 // The maps a person held on the GPU though its arithmetic is only close
 // (the program's decisions, `GPU close`, G12), by the function's id: their

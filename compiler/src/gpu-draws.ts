@@ -160,16 +160,19 @@ export function packsOf(sites: Record<number, DrawSite>): string {
   return `{ ${Object.entries(sites).map(([k, s]) => `${JSON.stringify(k)}: { instance: ${one(s.instance)}, corner: ${one(s.corner)} }`).join(", ")} }`;
 }
 
-export function gpuDraws(ir: CoreIR): { sites: Record<number, DrawSite>; refused: Map<number, string> } {
+// `whole`: the draws whose instances may be a list kept on the GPU (G13,
+// gpu-resident.ts), laid out as a kernel's answers are: every leaf of an
+// instance crosses, read or not.
+export function gpuDraws(ir: CoreIR, whole: ReadonlySet<number> = new Set()): { sites: Record<number, DrawSite>; refused: Map<number, string> } {
   const sites: Record<number, DrawSite> = {}, refused = new Map<number, string>();
   for (const d of ir.drawSites ?? []) {
-    try { sites[d.site] = drawSite(ir, d.site, d.vertex, d.fragment, d.caps); }
+    try { sites[d.site] = drawSite(ir, d.site, d.vertex, d.fragment, d.caps, whole.has(d.site)); }
     catch (e) { refused.set(d.site, e instanceof Error ? e.message : String(e)); }
   }
   return { sites, refused };
 }
 
-function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]): DrawSite {
+function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[], whole = false): DrawSite {
   const zonk = (x: Id) => { const y = ir.info.typeOf.get(x); return y && ir.info.subst.zonk(y); };
   const capTypes = caps.map(zonk);
   if (capTypes.some((t) => !t)) throw new Error("reads a value whose type isn't known");
@@ -226,7 +229,7 @@ function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]
   const allInstance = unread ? [] : leavesOf(it), allCorner = leavesOf(ct), capLeaves = capLs.map((t, i) => (textures.includes(i) ? [] : leavesOf(t)));
   // Only what the vertex function reads of an instance and of a corner
   // crosses (G8): the rest is 0 in the shader.
-  const instance = allInstance && reached(allInstance, readPaths(l.funcs, vi, 0)), corner = allCorner && reached(allCorner, readPaths(l.funcs, vi, 1));
+  const instance = allInstance && (whole ? allInstance : reached(allInstance, readPaths(l.funcs, vi, 0))), corner = allCorner && reached(allCorner, readPaths(l.funcs, vi, 1));
   if (!instance) throw new Error("its instances aren't records of Float64s, Ints and Bools");
   if (!corner) throw new Error("its mesh's corners aren't records of Float64s, Ints and Bools");
   if (capLeaves.some((x) => !x)) throw new Error("reads a value that isn't Float64s, Ints, Bools or records of them");

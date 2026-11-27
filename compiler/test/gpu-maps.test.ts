@@ -273,3 +273,83 @@ test("rain-page as written asks for one WebGPU device, for its kernel and its fr
     assert.equal(await page.evaluate(() => (window as unknown as { devices: number }).devices), 1);
   } finally { await browser.close(); }
 });
+
+// rain-page's drops kept on the GPU between ticks (G13b): after the slide
+// first runs there, each tick's kernel takes the last one's buffer and the
+// frame draws that buffer, so a tick brings back only each drop's steps
+// (4 bytes a drop) and the frames send no drops. The canvas is a texture
+// of the page's device (headless SwiftShader loses the device once a
+// canvas presents), read back to see the rain drawn.
+test("rain-page's drops stay on the GPU between ticks, slid by the kernel and drawn from its buffer (G13b)", { skip: !exe && "no Chromium" }, async () => {
+  const { chromium } = await import("../../ters/node_modules/playwright-core/index.mjs");
+  const browser = await chromium.launch({ executablePath: exe, args: ["--enable-unsafe-webgpu", "--enable-features=Vulkan", "--use-vulkan=swiftshader", "--use-webgpu-adapter=swiftshader"] });
+  const run = async (held: boolean) => {
+    const program = join(dir, held ? "rain-on-cpu" : "rain-kept"), out = join(dir, held ? "rain-on-cpu.html" : "rain-kept.html");
+    cpSync(join(import.meta.dirname, "../../ters/examples/rain-page"), program, { recursive: true });
+    // The slide held on the GPU, so each tick takes it there (SwiftShader,
+    // the CPU's, is never the quicker); the drops kept there, or held on
+    // the CPU.
+    assert.equal(spawnSync(process.execPath, [lab, "decisions", program], { encoding: "utf8" }).status, 0);
+    const file = `${program}.decisions`, lines = readFileSync(file, "utf8").split("\n");
+    const at = lines.findIndex((l) => / place: Pane's drops: /.test(l)), slide = lines.findIndex((l) => / place: ticked's map: /.test(l));
+    assert.match(lines[at], /: GPU between ticks; among CPU, GPU between ticks; target JavaScript page$/);
+    lines[slide] = `held ${lines[slide].replace(/: workers when slow, the GPU where the browser has WebGPU;/, ": GPU;")}`;
+    if (held) lines[at] = `held ${lines[at].replace(": GPU between ticks;", ": CPU;")}`;
+    writeFileSync(file, lines.join("\n"));
+    const r = spawnSync(process.execPath, [lab, "build-web", program, "-o", out], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(/resident:!0/.test(readFileSync(out, "utf8")), !held);
+    const page = await browser.newPage();
+    await page.addInitScript(() => {
+      type W = { reads: number[]; sent: number[]; ctx?: unknown; GPUBuffer?: { prototype: { getMappedRange(...a: unknown[]): ArrayBuffer } }; GPUQueue?: { prototype: { writeBuffer(b: unknown, o: number, d: ArrayBufferView | ArrayBuffer): void } } };
+      const w = window as unknown as W;
+      w.reads = []; w.sent = [];
+      const now = performance.now.bind(performance);
+      performance.now = () => now() * 100;
+      const b = w.GPUBuffer?.prototype, q = w.GPUQueue?.prototype;
+      if (b) { const read = b.getMappedRange; b.getMappedRange = function (...x: unknown[]) { const a = read.apply(this, x); w.reads.push(a.byteLength); return a; }; }
+      if (q) { const write = q.writeBuffer; q.writeBuffer = function (buf: unknown, o: number, d: ArrayBufferView | ArrayBuffer, ...x: unknown[]) { w.sent.push(d.byteLength); return (write as (...a: unknown[]) => void).call(this, buf, o, d, ...x); }; }
+      const ctx = HTMLCanvasElement.prototype.getContext as (this: HTMLCanvasElement, t: string, ...x: unknown[]) => unknown;
+      (HTMLCanvasElement.prototype as unknown as { getContext: typeof ctx }).getContext = function (t, ...x) {
+        if (t !== "webgpu") return ctx.call(this, t, ...x);
+        const canvas = this;
+        const c = { dev: null as null | { createTexture(d: object): unknown }, tex: null as unknown, format: "", configure(cfg: { device: { createTexture(d: object): unknown }; format: string }) { c.dev = cfg.device; c.format = cfg.format; c.tex = cfg.device.createTexture({ size: [canvas.width, canvas.height], format: cfg.format, usage: 0x10 | 0x01 }); }, getCurrentTexture: () => c.tex, unconfigure() {} };
+        w.ctx = c;
+        return c;
+      };
+    });
+    await page.goto(`file://${out}`);
+    if (!(await page.evaluate(() => !!(navigator as { gpu?: unknown }).gpu))) { await page.close(); return null; }
+    // Till the slide has run on the GPU a few times.
+    await page.waitForFunction(() => (window as unknown as { reads: number[] }).reads.length >= 6, undefined, { timeout: 30000 });
+    const seen = await page.evaluate(async () => {
+      const w = window as unknown as { reads: number[]; sent: number[]; ctx: { dev: { createBuffer(d: object): { mapAsync(m: number): Promise<void>; getMappedRange(): ArrayBuffer }; createCommandEncoder(): { copyTextureToBuffer(a: object, b: object, s: number[]): void; finish(): unknown }; queue: { submit(c: unknown[]): void } }; tex: { width: number; height: number } } };
+      const { dev, tex } = w.ctx, row = Math.ceil(tex.width * 4 / 256) * 256;
+      const reads = [...w.reads], sent = [...w.sent];
+      const buf = dev.createBuffer({ size: row * tex.height, usage: 0x01 | 0x08 }), enc = dev.createCommandEncoder();
+      enc.copyTextureToBuffer({ texture: tex }, { buffer: buf, bytesPerRow: row }, [tex.width, tex.height]);
+      dev.queue.submit([enc.finish()]);
+      await buf.mapAsync(1);
+      const px = new Uint8Array(buf.getMappedRange());
+      const colours = new Set<number>();
+      for (let y = 0; y < tex.height; y += 4) for (let x = 0; x < tex.width; x += 4) { const i = y * row + x * 4; colours.add((px[i] << 16) | (px[i + 1] << 8) | px[i + 2]); }
+      return { reads, sent, colours: colours.size };
+    });
+    await page.close();
+    return seen;
+  };
+  try {
+    const kept = await run(false), onCpu = await run(true);
+    if (!kept || !onCpu) return;
+    const drops = 20000, steps = drops * 4, all = drops * 5 * 4;
+    // Kept: after the first run's answers, only the steps come back, and
+    // no frame sends the drops.
+    assert.deepEqual(kept.reads.slice(1).filter((n) => n !== steps), [], kept.reads.join(" "));
+    assert.ok(kept.sent.filter((n) => n >= all).length <= 2, kept.sent.join(" "));
+    // Held on the CPU: each run brings the drops back, and frames send them.
+    assert.ok(onCpu.reads.every((n) => n === all + steps), onCpu.reads.join(" "));
+    assert.ok(onCpu.sent.filter((n) => n >= all).length > 6, onCpu.sent.join(" "));
+    // The rain is drawn either way: more colours than the glass's.
+    assert.ok(kept.colours > 3 && onCpu.colours > 3, `${kept.colours} ${onCpu.colours}`);
+  } finally { await browser.close(); }
+});

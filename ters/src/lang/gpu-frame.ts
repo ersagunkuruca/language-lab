@@ -18,7 +18,7 @@
 import { fromList, type Data, type Value } from "./run-values.ts";
 import { FRAME_V, TRUE } from "./std-ids.ts";
 import { copied, cssColour } from "./raster.ts";
-import { pageDevice } from "./gpu-device.ts";
+import { isGpuItems, pageDevice } from "./gpu-device.ts";
 
 export type Word = "f32" | "i32" | "bool";
 export interface Leaf { path: number[]; kind: Word }
@@ -219,9 +219,14 @@ export class GpuFrames {
         const slot = this.slot(`${pi}.${di}`);
         // Instances: sent again only when the list isn't the last frame's,
         // and not at all when an earlier draw of this frame sent it.
-        const its = items(list), n = its.length, leaves = JSON.stringify(site.instance), sent = sentNow.get(leaves);
+        // A list kept on the GPU (G13b): the kernel's buffer, laid out as
+        // the site's instances are (gpu-resident.ts keptOnGpu), bound as it is.
+        const kept = isGpuItems(list) ? list : null;
+        if (kept && kept.words !== site.instance.length) throw new Error("a list kept on the GPU isn't laid out as this draw's instances");
+        const its = kept ? [] : items(list), n = kept ? kept.n : its.length, leaves = JSON.stringify(site.instance), sent = sentNow.get(leaves);
         let instances: GPUBuffer;
-        if (sent && sameItems(sent.list, its)) instances = sent.buffer;
+        if (kept) instances = kept.buffer as GPUBuffer;
+        else if (sent && sameItems(sent.list, its)) instances = sent.buffer;
         else {
           if (!sameItems(slot.list, its) || !slot.items) {
             const per = site.instance.length, w = words(n * per);

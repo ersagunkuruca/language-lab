@@ -57,7 +57,8 @@ import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { gpuMaps } from "./gpu-maps.ts";
-import { gpuDraws, packsOf } from "./gpu-draws.ts";
+import { packsOf } from "./gpu-draws.ts";
+import { keptOnGpu } from "./gpu-resident.ts";
 import { rangeArrays, rangeChoices } from "./range-choices.ts";
 import { originalOf, PRELUDE_DEFS, typedOriginalOf } from "../../ters/src/lang/prelude-ids.ts";
 import { earlyAnd } from "./early-and.ts";
@@ -1717,11 +1718,14 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
   // page's own script, which each worker runs (core-page.ts).
   const js1 = worlds.includes("mapAway") || worlds.includes("searchAway") ? withFunctionsNamed(js0, "R.pageBranches(typeof document === \"undefined\" ? undefined : document.currentScript?.textContent ?? undefined, ", poolHeld("JavaScript page")) : js0;
   // Its maps the GPU may run, each as a kernel (C61 d′, gpu-maps.ts).
-  const kernels = worlds.includes("mapAway") ? gpuMaps(ir) : {};
+  // And its draws the GPU takes, each as a site (G9c, gpu-draws.ts); a
+  // list only kernels and draws read kept on the GPU between ticks (G13b,
+  // gpu-resident.ts), the kernels whose answers it is marked so.
+  const away = worlds.includes("mapAway") ? gpuMaps(ir) : {}, kept = keptOnGpu(ir, away);
+  const kernels = Object.fromEntries(Object.entries(away).map(([s, m]) => [s, kept.resident.sites.includes(Number(s)) ? { ...m, resident: true as const } : m]));
   const js = Object.keys(kernels).length ? `R.pageGpu(${JSON.stringify(kernels)});\n${js1}` : js1;
   const code = codeFor(ir, js);
-  // Its draws the GPU takes, each as a site (G9c, gpu-draws.ts).
-  const draws = ir.drawSites ? gpuDraws(ir).sites : {};
+  const draws = kept.draws;
   const drawn = Object.keys(draws).length ? [using("pageDraws", page), `pageDraws(${JSON.stringify(draws)}, ${packsOf(draws)});`] : [];
   return wrapped(page, [
     using("startCorePage", page),

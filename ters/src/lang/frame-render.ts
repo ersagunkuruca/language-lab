@@ -6,6 +6,7 @@ import { fromList, type Data, type Value } from "./run-values.ts";
 import type { El, Mount } from "./html.ts";
 import { rasterize } from "./raster.ts";
 import { GpuFrames, sitedOf } from "./gpu-frame.ts";
+import { drawnOnGpu } from "./gpu-device.ts";
 import { FRAME_V } from "./std-ids.ts";
 
 // A canvas renders with WebGPU when every draw of its first frame has a
@@ -28,6 +29,8 @@ export function renderFrame(e: El, v: Value | null, call: Mount["call"]): void {
       state.gpu = "opening";
       void GpuFrames.open(e as unknown as HTMLCanvasElement).catch(() => null).then((g) => {
         state.gpu = g;
+        // Lists may stay on the GPU only while the frames draw there (G13b).
+        drawnOnGpu(!!g);
         if (state.latest !== null) renderFrame(e, state.latest, call);
       });
     }
