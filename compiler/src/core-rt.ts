@@ -638,7 +638,7 @@ function cellFns(cells: Cells) {
   // views read its Bools as booleans, the same view each time (so each of
   // finds its list), and what a row gives is turned the evaluator's way.
   const deep = cellOps(cells, call((v) => turned(v, inn)), LIST_SHAPE_BOOLS);
-  return { ...cellOps(cells, call(inn)), [`${CELL_OPS.each}:deep`]: deep[CELL_OPS.each], [`${CELL_OPS.eachOf}:deep`]: deep[CELL_OPS.eachOf] };
+  return { ...cellOps(cells, call(inn)), [`${CELL_OPS.each}:deep`]: deep[CELL_OPS.each], [`${CELL_OPS.eachArray}:deep`]: deep[CELL_OPS.eachArray], [`${CELL_OPS.eachOf}:deep`]: deep[CELL_OPS.eachOf] };
 }
 
 // A relational solve's mode plan written out (C167b, core-solve.ts

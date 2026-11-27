@@ -710,6 +710,12 @@ export const CELL_OPS = {
     const a = s.fresh(), b = s.fresh();
     return fn([cellOf(list(a)), fn([a], b, { effs: [CELLS, DIVERGE], tail: null })], cellOf(list(b)), s.freshRow([CELLS]));
   }),
+  // each over an array (C354): the representation `array of List` takes
+  // each's job, so a page's list held as an array is mapped as it is.
+  eachArray: builtin("cells.eachArray", "each in array", (s) => {
+    const a = s.fresh(), b = s.fresh();
+    return fn([cellOf(arrayOf_(a)), fn([a], b, { effs: [CELLS, DIVERGE], tail: null })], cellOf(arrayOf_(b)), s.freshRow([CELLS]));
+  }),
   // The same over a list inside a cell, as a row has it (its item's
   // steps): a step added or moved makes or moves one row of this, and
   // the row it's in isn't made again. Over a plain list, mapped once.
@@ -757,7 +763,7 @@ discharge("first", [CHOICE], "the first answer, or the default when there's none
 discharge("optional", [CHOICE], "the first answer as some(answer), or none", [S.optional]);
 discharge("with fuel", [DIVERGE], "at most n calls that may not end, then no answer: Diverge becomes Choice", [S.fuel]);
 discharge("seeded", [RANDOM], "the same numbers for the same seed, from a generator in the program", [S.seeded]);
-discharge("formula, each", [DIVERGE], "a formula runs when it's read, so read has Diverge instead", [CELL_OPS.formula, CELL_OPS.each, CELL_OPS.eachOf]);
+discharge("formula, each", [DIVERGE], "a formula runs when it's read, so read has Diverge instead", [CELL_OPS.formula, CELL_OPS.each, CELL_OPS.eachArray, CELL_OPS.eachOf]);
 
 // Int: whole numbers that never overflow. Same names as Float64's, because
 // names are presentation (NUMBERS.md stage 2): the palette offers the one

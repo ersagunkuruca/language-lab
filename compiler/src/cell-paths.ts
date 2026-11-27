@@ -209,6 +209,28 @@ function trackReadsIn(ir: CoreIR): number {
           // A choice's items cut to a piece's (C43g, branches-rt.ts
           // chooseSplit): some of the same items, read as the list is.
           if (e.fn === "choose.split") return xs[0] ?? NONE;
+          // A list held as an array (C354): read as the list is, an item by
+          // its position any item (`*/`), its length its case, a slice or
+          // its items the same list; one made holds what it's given whole.
+          const arr = /^array\.(\w+)\.a(\d+)$/.exec(e.fn), at = arr && ir.arrays.find((a) => a.index === Number(arr[2]));
+          if (arr && at) {
+            const [a, ...more] = xs;
+            const as = at as unknown as LType;
+            switch (arr[1]) {
+              case "length": { for (const x of more) need(x, false); need({ ...a, held: [] }, true); apart(a, as); return NONE; }
+              case "get": case "at": case "first": { for (const x of more) need(x, false); return step(a, "*/", as, at.item); }
+              case "slice": case "rest": case "items": { for (const x of more) need(x, false); return a; }
+              case "empty": case "push": case "pushOwned": case "pushFront": case "pushFrontOwned": case "replaceOwned": case "replace": {
+                let held: Src[] = [];
+                xs.forEach((x, i) => {
+                  for (const c of x.clos) for (const y of c.caps) need(y, false);
+                  if ((arr[1] === "replaceOwned" || arr[1] === "replace") && i === 1) need(x, false);
+                  else held = union(held, union(x.srcs, x.held));
+                });
+                return held.length ? { srcs: [], clos: [], held } : NONE;
+              }
+            }
+          }
           for (const x of xs) need(x, false);
           return NONE;
         }

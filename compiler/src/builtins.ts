@@ -141,6 +141,7 @@ export const TARGETS: Record<Id, Target> = {
   [CELL_OPS.cell]: { js: op(([a]) => `$cells().cell(${a})`), scalar: CELLS },
   [CELL_OPS.formula]: { js: op(([f]) => `$cells().formula(${f})`), scalar: CELLS },
   [CELL_OPS.each]: { js: op(([c, f]) => `$cells().each(${c}, ${f}, $listViews)`), scalar: CELLS },
+  [CELL_OPS.eachArray]: { js: op(([c, f]) => `$cells().each(${c}, ${f}, $arrayLists)`), scalar: CELLS },
   [CELL_OPS.eachOf]: { js: op(([l, f]) => `$cells().eachOf(${l}, ${f}, $listViews)`), scalar: CELLS },
   [CELL_OPS.read]: { js: op(([c]) => `$cells().read(${c})`), scalar: CELLS },
   [CELL_OPS.write]: { js: op(([c, v]) => `($cells().write(${c}, ${v}), $unit)`), scalar: CELLS },

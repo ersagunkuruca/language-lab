@@ -25,6 +25,8 @@
 // handler, which is what a deep handler is.
 
 import type { Value } from "./run-values.ts";
+import { ArrayView, arrayOf, itemsIn, replaceIn } from "./array-view.ts";
+import { CONS, NIL } from "./std-ids.ts";
 
 const CLEAN = 0, CHECK = 1, DIRTY = 2;
 
@@ -188,6 +190,11 @@ export interface Lists {
   views?: { cons: string; nil: string; isList: (v: Value) => boolean; bools?: { t: string; f: string } };
 }
 type Data = { tag: string; fields: Value[] };
+// A list held as an array (C354, `array of List`): a list here whatever
+// the shape, its items by position, an edit of one a replace in it.
+const isArray = (v: unknown): v is ArrayView => v instanceof ArrayView;
+const itemsOfList = (v: Value, lists: Lists): Value[] => (isArray(v) ? (itemsIn(v) as Value[]) : lists.from(v));
+const arrayItem = (a: ArrayView, i: number): Value | undefined => (i >= 0 && i < a.n ? (a.buf.items[a.start + i] as Value) : undefined);
 const keyOf = (steps: Step[]) => steps.map((s) => ("item" in s ? `i${s.item}/` : "field" in s ? `f${s.field}/` : "k/")).join("");
 // Does a change at `key` meet a reader's path `p`? A change at the place,
 // around it or inside it does. A path the compiler worked out (C162,
@@ -218,6 +225,12 @@ function inside(p: string, key: string): number {
 function replaced(v: Value, old: Value, now: Value, lists: Lists, depth: number): Value {
   if (v === old) return now;
   if (depth > 8 || typeof v !== "object" || v === null || !("fields" in v)) return v;
+  if (isArray(v)) {
+    const xs = itemsIn(v) as Value[];
+    let ys: Value[] | null = null;
+    xs.forEach((x, i) => { const y = replaced(x, old, now, lists, depth); if (y !== x) (ys ??= xs.slice())[i] = y; });
+    return ys ? (arrayOf(ys) as unknown as Value) : v;
+  }
   // Another value of the part's own case (another card) isn't looked into:
   // the compiler keeps a place only where the answer holds it whole, and
   // one of its kind taken apart is needed instead (cell-paths.ts), so the
@@ -236,6 +249,7 @@ function partOf(v: Value, steps: Step[], lists: Lists): Value | undefined {
   for (const s of steps) {
     if (v === undefined || typeof v !== "object" || v === null || !("fields" in v)) return undefined;
     if ("field" in s) { v = (v as unknown as Data).fields[s.field]; continue; }
+    if (isArray(v)) { v = arrayItem(v, (s as { item: number }).item) as Value; continue; }
     let d = v as unknown as Data;
     for (let i = 0; i < (s as { item: number }).item && d.tag === views.cons; i++) d = d.fields[1] as unknown as Data;
     if (d.tag !== views.cons) return undefined;
@@ -246,7 +260,7 @@ function partOf(v: Value, steps: Step[], lists: Lists): Value | undefined {
 // How many items of the list v are `x` itself.
 function timesIn(v: Value, x: Value, lists: Lists): number {
   const views = lists.views;
-  if (!views) return lists.from(v).filter((y) => y === x).length;
+  if (!views || isArray(v)) return itemsOfList(v, lists).filter((y) => y === x).length;
   let n = 0;
   for (let d = v as unknown as Data; d && d.tag === views.cons; d = d.fields[1] as unknown as Data) if (d.fields[0] === x) n++;
   return n;
@@ -269,7 +283,7 @@ export function resolved(v: Value, steps: Step[], lists: Lists): Step[] {
   const out: Step[] = [];
   let here: Value | undefined = v;
   for (const s of steps) {
-    const step: Step = "key" in s ? { item: here === undefined ? -1 : keyed(lists.from(here), s, lists) } : s;
+    const step: Step = "key" in s ? { item: here === undefined ? -1 : keyed(itemsOfList(here, lists), s, lists) } : s;
     out.push(step);
     here = here === undefined ? undefined : partAt(here, [step], lists);
   }
@@ -279,7 +293,8 @@ export function resolved(v: Value, steps: Step[], lists: Lists): Step[] {
 export function partAt(v: Value, steps: Step[], lists: Lists): Value | undefined {
   for (const s of steps) {
     if ("field" in s) v = (v as unknown as Data).fields[s.field];
-    else { const xs = lists.from(v), i = "key" in s ? keyed(xs, s, lists) : s.item; if (!(i >= 0 && i < xs.length)) return undefined; v = xs[i]; }
+    else if (isArray(v) && !("key" in s)) { const x = arrayItem(v, s.item); if (x === undefined) return undefined; v = x; }
+    else { const xs = itemsOfList(v, lists), i = "key" in s ? keyed(xs, s, lists) : s.item; if (!(i >= 0 && i < xs.length)) return undefined; v = xs[i]; }
   }
   return v;
 }
@@ -288,13 +303,19 @@ export function partAt(v: Value, steps: Step[], lists: Lists): Value | undefined
 export function changeAt(v: Value, steps: Step[], change: (part: Value) => Value | undefined, lists: Lists): Value {
   if (!steps.length) return change(v) ?? v;
   const [first, ...rest] = steps;
-  const s = "key" in first ? { item: keyed(lists.from(v), first, lists) } : first;
+  const s = "key" in first ? { item: keyed(itemsOfList(v, lists), first, lists) } : first;
   if ("field" in s) {
     const d = v as unknown as Data, inner = changeAt(d.fields[s.field], rest, change, lists);
     if (inner === d.fields[s.field]) return v;
     const fields = d.fields.slice();
     fields[s.field] = inner;
     return { tag: d.tag, fields } as unknown as Value;
+  }
+  if (isArray(v)) {
+    const x = arrayItem(v, s.item);
+    if (x === undefined) return v;
+    const inner = changeAt(x, rest, change, lists);
+    return inner === x ? v : (replaceIn(v, s.item, inner) as unknown as Value);
   }
   const xs = lists.from(v);
   if (!(s.item >= 0 && s.item < xs.length)) return v;
@@ -316,6 +337,15 @@ function differences(a: Value, b: Value, lists: Lists): Place[] | null {
   const views = lists.views;
   const go = (x: Value, y: Value, at: Step[]): boolean => {
     if (x === y) return true;
+    if (isArray(x) && isArray(y)) {
+      // Items by position, read from a copy of each (a version read in
+      // turn with the other would be put back each item). One longer or
+      // shorter differs as a whole.
+      if (x.n !== y.n) { out.push({ at, a: x, b: y, sure: true }); return out.length <= MAX_DIFFERENCES; }
+      const xs = itemsIn(x) as Value[], ys = itemsIn(y) as Value[];
+      for (let i = 0; i < xs.length; i++) if (xs[i] !== ys[i] && !go(xs[i], ys[i], [...at, { item: i }])) return false;
+      return true;
+    }
     if (views && views.isList(x) && views.isList(y)) {
       // Walked together, the items that are the same object (all but one,
       // after a card is added) skipped without copying either list.
@@ -331,7 +361,7 @@ function differences(a: Value, b: Value, lists: Lists): Place[] | null {
       return out.length <= MAX_DIFFERENCES;
     } else if (typeof x === "object" && typeof y === "object" && x !== null && y !== null && "fields" in x && "fields" in y) {
       const d = x as unknown as Data, e = y as unknown as Data;
-      if (d.tag === e.tag && d.fields.length === e.fields.length && !(views && (views.isList(x) || views.isList(y)))) {
+      if (d.tag === e.tag && d.fields.length === e.fields.length && !(views && (views.isList(x) || views.isList(y))) && !isArray(x) && !isArray(y)) {
         for (let i = 0; i < d.fields.length; i++) if (!go(d.fields[i], e.fields[i], [...at, { field: i }])) return false;
         return true;
       }
@@ -347,6 +377,7 @@ function differences(a: Value, b: Value, lists: Lists): Place[] | null {
 // and no more. Null otherwise (not lists, any other change).
 function inserted(a: Value, b: Value, lists: Lists): Edit[] | null {
   const views = lists.views;
+  if (a !== b && isArray(a) && isArray(b)) return insertedInto(itemsIn(a) as Value[], itemsIn(b) as Value[]);
   if (a === b || !views || !views.isList(a) || !views.isList(b)) return null;
   // Put in at the end, the common case, walked without copying.
   let p = a as unknown as Data, q = b as unknown as Data, at = 0;
@@ -357,7 +388,9 @@ function inserted(a: Value, b: Value, lists: Lists): Edit[] | null {
     for (; q.tag === views.cons && out.length <= 32; q = q.fields[1] as unknown as Data) out.push({ at: [], kind: "insert", i: at++ });
     return out;
   }
-  const xs = lists.from(a), ys = lists.from(b);
+  return insertedInto(lists.from(a), lists.from(b));
+}
+function insertedInto(xs: Value[], ys: Value[]): Edit[] | null {
   if (ys.length < xs.length) return null;
   let k = 0;
   while (k < xs.length && xs[k] === ys[k]) k++;
@@ -1225,7 +1258,11 @@ export function handOver(a: Kept, b: Kept, to: Pick<Cells, "write" | "batch">, w
     const n = nodeOf(a[i].cell);
     if (!n || n.disposed) continue;
     const now = n.value as Value;
-    if (plainSame(a[i].first, b[i].first) && plainSame(now, now) && !plainSame(now, a[i].first)) moves.push([b[i].cell, now]);
+    // The two engines may hold lists two ways (C354: the compiled page's
+    // as arrays): what's carried is made the other's way.
+    const way = listsWay(a[i].first, b[i].first);
+    if (way === null) { if (plainSame(a[i].first, b[i].first) && plainSame(now, now) && !plainSame(now, a[i].first)) moves.push([b[i].cell, now]); continue; }
+    if (plainSame(reshaped(a[i].first, b[i].first, way), b[i].first) && plainSame(now, now) && !plainSame(now, a[i].first)) moves.push([b[i].cell, reshaped(now, b[i].first, way) as Value]);
   }
   to.batch(() => { for (const [c, v] of moves) to.write(c, v); });
   return moves.length;
@@ -1237,7 +1274,52 @@ export function handOver(a: Kept, b: Kept, to: Pick<Cells, "write" | "batch">, w
 // same plain data. Null when it can't be carried.
 export function carried(fromFirst: unknown, toFirst: Value, now: unknown): { value: Value } | null {
   if (now === fromFirst || plainSame(now, fromFirst)) return { value: toFirst };
+  const way = listsWay(fromFirst, toFirst);
+  if (way !== null) return plainSame(reshaped(fromFirst, toFirst, way), toFirst) && plainSame(now, now) ? { value: reshaped(now, toFirst, way) as Value } : null;
   return plainSame(fromFirst, toFirst) && plainSame(now, now) ? { value: now as Value } : null;
+}
+// Lists held two ways, a's cons cells where b has an array (true: made
+// arrays) or the other way (false), found where both hold a list at the
+// same place; null where they hold them the same way.
+type ListData = { tag: string; fields: unknown[] };
+const isCons = (v: unknown): v is ListData => typeof v === "object" && v !== null && !(v instanceof ArrayView) && ((v as ListData).tag === CONS || (v as ListData).tag === NIL);
+function listsWay(a: unknown, b: unknown): boolean | null {
+  const todo: unknown[] = [a, b];
+  for (let steps = 0; todo.length && steps < 100000; steps++) {
+    const y = todo.pop(), x = todo.pop();
+    if (isCons(x) && y instanceof ArrayView) return true;
+    if (x instanceof ArrayView && isCons(y)) return false;
+    if (x instanceof ArrayView && y instanceof ArrayView) { if (x.n && y.n) todo.push(x.buf.items[x.start], y.buf.items[y.start]); continue; }
+    if (isCons(x) && isCons(y)) { if (x.tag === CONS && y.tag === CONS) todo.push(x.fields[0], y.fields[0]); continue; }
+    if (typeof x !== "object" || typeof y !== "object" || !x || !y) continue;
+    const d = x as ListData, e = y as ListData;
+    if (typeof d.tag === "string" && d.tag === e.tag && Array.isArray(d.fields) && Array.isArray(e.fields) && d.fields.length === e.fields.length) for (let i = 0; i < d.fields.length; i++) todo.push(d.fields[i], e.fields[i]);
+  }
+  return null;
+}
+// v with its lists held as `like` holds them where it holds one at that
+// place, and elsewhere as arrays (`arrays`) or cons cells.
+function reshaped(v: unknown, like: unknown, arrays: boolean): unknown {
+  if (typeof v !== "object" || v === null) return v;
+  const list = v instanceof ArrayView || isCons(v);
+  if (list) {
+    const guide = like instanceof ArrayView || isCons(like) ? like : undefined;
+    const want = guide === undefined ? arrays : guide instanceof ArrayView;
+    const g = guide instanceof ArrayView ? (guide.n ? guide.buf.items[guide.start] : undefined) : guide?.tag === CONS ? guide.fields[0] : undefined;
+    const xs: unknown[] = [];
+    if (v instanceof ArrayView) { for (const x of Array.from(itemsIn(v))) xs.push(reshaped(x, g, arrays)); }
+    else for (let d = v as ListData; d.tag === CONS; d = d.fields[1] as ListData) xs.push(reshaped(d.fields[0], g, arrays));
+    if (want) return arrayOf(xs);
+    let l: unknown = { tag: NIL, fields: [] };
+    for (let i = xs.length - 1; i >= 0; i--) l = { tag: CONS, fields: [xs[i], l] };
+    return l;
+  }
+  const d = v as ListData, e = like as ListData | undefined;
+  if (typeof d.tag !== "string" || !Array.isArray(d.fields)) return v;
+  const same = !!e && typeof e === "object" && e.tag === d.tag && Array.isArray(e.fields) && e.fields.length === d.fields.length;
+  let fields: unknown[] | null = null;
+  d.fields.forEach((x, i) => { const y = reshaped(x, same ? e!.fields[i] : undefined, arrays); if (y !== x) (fields ??= d.fields.slice())[i] = y; });
+  return fields ? { tag: d.tag, fields } : v;
 }
 // The same plain data: numbers (NaN the same as NaN), strings, whole
 // numbers, and data with the same tag and the same fields. Never true

@@ -22,7 +22,7 @@
 
 import type { Id } from "../model.ts";
 import type { Lang } from "./dsl.ts";
-import { ARRAY_OPS, COMPARE, CONS, COST, INT_OPS, JOBS, NIL, NONE, PAIR_V, REPRESENTATION_V, S, SHOW_ANY, SOME } from "./std.ts";
+import { ARRAY_OPS, CELL_OPS, COMPARE, CONS, COST, INT_OPS, JOBS, NIL, NONE, PAIR_V, REPRESENTATION_V, S, SHOW_ANY, SOME } from "./std.ts";
 
 // `representations`: the array's row, then List's own (the definition as
 // written, with its costs), which the chooser weighs it against.
@@ -145,6 +145,8 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.job, k.x(prelude("drop")), k.x(dropped), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("take")), k.x(taken), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("sort")), k.x(sorted), cost(k, "linearithmic")),
+    // A page's each over a cell holding the list (C354): over the array.
+    k.call(JOBS.job, k.x(CELL_OPS.each), k.x(CELL_OPS.eachArray), cost(k, "linear")),
     k.call(JOBS.hides, k.x(CONS), k.int(1)),
     // A whole list from outside: one array of it (C76).
     k.call(JOBS.storeBy, k.x(ARRAY_OPS.of)),
