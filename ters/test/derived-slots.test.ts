@@ -61,3 +61,23 @@ test("a filled program's solves and calls are those a full scan finds", () => {
     r.undo();
   }
 });
+
+// I387: a node the edit changes keeps its id (buffer's `match k` made
+// `match 0`: the scrutinee, a ref to k, became a literal). The base's
+// slots had it as k; the derived program's verdict must be a fresh one's,
+// where edited calls itself on something that isn't smaller.
+test("a derived program whose ref became a literal under the same id gets a fresh program's verdict (I387)", async () => {
+  const { analyzer } = await import("../src/lang/modes.ts");
+  const p = loadProgram(join(root, "examples", "buffer"));
+  const edited = p.named("edited"), doc = p.named("doc");
+  const m = subtree(p.code, edited).map((x) => p.code.nodes[x]).find((n): n is NodeOf<"match"> => n?.kind === "match")!;
+  const spec = new Map([[0, { k: "def" as const, id: doc }]]);
+  // The base asked first, so its slots are kept.
+  assert.equal(analyzer(p.code, p.pres.names).ofMode(edited, ["0", "1", "2"], spec)?.ends, true);
+  const code = replace(p.code, m.scrutinee, () => ({ kind: "lit", value: 0 } as never));
+  derivedFrom(code, p.code, [m.scrutinee]);
+  const fresh = { nodes: copyNodes(code.nodes), defs: code.defs };
+  const verdict = (c: typeof code) => analyzer(c, p.pres.names).ofMode(edited, ["0", "1", "2"], spec)?.ends;
+  assert.equal(verdict(fresh), false);
+  assert.equal(verdict(code), false);
+});

@@ -57,6 +57,9 @@ interface Closed {
   // Uses of an interface's operation at the group's own variables, kept
   // live for showing its types (infer.ts generalize: "Kept live too").
   effectsAt?: { t: Type; iface: Id; field: number; row: Row; at: Id }[];
+  // The definitions a call's modes verdict read (infer.ts byBody), each by
+  // its text: kept only while each is the same (I387).
+  bodies?: [Id, string][];
 }
 
 // Renumbers the variables of the types it is given, in the order they are
@@ -300,7 +303,8 @@ export class CheckCache {
       take: (group: Id[]): boolean => {
         finish();
         const k = keyOf(group);
-        const c = k === null ? undefined : this.get(k.key, k.stored);
+        let c = k === null ? undefined : this.get(k.key, k.stored);
+        if (c?.bodies && c.bodies.some(([d, t]) => !code.nodes[d] || spelled(defText(code, d)) !== t)) c = undefined;
         if (!c) { this.misses++; if (k !== null) missed.push({ group, key: k.key, stored: k.stored, from: s.wanted.length, to: -1 }); return false; }
         this.hits++;
         const o = new Opener(s.next);
@@ -339,6 +343,19 @@ export class CheckCache {
         const bad = new Set<number>();
         for (const e of info.errors) { const g = groupOf.get(e.id); if (g !== undefined) bad.add(g); }
         for (const id of info.holes.keys()) { const g = groupOf.get(id); if (g !== undefined) bad.add(g); }
+        // A call whose effects the callee's body narrowed (infer.ts byBody):
+        // the key has the callee's type, not its body, so the group keeps
+        // the text of each definition the verdict could read, the callee's
+        // and those it reaches, but for the kept layer's (in the key).
+        const read = new Map<number, Set<Id>>();
+        for (const [id, f] of info.byBody ?? []) {
+          const g = groupOf.get(id);
+          if (g === undefined) continue;
+          const xs = read.get(g) ?? new Set<Id>();
+          read.set(g, xs);
+          const walk = (d: Id) => { if (xs.has(d) || named?.schemes.has(d) || code.nodes[d]?.kind !== "def") return; xs.add(d); deps(d).forEach(walk); };
+          walk(f);
+        }
         // Not kept: definitions with results, directions or ways, whose
         // checks reach outside the group (results(), predicates).
         // A group that runs a definition backwards neither: whether it can
@@ -406,6 +423,8 @@ export class CheckCache {
             wanted: s.wanted.slice(m.from, m.to).map((w) => ({ t: cl.type(w.t), iface: w.iface, at: w.at })),
             plain: [], numbers: [], arith: [], fractional: [], whole: [], noWorld: [], needs: [], subs: [],
           };
+          const bodies = read.get(i);
+          if (bodies?.size) c.bodies = [...bodies].sort().map((d) => [d, spelled(defText(code, d))]);
           const at = s.effectsAt.filter((e) => groupOf.get(e.at) === i);
           if (at.length) c.effectsAt = at.map((e) => ({ t: cl.type(e.t), iface: e.iface, field: e.field, row: cl.row(e.row), at: e.at }));
           for (const x of s.subs) {

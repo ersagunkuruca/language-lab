@@ -336,7 +336,7 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     return r;
   };
   const union = (a: Id, b: Id) => { const x = find(a), y = find(b); if (x !== y) parent.set(x, y); };
-  const isLet = (n: Call) => nodes[n.fn]?.kind === "lambda" && (nodes[n.fn] as NodeOf<"lambda">).params.length === n.args.length;
+  const isLet = (n: Call, in_ = nodes) => in_[n.fn]?.kind === "lambda" && (in_[n.fn] as NodeOf<"lambda">).params.length === n.args.length;
   // Nodes can be added while a program runs (a derivative is a new
   // lambda), so the slots are brought up to date when one is asked for.
   const seen = new Set<Id>();
@@ -352,7 +352,15 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
   // A program that is another with a few nodes changed (a palette's
   // filling, BACKLOG E133b) starts from that one's slots and scans only
   // what changed: the scan of every node was most of each offer's plan.
-  const from = derived.get(code), base = from && baseSlots(from.base);
+  // Unless a changed node is one the base's slots joined to another (a
+  // ref to a binder, a let, a let's function) and is something else now:
+  // the base's slots would still join it (I387: buffer's `match k` made
+  // `match 0` kept the scrutinee's id, and the base still had it as k, so
+  // edited's recursion on the match's piece read as on a piece of k).
+  const derivation = derived.get(code), was = derivation?.base.nodes;
+  const joins = (n: Node | undefined) => !!n && ((n.kind === "ref" && was![n.target]?.kind === "binder") || n.kind === "lambda" || (isCall(n) && isLet(n, was!)));
+  const stale = !!derivation && [...derivation.changed].some((id) => was![id] !== nodes[id] && joins(was![id]));
+  const from = stale ? undefined : derivation, base = from && baseSlots(from.base);
   const refresh = base
     ? () => { for (const n of nodeValues(nodes)) if (!seen.has(n.id) && (!base.seen.has(n.id) || from!.changed.has(n.id))) scan(n); }
     : () => { for (const n of nodeValues(nodes)) if (!seen.has(n.id)) scan(n); };
