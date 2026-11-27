@@ -33,7 +33,15 @@ import { vectorWidth } from "./wgsl.ts";
 // `words` (G12): a map or keep of records (rain-page's drops), the item,
 // each capture and the answer crossing as 4-byte words, a leaf each, as a
 // draw's do (gpu-draws.ts): a Float32 an f32, an Int an i32, a Bool 0 or 1.
-export interface GpuMap { how: "map" | "keep" | "add" | "max" | "min" | "with"; result: "int" | "bool" | "words"; wgsl: string; caps: ("int" | "bool")[]; hows?: ("add" | "max" | "min")[]; words?: { item: Leaf[]; caps: Leaf[][]; out: Leaf[] } }
+// `close` (G12): why its arithmetic is only close to the CPU's, a kernel
+// made only where the program's decisions hold its map on the GPU so.
+export interface GpuMap { how: "map" | "keep" | "add" | "max" | "min" | "with"; result: "int" | "bool" | "words"; wgsl: string; caps: ("int" | "bool")[]; hows?: ("add" | "max" | "min")[]; words?: { item: Leaf[]; caps: Leaf[][]; out: Leaf[] }; close?: string }
+
+// The maps a person held on the GPU though its arithmetic is only close
+// (the program's decisions, `GPU close`, G12), by the function's id: their
+// answers may differ from the CPU's in the last bits.
+let closeHeld: ReadonlySet<Id> = new Set();
+export function allowClose(fns: Iterable<Id>) { closeHeld = new Set(fns); }
 
 // The kernel's own part: the items in, the answers and the steps out, and
 // the budget and the count of items.
@@ -165,7 +173,9 @@ export function inexact(ir: CoreIR, entry: number): string | null {
 
 // The kernels by site, for the sites whose function the shader lowering
 // takes, with what it captured (Ints and Bools) given after the item.
-export function gpuMaps(ir: CoreIR): Record<number, GpuMap> {
+// A map whose arithmetic is only close has one where `close` has its
+// function (those held, or "all" for the placements the compiler offers).
+export function gpuMaps(ir: CoreIR, close: "all" | ReadonlySet<Id> = closeHeld): Record<number, GpuMap> {
   const out: Record<number, GpuMap> = {};
   for (const m of ir.awayMaps ?? []) {
     const node = ir.code.nodes[m.fn];
@@ -201,10 +211,12 @@ export function gpuMaps(ir: CoreIR): Record<number, GpuMap> {
         // A map's answer is made like its item (the runtime has only the
         // item's class to make one with), or is a single leaf.
         const like = m.how === "keep" || typeof result !== "object" || (isRecord(result) && isRecord(item) && result.key === item.key);
-        if (leaves.some((x) => !x) || !outs || !like || ![item, ...caps, result].every(float32sOnly) || inexact(l, fi)) continue;
+        if (leaves.some((x) => !x) || !outs || !like || ![item, ...caps, result].every(float32sOnly)) continue;
+        const why = inexact(l, fi);
+        if (why && close !== "all" && !close.has(m.fn)) continue;
         const sh = emitWgsl(l, { kernel: true }), entry = sh.entries.get(fi);
         if (!entry || sh.matrices.size) continue;
-        out[m.site] = { how: m.how, result: "words", caps: [], words: { item: leaves[0]!, caps: leaves.slice(1) as Leaf[][], out: outs }, wgsl: sh.wgsl + recordKernel(entry, sh.wgsl.includes("var<private> lab_fuel"), sh.wgsl.includes("var<private> lab_none"), item, caps, result, outs, sh.structs) };
+        out[m.site] = { how: m.how, result: "words", caps: [], words: { item: leaves[0]!, caps: leaves.slice(1) as Leaf[][], out: outs }, wgsl: sh.wgsl + recordKernel(entry, sh.wgsl.includes("var<private> lab_fuel"), sh.wgsl.includes("var<private> lab_none"), item, caps, result, outs, sh.structs), ...(why ? { close: why } : {}) };
         continue;
       }
       // A record of Ints's fold (C42g): the rest and the answer that
