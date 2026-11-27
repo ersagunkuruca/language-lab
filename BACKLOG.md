@@ -28,7 +28,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L271c (the fill's push); L266 parked 11-26 (Ersagun) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| L Language and library | "Explore grammars and machines across the Chomsky hierarchy" | L293d, then L293e, L293f (exploratory, Ersagun 2026-11-27) |
+| L Language and library | "Explore grammars and machines across the Chomsky hierarchy" | L293f, then L293e if it earns it (exploratory, Ersagun 2026-11-27) |
 | L Language and library | "Speed up the interpreter on real programs" | no open row (round 2 stopped 2026-11-23, Ersagun: fix the failed compile instead, E320) |
 | G Game | "Build a game to test Ters against engines" | stage 1: done (C265, C267 done, C283 and C284 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
@@ -245,7 +245,6 @@ Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L293d | Turing machines as data in chomsky: a linear bounded automaton for aⁿbⁿcⁿ that ends, a Turing machine under `with fuel`; each recogniser's effects against its level (Diverge only at the unrestricted level) | Ersagun 2026-11-27 ("OK let's try that and see where it goes"), [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) | P1 | M | ▶ |
 | L293e | Conversions up the hierarchy in chomsky, if L293a-d earn them: a PDA to a grammar, a Turing machine to an unrestricted grammar, each checked by the words both give | Ersagun 2026-11-27 ("OK let's try that and see where it goes"), [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) | P1 | L |  |
 | L293f | Chomsky findings: the language gaps the example wrote around, as rows, and the calls for Ersagun. Found so far: (1) text can't write a parameter's type, so a count stays generic and Diverge until a use only an Int has settles its literals (the chomsky driver writes `quotient(rounds, 1) < 0` and removes it); (2) for the same reason `m.start` read in text, with two record types having a field `start`, took the wrong type (Automaton's field renamed `initial`); (3) a type of two words can't be written in a field's type unbracketed (`List Push move` isn't read; `List (Push move)` is); (4) no way found to write a let inside a fold's or match's arm in text (`(k = …; □ …)` isn't read), so a helper took its place | Ersagun 2026-11-27 ("OK let's try that and see where it goes"), [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) | P1 | S |  |
 
