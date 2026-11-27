@@ -30,9 +30,9 @@ const NO_MAIN = new Set(["archive", "mandelbrot", "quadratic", "raymarch", "rmol
 // added, take it off once it comes out the same.
 const KNOWN: Record<string, string> = {};
 // Known not to compile, with what the compiler says: both ways must refuse
-// it so. When one compiles, take it off. chomsky's `found within` runs under
-// `with fuel(n, …)` with n an argument (row C367).
-const REFUSED: Record<string, string> = { chomsky: "has a budget that isn't a number written down" };
+// it so. When one compiles, take it off. (chomsky was until its budgets were
+// written down; C367 is compiling a budget given as an input.)
+const REFUSED: Record<string, string> = {};
 
 function refused(name: string, recheck: boolean): string {
   const env = { ...process.env };
