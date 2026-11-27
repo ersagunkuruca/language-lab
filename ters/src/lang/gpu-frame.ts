@@ -39,6 +39,9 @@ export interface Site {
   // is, the vertex reading those places; an ordinary one sends only
   // `instance`'s leaves.
   kept?: { leaves: Leaf[]; places: number[] };
+  // The module has a compute entry `lab_cull_main` too (G14b,
+  // gpu-draws.ts): each instance's flag, 1 where some of it may be drawn.
+  cull?: true;
 }
 // A compiled draw's site (its fields after the four: the site's key in
 // the page's table, and the captured values).
@@ -92,7 +95,50 @@ function put(v: Value, leaves: Leaf[], f: Float32Array, n: Int32Array, at: numbe
 const sameItems = (a: Value[] | null, b: Value[]) => a !== null && a.length === b.length && a.every((x, i) => x === b[i]);
 const words = (count: number) => { const b = new ArrayBuffer(Math.max(16, Math.ceil(count / 4) * 16)); return { b, f: new Float32Array(b), n: new Int32Array(b) }; };
 
-interface Slot { list: Value[] | null; items: GPUBuffer | null; caps: GPUBuffer | null; capsWere: string; group: GPUBindGroup | null; groupFor: unknown[] }
+interface Slot { list: Value[] | null; items: GPUBuffer | null; caps: GPUBuffer | null; capsWere: string; group: GPUBindGroup | null; groupFor: unknown[]; cull?: Culling }
+// A culled draw's buffers (G14b): each instance's flag, the kept
+// instances' indices in order, drawIndexedIndirect's five words, and the
+// two passes' counts; with the bind groups made of them.
+interface Culling { n: number; flags: GPUBuffer; ids: GPUBuffer; args: GPUBuffer; job: GPUBuffer; scan: GPUBuffer; groups: Map<string, GPUBindGroup>; groupFor: unknown[] }
+
+// Culling (G14b, CULLING.md): a draw of at least this many instances
+// whose site can be culled is: a compute pass flags the instances some of
+// which may land in the picture, a second keeps their indices in order,
+// and the draw is indirect, of those alone. Fewer aren't worth two passes.
+const CULL_FROM = 256;
+// Off where a test says so, to compare the pictures.
+const culling = () => !(globalThis as { labCullOff?: true }).labCullOff;
+// The kept instances' indices in order: one workgroup, each of its 256
+// threads counting a run of the flags, the counts summed (Hillis and
+// Steele's scan), then each run's kept indices written from where its
+// sum starts; and the indirect draw's arguments, the kept as instances.
+const KEPT_IN_ORDER = `@group(0) @binding(0) var<storage, read> lab_kept: array<u32>;
+@group(0) @binding(1) var<storage, read_write> lab_ids: array<u32>;
+@group(0) @binding(2) var<storage, read_write> lab_args: array<u32, 5>;
+struct LabScan { n: u32, indices: u32 }
+@group(0) @binding(3) var<uniform> lab_scan: LabScan;
+var<workgroup> lab_sums: array<u32, 256>;
+@compute @workgroup_size(256) fn lab_main(@builtin(local_invocation_index) t: u32) {
+  let n = lab_scan.n;
+  let per = (n + 255u) / 256u;
+  let lo = min(t * per, n);
+  let hi = min(lo + per, n);
+  var s = 0u;
+  for (var i = lo; i < hi; i++) { s += lab_kept[i]; }
+  lab_sums[t] = s;
+  workgroupBarrier();
+  for (var d = 1u; d < 256u; d = d << 1u) {
+    var v = 0u;
+    if (t >= d) { v = lab_sums[t - d]; }
+    workgroupBarrier();
+    lab_sums[t] += v;
+    workgroupBarrier();
+  }
+  var at = lab_sums[t] - s;
+  for (var i = lo; i < hi; i++) { if (lab_kept[i] != 0u) { lab_ids[at] = i; at++; } }
+  if (t == 255u) { lab_args[0] = lab_scan.indices; lab_args[1] = lab_sums[255]; lab_args[2] = 0u; lab_args[3] = 0u; lab_args[4] = 0u; }
+}
+`;
 // What a pass draws into: the canvas, or a texture of its own (G10),
 // stored as rgba8unorm as raster.ts stores one, from 0 to 1.
 const TEXTURE_FORMAT: GPUTextureFormat = "rgba8unorm";
@@ -104,7 +150,7 @@ export class GpuFrames {
   private pipelines = new Map<string, GPURenderPipeline>();
   // By mesh, then by site: two sites may read different leaves of the
   // same corners (G8a), so each writes its own corner words.
-  private meshes = new WeakMap<object, Map<Site, { corners: GPUBuffer; triangles: GPUBuffer; count: number }>>();
+  private meshes = new WeakMap<object, Map<Site, { corners: GPUBuffer; triangles: GPUBuffer; count: number; n: number }>>();
   private slots = new Map<string, Slot>();
   private depths = new Map<string, GPUTexture>();
   private textures = new Map<string, GPUTexture>();
@@ -134,20 +180,64 @@ export class GpuFrames {
     return new GpuFrames(device, context, format, canvas);
   }
 
-  private pipeline(site: Site, depth: boolean, format: GPUTextureFormat, kept = false): GPURenderPipeline {
-    const key = `${depth}\u0000${format}\u0000${kept}\u0000${site.wgsl}`;
+  // The pipeline constants for a list kept on the GPU (G13c): where in it
+  // each leaf the vertex reads sits.
+  private placesOf(site: Site, kept: boolean) {
+    return kept && site.kept ? { constants: { lab_iw: site.kept.leaves.length, ...Object.fromEntries(site.kept.places.map((at, j) => [`lab_i${j}`, at])) } } : {};
+  }
+
+  private pipeline(site: Site, depth: boolean, format: GPUTextureFormat, kept = false, culled = false): GPURenderPipeline {
+    const key = `${depth}\u0000${format}\u0000${kept}\u0000${culled}\u0000${site.wgsl}`;
     let p = this.pipelines.get(key);
     if (p) return p;
-    const module = this.device.createShaderModule({ code: site.wgsl });
+    // Culled, the vertex takes its instance from the kept indices.
+    const code = culled ? `${site.wgsl.replace("let lab_it = lab_ii; // drawn", "let lab_it = lab_ids[lab_ii];")}\n@group(1) @binding(0) var<storage, read> lab_ids: array<u32>;\n` : site.wgsl;
+    const module = this.device.createShaderModule({ code });
     p = this.device.createRenderPipeline({
       layout: "auto",
-      vertex: { module, entryPoint: "lab_vs", ...(kept && site.kept ? { constants: { lab_iw: site.kept.leaves.length, ...Object.fromEntries(site.kept.places.map((at, j) => [`lab_i${j}`, at])) } } : {}) },
+      vertex: { module, entryPoint: "lab_vs", ...this.placesOf(site, kept) },
       fragment: { module, entryPoint: "lab_fs", targets: [{ format, blend: { color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha" }, alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha" } } }] },
       primitive: { topology: "triangle-list" },
       ...(depth ? { depthStencil: { format: "depth24plus" as GPUTextureFormat, depthWriteEnabled: true, depthCompare: "less" as GPUCompareFunction } } : {}),
     });
     this.pipelines.set(key, p);
     return p;
+  }
+
+  // The cull pass of a site (its module's lab_cull_main), and the pass
+  // keeping the indices, one for every site.
+  private computes = new Map<string, GPUComputePipeline>();
+  private compute(key: string, code: string, entryPoint: string, more: object = {}): GPUComputePipeline {
+    let p = this.computes.get(key);
+    if (!p) this.computes.set(key, (p = this.device.createComputePipeline({ layout: "auto", compute: { module: this.device.createShaderModule({ code }), entryPoint, ...more } })));
+    return p;
+  }
+
+  // Encodes the cull of a draw's n instances (G14b), before its pass.
+  private cull(enc: GPUCommandEncoder, slot: Slot, site: Site, kept: boolean, buffers: GPUBuffer[], n: number, corners: number, indices: number, drawn: Drawn): Culling {
+    const D = this.device, U = GPUBufferUsage;
+    let c = slot.cull;
+    if (!c || c.n < n) {
+      if (c) for (const b of [c.flags, c.ids, c.args, c.job, c.scan]) b.destroy();
+      const size = Math.max(16, n * 4);
+      c = slot.cull = { n, flags: D.createBuffer({ size, usage: U.STORAGE }), ids: D.createBuffer({ size, usage: U.STORAGE }), args: D.createBuffer({ size: 32, usage: U.STORAGE | U.INDIRECT | U.COPY_SRC }), job: D.createBuffer({ size: 16, usage: U.UNIFORM | U.COPY_DST }), scan: D.createBuffer({ size: 16, usage: U.UNIFORM | U.COPY_DST }), groups: new Map(), groupFor: [] };
+    }
+    D.queue.writeBuffer(c.job, 0, new Uint32Array([n, corners, 0, 0]));
+    D.queue.writeBuffer(c.scan, 0, new Uint32Array([n, indices, 0, 0]));
+    drawn.bytes += 32;
+    const flag = this.compute(`cull\u0000${kept}\u0000${site.wgsl}`, site.wgsl, "lab_cull_main", this.placesOf(site, kept));
+    const scan = this.compute("scan", KEPT_IN_ORDER, "lab_main");
+    // The flagging pass's group, made again when what it binds changes.
+    if (buffers.some((b, i) => b !== c!.groupFor[i]) || !c.groups.has("flag")) {
+      c.groups.set("flag", D.createBindGroup({ layout: flag.getBindGroupLayout(0), entries: [...buffers, c.flags, c.job].map((buffer, binding) => ({ binding, resource: { buffer } })) }));
+      c.groupFor = buffers;
+    }
+    if (!c.groups.has("scan")) c.groups.set("scan", D.createBindGroup({ layout: scan.getBindGroupLayout(0), entries: [c.flags, c.ids, c.args, c.scan].map((buffer, binding) => ({ binding, resource: { buffer } })) }));
+    const p = enc.beginComputePass(), groups = Math.ceil(n / 64);
+    p.setPipeline(flag); p.setBindGroup(0, c.groups.get("flag")!); p.dispatchWorkgroups(Math.min(groups, 65535), Math.ceil(groups / 65535));
+    p.setPipeline(scan); p.setBindGroup(0, c.groups.get("scan")!); p.dispatchWorkgroups(1);
+    p.end();
+    return c;
   }
 
   private buffer(data: ArrayBuffer | Uint32Array, usage: number): GPUBuffer {
@@ -165,7 +255,7 @@ export class GpuFrames {
     const w = words(cs.length * site.corner.length);
     const pack = PACKS.get(site)?.corner;
     if (pack) pack(cs, w.f, w.n); else cs.forEach((c, i) => put(c, site.corner, w.f, w.n, i * site.corner.length));
-    got = { corners: this.buffer(w.b, GPUBufferUsage.STORAGE), triangles: this.buffer(new Uint32Array(ts), GPUBufferUsage.INDEX), count: ts.length };
+    got = { corners: this.buffer(w.b, GPUBufferUsage.STORAGE), triangles: this.buffer(new Uint32Array(ts), GPUBufferUsage.INDEX), count: ts.length, n: cs.length };
     bySite.set(site, got);
     return got;
   }
@@ -214,11 +304,9 @@ export class GpuFrames {
       const view = drawnInto ? drawnInto.createView() : screen;
       const depth = (part(pass, 2) as Data).tag === TRUE || (part(pass, 2) as unknown) === true;
       const [r, g, b, a] = cssColour(String(part(pass, 1)));
-      const rp = enc.beginRenderPass({
-        colorAttachments: [{ view, clearValue: { r, g, b, a }, loadOp: "clear", storeOp: "store" }],
-        ...(depth ? { depthStencilAttachment: { view: this.depth(size).createView(), depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "store" } } : {}),
-      });
-      items(part(pass, 3)).forEach((d, di) => {
+      // Each draw made ready (its buffers, and its cull's passes encoded
+      // before the render pass), then drawn in the render pass.
+      const draws = items(part(pass, 3)).map((d, di) => {
         const { site, caps } = sited[pi][di]!;
         const list = (d as Data).fields[1];
         const mesh = this.mesh((d as Data).fields[0], site);
@@ -257,7 +345,8 @@ export class GpuFrames {
           slot.capsWere = said;
           drawn.bytes += u.b.byteLength;
         }
-        const pipeline = this.pipeline(site, depth, format, !!kept);
+        const culled = culling() && !!site.cull && n >= CULL_FROM ? this.cull(enc, slot, site, !!kept, [slot.caps!, instances, mesh.corners], n, mesh.n, mesh.count, drawn) : null;
+        const pipeline = this.pipeline(site, depth, format, !!kept, !!culled);
         // The textures sampled, by the names of the targets captured.
         const sampled = (site.textures ?? []).map((i) => {
           const t = String(part(caps[i], 0));
@@ -271,12 +360,28 @@ export class GpuFrames {
           slot.group = this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
           slot.groupFor = want;
         }
-        rp.setPipeline(pipeline);
-        rp.setBindGroup(0, slot.group);
-        rp.setIndexBuffer(mesh.triangles, "uint32");
-        if (n) rp.drawIndexed(mesh.count, n);
+        let ids: GPUBindGroup | null = null;
+        if (culled) {
+          const key = `ids\u0000${depth}\u0000${format}\u0000${!!kept}`;
+          if (!culled.groups.has(key)) culled.groups.set(key, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(1), entries: [{ binding: 0, resource: { buffer: culled.ids } }] }));
+          ids = culled.groups.get(key)!;
+        }
+        const group = slot.group;
         drawn.draws++;
+        return (rp: GPURenderPassEncoder) => {
+          rp.setPipeline(pipeline);
+          rp.setBindGroup(0, group);
+          if (ids) rp.setBindGroup(1, ids);
+          rp.setIndexBuffer(mesh.triangles, "uint32");
+          if (culled) rp.drawIndexedIndirect(culled.args, 0);
+          else if (n) rp.drawIndexed(mesh.count, n);
+        };
       });
+      const rp = enc.beginRenderPass({
+        colorAttachments: [{ view, clearValue: { r, g, b, a }, loadOp: "clear", storeOp: "store" }],
+        ...(depth ? { depthStencilAttachment: { view: this.depth(size).createView(), depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "store" } } : {}),
+      });
+      for (const d of draws) d(rp);
       rp.end();
       if (name !== null) drawnNow.add(name);
     });

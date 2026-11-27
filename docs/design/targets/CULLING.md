@@ -82,9 +82,15 @@ what is left is every corner's vertex run, the work G14b skips.
 
 - **G14a** (done): rain-page's closer look, a Closer button (Ters pages
   have no wheel or pinch events yet). Measured above.
-- **G14b**: GPU culling: the cull pass from the vertex function, indices
-  in order, `drawIndexedIndirect`; on ordinary and kept lists; the
-  decisions entry. Tested pixel for pixel against the draw without it.
+- **G14b1** (done): GPU culling: the cull pass from the vertex function
+  (gpu-draws.ts, `lab_cull_main` in the draw's own module), the kept
+  indices in order (one workgroup's scan, gpu-frame.ts `KEPT_IN_ORDER`),
+  `drawIndexedIndirect`; on ordinary and kept lists, for a draw of 256
+  instances or more. At 4× rain-page draws about a sixteenth of its drops:
+  250 ms a frame before, 37 ms after (SwiftShader); at 1×, 480 and 405
+  ms. The picture is the one without culling, pixel for pixel
+  (gpu-cull.test).
+- **G14b2**: the decisions entry, so a person may hold a draw unculled.
 - **G14c**: CPU culling, if G14a's numbers say it pays.
 - **G14d**: occlusion, waiting for a page with depth.
 
