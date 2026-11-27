@@ -29,6 +29,7 @@ import { consOnto, type ConsOnto } from "./cons-onto.ts";
 import { splitLists } from "./rep-split.ts";
 import { carriedChoice } from "./carried-reps.ts";
 import { COMPANIONS, TOGETHER } from "./together.ts";
+import { keyGroups, trefGroup, type Groups } from "./map-groups.ts";
 import { ownLibraryHolders } from "./own-holders.ts";
 import { keptMap } from "../kept.ts";
 import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
@@ -344,6 +345,8 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
         ? { ...lists, chosen: [...r.chosen, ...lists.chosen], insiders: [...r.insiders, ...lists.insiders], picks: [...(r.picks ?? []), ...(lists.picks ?? [])] }
         : held ? { code: held.code, names: held.names, chosen: r.chosen, insiders: r.insiders, info: held.info, picks: r.picks } : { code: r.code, names: r.names, chosen: r.chosen, insiders: r.insiders, info: checked, picks: r.picks };
     }
+    // A type chosen per group that doesn't check is chosen whole.
+    if ((r as { split?: boolean }).split) { for (const x of r.reps) skip.add("split " + x.of); continue; }
     const list = r.reps.find((x) => x.of === LIST);
     // A hash table that doesn't check gives way to the tree, not to the
     // definition.
@@ -419,6 +422,10 @@ function typesIn(code: Code, info: Info, d: Id): Type[] {
 
 function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[], skip: Set<Id>, options: LibraryOptions): Chosen & { reps: Representation[] } {
   const chosen: Representation[] = [];
+  // Where a type's rows are chosen per group (C358): each row's groups,
+  // and the sites' groups.
+  const groupsOf = new Map<Representation, Set<string>>();
+  let sites: Groups | null = null;
   const key = context && `${context.key}#${context.n++}|${JSON.stringify([asked, [...skip].sort()])}`;
   const was = key ? decidedKept.get(key) ?? decidedStore?.load(key) : undefined;
   const keep = (d: Decided) => { if (!key) return; if (decidedKept.size >= 16) decidedKept.clear(); decidedKept.set(key, d); decidedStore?.save(key, d); };
@@ -540,6 +547,25 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // as written (C45's appends and changes by position, now that an
     // append onto what a loop carries is the array's own, C234).
     const left = [...rows];
+    // A Map's groups by key type, each stored its own way where they'd be
+    // chosen apart (map-groups.ts, C358): crew's maps by name as hash
+    // tables, its map by worker number, which gives its smallest key, a
+    // tree. Not where a run measured the type, whose sizes are the whole's.
+    if (ty === MAP && !skip.has("split " + ty) && !options.measured?.get(ty)) {
+      const g = keyGroups(code, info, [main, ...defs], ty, new Set(LIBRARY.reps.filter((r) => r.of === ty).flatMap((r) => Object.keys(r.cost))));
+      if (g && g.heads.length > 1) {
+        const target = (id: Id) => (code.nodes[id] as NodeOf<"ref">).target;
+        const referred = new Set([...g.of.keys()].map(target));
+        const opaque = [...asked.flatMap((r) => Object.keys(r.impl)), ...replaced(), ...edges];
+        const per = g.heads.map((h) => [h, choose(code, main, [spec, ...left], undefined, opaque, undefined, { jobs: new Set([...g.of].filter(([, x]) => x === h).map(([id]) => target(id))), referred }).rep] as const);
+        const rowsOf = new Set(per.map(([, r]) => r));
+        if (rowsOf.size > 1 && !rowsOf.has(spec) && !keyed(info, defs, code, ty) && [...rowsOf].every((r) => !generic(info, defs, code, r) && plainBoundary(code, defs, r))) {
+          for (const r of rowsOf) { pick(r); groupsOf.set(r, new Set(per.filter(([, x]) => x === r).map(([h]) => h))); }
+          sites = g;
+          continue;
+        }
+      }
+    }
     for (;;) {
       const tree = choose(code, main, [spec, ...left], options.sound && ty === LIST ? (r) => r.name === "array of List" : undefined, [...asked.flatMap((r) => Object.keys(r.impl)), ...replaced(), ...edges], options.measured?.get(ty)).rep;
       if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue types;
@@ -573,7 +599,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       break;
     }
   }
-  if (!replayed && chosen.every((r) => LIBRARY.reps.includes(r))) keep({ chosen: chosen.map((r) => LIBRARY.reps.indexOf(r)) });
+  if (!replayed && !groupsOf.size && chosen.every((r) => LIBRARY.reps.includes(r))) keep({ chosen: chosen.map((r) => LIBRARY.reps.indexOf(r)) });
   if (!chosen.length) return { code, names, chosen: [], insiders: [], reps: [] };
   // The trees' module, which the library leaves out (library.ts): only
   // the definitions the chosen rows use, since the program is checked
@@ -645,10 +671,18 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   const k = new Lang(code);
   const bounds = chosen.filter((r) => r.of !== LIST).map((r) => plainBoundary(code, defs, r, names)!);
   const copyOf = new Map(bounds.flatMap((b) => [...b.copyOf]));
-  const meanings = asMeanings(k, code, info, names, chosen, copyOf);
+  // A type's row: by its key type where its rows are chosen per group.
+  const rowFor = (t: Type & { t: "con" }) => chosen.find((r) => {
+    if (r.of !== t.id) return false;
+    const gs = groupsOf.get(r);
+    if (!gs) return true;
+    const a = t.args[0] && info.subst.zonk(t.args[0]);
+    return !!a && a.t === "con" && gs.has(a.id);
+  });
+  const meanings = asMeanings(k, code, info, names, chosen, copyOf, rowFor);
   const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const typeOf = (id: Id) => { const t = info.typeOf.get(id); return t && info.subst.zonk(t); };
-  const rowOf = (id: Id) => { const t = typeOf(id); return t?.t === "con" ? chosen.find((r) => r.of === t.id) : undefined; };
+  const rowOf = (id: Id) => { const t = typeOf(id); return t?.t === "con" ? rowFor(t) : undefined; };
   const call = (fn: Id, arg: Id): Id => { const r = freshId(), c = freshId(); nodes[r] = { id: r, kind: "ref", target: fn }; nodes[c] = { id: c, kind: "call", fn: r, args: [arg] }; return c; };
   for (const b of bounds) { Object.assign(nodes, b.nodes); Object.assign(names, b.names); }
   const copied = bounds.flatMap((b) => b.made);
@@ -710,8 +744,23 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   // written on List Int), where lists go to arrays beside it.
   const rowsAsked = lists ? asked.filter((r) => plainRow(code, r)).flatMap((r) => [...Object.values(r.impl), ...(r.meaning ? [r.meaning] : []), ...(r.store ? [r.store] : [])]) : [];
   const kept = [...made.filter((d) => !own.includes(d)), ...(boundary ? [...boundary.made, ...boundary.edges] : []), ...rowsAsked];
-  const out = chosen.reduce((c, rep) => represent(c, own, rep, kept), all);
-  return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}`), insiders: made, reps: chosen, picks: chosen.map((r) => ({ of: r.of, rep: r.name })) };
+  // A row chosen for some groups only rewrites their sites; a type
+  // reference without a named key goes by its definition's sites.
+  const only = (r: Representation) => {
+    const gs = groupsOf.get(r);
+    if (!gs || !sites) return undefined;
+    const g = sites;
+    return (id: Id, def: Id) => {
+      const n = code.nodes[id];
+      const h = n?.kind === "ref" ? g.of.get(id) : n?.kind === "tref" ? trefGroup(code, n) : undefined;
+      if (h !== undefined) return gs.has(h);
+      const here = g.inDef.get(def);
+      return !!here && here.size === 1 && gs.has([...here][0]);
+    };
+  };
+  const out = chosen.reduce((c, rep) => represent(c, own, rep, kept, only(rep)), all);
+  const keys = (r: Representation) => { const gs = groupsOf.get(r); return gs ? ` for ${[...gs].map((h) => names[h] ?? LIBRARY.names[h] ?? h).join(", ")} keys` : ""; };
+  return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}${keys(r)}`), insiders: made, reps: chosen, picks: chosen.map((r) => ({ of: r.of, rep: r.name })), ...(groupsOf.size ? { split: true } : {}) };
 }
 
 // A definition consing onto a call of itself appends at the back instead,
@@ -911,7 +960,7 @@ const prelude = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY
 // value with each one as its meaning (null if it has none): a list item by
 // item, a case field by field, a map's values. The definitions aren't the
 // program's, so representing it leaves the meanings they build alone.
-function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Representation[], copyOf: Map<Id, Id> = new Map()) {
+function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Representation[], copyOf: Map<Id, Id> = new Map(), rowFor: (t: Type & { t: "con" }) => Representation | undefined = (t) => chosen.find((r) => r.of === t.id)) {
   const made = new Map<string, Id | null>();
   // A case of another type has one if its own fields do (GAPS.md M2: the
   // program's record holding a map).
@@ -924,7 +973,7 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
     if (made.has(ks)) return made.get(ks)!;
     const d = k.def(`as meanings`);
     made.set(ks, d);
-    const row = chosen.find((r) => r.of === t.id);
+    const row = rowFor(t);
     const args = t.args.map((a) => info.subst.zonk(a));
     if (row?.of === LIST) {
       // An array's items, each as its meaning when it holds some. A fold

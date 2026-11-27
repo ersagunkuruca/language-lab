@@ -506,7 +506,7 @@ function freshUses(code: Code, defs: Id[], reps: Representation[]): Set<Id> {
 // queue's entries, std.ts), whose field is the representation too where
 // the definitions reaching it are rewritten, and so is every definition
 // making or matching one (C186).
-function holders(code: Code, def: Id, t: Id): Id[] {
+export function holders(code: Code, def: Id, t: Id): Id[] {
   const out = new Set<Id>();
   for (const id of subtree(code, def)) {
     const n = code.nodes[id];
@@ -520,7 +520,7 @@ function holders(code: Code, def: Id, t: Id): Id[] {
 // What a definition's refs and arms name, kept by its walk (the same
 // while its nodes are).
 const namedKept = new WeakMap<readonly Id[], Id[]>();
-function madeOrMatched(code: Code, def: Id): Set<Id> {
+export function madeOrMatched(code: Code, def: Id): Set<Id> {
   const ids = subtreeKept(code, def);
   let named = namedKept.get(ids);
   if (!named) {
@@ -607,8 +607,10 @@ const stepsAt = (order: string, n: number): number => {
 // its calls would have taken at its largest size first (each job's
 // count times its order at that n), in place of guessing which jobs are in
 // a loop; the ladder after, for the jobs not measured (matches, folds).
-export function choose(code: Code, entry: Id, reps: Representation[], prefer?: (r: Representation) => boolean, opaque: Iterable<Id> = [], measured?: Measured): Choice {
-  const jobs = uses(code, entry, reps, true, opaque);
+// `only`: one group of the type's uses (map-groups.ts, C358): the jobs
+// referred to at its sites, and the rest that aren't references (a match).
+export function choose(code: Code, entry: Id, reps: Representation[], prefer?: (r: Representation) => boolean, opaque: Iterable<Id> = [], measured?: Measured, only?: { jobs: ReadonlySet<string>; referred: ReadonlySet<string> }): Choice {
+  const jobs = uses(code, entry, reps, true, opaque).filter((j) => !only || only.jobs.has(j) || !only.referred.has(j));
   const spec = reps.find((r) => r.type === r.of && !Object.keys(r.impl).length)!;
   // Building a v onto a field taken out of another value costs v's
   // constructor where the field is a value kept (the definition as
@@ -671,7 +673,10 @@ export function jobProblem(info: Info, rep: Representation, names: Record<Id, st
 // match), so names and comments stay attached.
 // `keep`: definitions written on T that it reaches but leaves as they are
 // (library-reps.ts's meanings of a value with a stored one inside).
-export function represent(code: Code, entries: Id[], rep: Representation, keep: Id[] = []): Code {
+// `only`: where the type is stored this way when not everywhere (a Map's
+// group by key type, C358), asked of each job's reference, type reference
+// and match on the type, with the definition it is in.
+export function represent(code: Code, entries: Id[], rep: Representation, keep: Id[] = [], only?: (id: Id, def: Id) => boolean): Code {
   // The definition itself; a representation by the same type changes the
   // jobs (Float32 rounds each one).
   if (rep.type === rep.of && !Object.keys(rep.impl).length && !rep.literal) return code;
@@ -770,10 +775,12 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
     return ty.kind === "tref" && ty.target === t;
   });
 
+  let at: Id = "";
+  const here = (id: Id) => !only || only(id, at);
   const rewrite = (id: Id) => {
     const n = nodes[id];
     for (const c of childrenOf(n)) rewrite(c);
-    if (n.kind === "ref" && jobOf(n.target)) nodes[id] = { ...n, target: jobOf(n.target)! };
+    if (n.kind === "ref" && jobOf(n.target)) { if (here(id)) nodes[id] = { ...n, target: jobOf(n.target)! }; }
     else if (fromFraction && n.kind === "lit" && n.of === t && /^\s*\d+\s*$/.test(String(n.value))) {
       nodes[id] = { id, kind: "call", fn: ref(rep.impl[fromFraction]), args: [add({ kind: "lit", value: String(n.value).trim().length <= 15 ? Number(n.value) : String(n.value).trim(), of: INT }), add({ kind: "lit", value: 1, of: INT })] };
     }
@@ -781,7 +788,8 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
       const { id: _, ...lit } = n;
       nodes[id] = { id, kind: "call", fn: ref(rep.literal), args: [add(lit)] };
     }
-    else if (n.kind === "tref" && n.target === t) nodes[id] = { ...n, target: rep.type };
+    else if (n.kind === "tref" && n.target === t) { if (here(id)) nodes[id] = { ...n, target: rep.type }; }
+    else if (only && (n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants) && !here(id)) { /* the other group's */ }
     else if (n.kind === "fold" && rep.meaning && rep.cost[FOLD_OF_ITEMS] && armsOver(code, n, variants) && readsNoRest(code, n, t)) {
       nodes[id] = { ...n, scrutinee: add({ kind: "call", fn: ref(rep.meaning), args: [n.scrutinee] }) };
     }
@@ -832,7 +840,7 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
     nodes[id] = { id, kind: "call", fn: add({ kind: "lambda", params: [params[0]], body }), args: [c.args[0]] };
   };
 
-  for (const d of todo) rewrite(d);
+  for (const d of todo) { at = d; rewrite(d); }
   return { nodes, defs: code.defs };
 }
 
