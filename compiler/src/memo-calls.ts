@@ -35,6 +35,9 @@
 
 import { isArray, isData, isFn, isRecord, kids, type CoreIR, type LType, type SExpr } from "./scalar.ts";
 import { SAFE_RT } from "./share-calls.ts";
+import { CELL_OPS, CONS, NIL } from "../../ters/src/lang/std-ids.ts";
+
+const CELL_READ = `host:${CELL_OPS.read}`;
 
 // An array's reads by position, of rows or columns (columns.ts).
 const READS = /^array\.(get|getb|at|atb|length|lengthb|cget\d+|clength|cin|has|slice|from|drop)\.a\d+$/;
@@ -48,17 +51,64 @@ const BUILDS = /^array\.(push|pushFront|pushOwned|pushFrontOwned|replaceOwned|of
 export const MEMO_SIZE = 8;
 
 export function memoFuncs(ir: CoreIR, deep: ReadonlySet<number>): Set<number> {
+  return analysed(ir, deep).memo;
+}
+
+// A copy of the prelude's keep, map or flat map (by its function: keep·at
+// stage.λ), given a list and a closure whose code only computes, its
+// answers kept with the closure's code and captures and the list (C354
+// step 1): called again with the same code and captures and that list with
+// items put on its end, it works out only the new items, and gives the last
+// answer with theirs after it. keep(xs ++ ys, f) is keep(xs, f) ++ keep(ys,
+// f), and so are map's and flat map's, for an f that only computes. A
+// page's view runs again over a list a card was added to (board's columns,
+// its tags): one card's test, not every card's.
+//
+// Its own code (the prelude's) may set the boxes it collects into and split
+// its list for workers (split.hold, choose.split, split.give); what it
+// calls of the program's, the closure's code, only computes.
+export function listMemoFuncs(ir: CoreIR, deep: ReadonlySet<number>, listwise: (def: string) => boolean): Set<number> {
+  const out = new Set<number>();
+  // Only a program whose views run again: one reading cells (a page).
+  const reads = (e: SExpr): boolean => (e.k === "rt" && (e.fn.startsWith("readPaths:") || e.fn.startsWith(CELL_READ))) || kids(e).some(reads);
+  if (!ir.funcs.some((f) => reads(f.body))) return out;
+  const { lenient, writtenLists } = analysed(ir, deep);
+  ir.funcs.forEach((f, i) => {
+    if (!listwise(f.def) || !lenient[i] || deep.has(i) || f.multi || f.params.length !== 2) return;
+    const [xs, fn] = f.params;
+    // A list as written, or held as an array (C354a): kept and given as
+    // views of their own on shared buffers (core-rt.ts keptList), so a
+    // write in place elsewhere makes a version instead.
+    const list = (t: LType) => (isData(t) && t.cases.length === 2 && t.cases.every((c) => c.variant === NIL || c.variant === CONS) && !writtenLists.has(t.key)) || isArray(t);
+    if (!list(xs) || !isFn(fn) || fn.several || fn.waits || !list(f.result)) return;
+    out.add(i);
+  });
+  return out;
+}
+
+const SPLITS = /^(split\.hold|choose\.split|split\.give)$/;
+
+function analysed(ir: CoreIR, deep: ReadonlySet<number>): { memo: Set<number>; lenient: boolean[]; writtenLists: Set<string>; writtenArrays: Set<number> } {
   const n = ir.funcs.length;
   // What is written in place anywhere: arrays by their index, records by key.
-  const writtenArrays = new Set<number>(), writtenRecords = new Set<string>();
-  const writes = (e: SExpr): void => {
+  const writtenArrays = new Set<number>(), writtenRecords = new Set<string>(), writtenLists = new Set<string>();
+  // A list turned round where its cells are (scalar.ts `turned`, C279)
+  // writes only cells made for it and seen by nothing else.
+  const turning = (i: number) => { const f = ir.funcs[i]; return !!f.inner && f.params.length === 2 && isData(f.result) && f.name === `${f.result.name}.turned`; };
+  const writes = (e: SExpr, turns: boolean): void => {
     if (e.k === "rt") { const m = /^array\.(\w+)\.a(\d+)$/.exec(e.fn); if (m && /^(replaceOwned|pushFrontOwned|c(set[\d_]*|push|copy|front|build|new))$/.test(m[1])) writtenArrays.add(Number(m[2])); }
-    if ((e.k === "make" || e.k === "new") && e.into !== undefined) writtenRecords.add(e.t.key);
-    kids(e).forEach(writes);
+    if ((e.k === "make" || e.k === "new") && e.into !== undefined) { writtenRecords.add(e.t.key); if (!turns) writtenLists.add(e.t.key); }
+    kids(e).forEach((x) => writes(x, turns));
   };
-  ir.funcs.forEach((f) => writes(f.body));
+  ir.funcs.forEach((f, i) => writes(f.body, turning(i)));
   const calls = ir.funcs.map(() => new Set<number>());
-  const quiet = ir.funcs.map((f, i) => {
+  // The codes of each closure type: an apply may call any of them.
+  const coded = new Map<string, Set<number>>();
+  const closures = (e: SExpr): void => { if (e.k === "closure") { const s = coded.get(e.t.key) ?? new Set(); coded.set(e.t.key, s.add(e.fn)); } kids(e).forEach(closures); };
+  ir.funcs.forEach((f) => closures(f.body));
+  // `lib`: the prelude's own code may set its boxes and split for workers.
+  const quietOf = (lib: boolean) => ir.funcs.map((f, i) => {
+    const own = lib && f.def.startsWith("@");
     let ok = !f.multi && !f.spends && !f.budgeted;
     const walk = (e: SExpr) => {
       if (!ok) return;
@@ -66,21 +116,30 @@ export function memoFuncs(ir: CoreIR, deep: ReadonlySet<number>): Set<number> {
         // A map that may share its items on workers gives what it does in
         // turn (map.worth, scalar.ts; columns.ts reads it so too).
         case "if": if (e.cond.k === "rt" && e.cond.fn === "map.worth") { walk(e.else); return; } break;
-        case "world": case "apply": case "abort": case "handle": case "released": case "set": case "choose": case "search": case "budget": ok = false; return;
-        case "rt": if (e.host || e.own || !(SAFE_RT(e.fn) || READS.test(e.fn) || BUILDS.test(e.fn))) { ok = false; return; } break;
+        case "set": if (own) break; ok = false; return;
+        // In the lenient reading an apply is a call of each code its type has.
+        case "apply": { const codes = coded.get(e.t.key); if (!lib || e.cps || !codes) { ok = false; return; } codes.forEach((g) => calls[i].add(g)); break; }
+        case "world": case "abort": case "handle": case "released": case "choose": case "search": case "budget": ok = false; return;
+        case "rt": if (e.host || e.own || !(SAFE_RT(e.fn) || READS.test(e.fn) || BUILDS.test(e.fn) || (own && SPLITS.test(e.fn)))) { ok = false; return; } break;
         case "call": if (e.cps) { ok = false; return; } calls[i].add(e.fn); break;
         case "attempt": if (e.spent || e.resumes) { ok = false; return; } break;
-        case "make": case "new": if (e.into !== undefined) { ok = false; return; } break;
+        case "make": case "new": if (e.into !== undefined && !(lib && turning(i))) { ok = false; return; } break;
       }
       kids(e).forEach(walk);
     };
     walk(f.body);
     return ok;
   });
-  for (let changed = true; changed;) {
-    changed = false;
-    for (let i = 0; i < n; i++) if (quiet[i] && [...calls[i]].some((j) => !quiet[j])) { quiet[i] = false; changed = true; }
-  }
+  const closed = (q: boolean[]) => {
+    for (let changed = true; changed;) {
+      changed = false;
+      for (let i = 0; i < n; i++) if (q[i] && [...calls[i]].some((j) => !q[j])) { q[i] = false; changed = true; }
+    }
+    return q;
+  };
+  const quiet = closed(quietOf(false));
+  calls.forEach((c) => c.clear());
+  const lenient = closed(quietOf(true));
   // Whether a function calls itself, and whether one it reaches does.
   const loops = ir.funcs.map((_, i) => calls[i].has(i));
   const loopsBelow = ir.funcs.map((_, i) => {
@@ -104,5 +163,5 @@ export function memoFuncs(ir: CoreIR, deep: ReadonlySet<number>): Set<number> {
     if (!plain(f.result) || !f.params.every(input)) return;
     out.add(i);
   });
-  return out;
+  return { memo: out, lenient, writtenLists, writtenArrays };
 }

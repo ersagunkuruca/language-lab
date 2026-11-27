@@ -64,3 +64,21 @@ test("an array replaced in place between two calls is read again", () => {
   ], [["added", ["l"], "match l\n  nil → 0.0\n  cons(x, r) → x + added(r)"], ["sum of items", ["xs"], "added(items of array(xs))"]]);
   assert.doesNotMatch(js, /Object\.is\(f\d+\$k0\[j\d*\]/, "nothing kept where an array is written in place");
 });
+
+// C354a: a view's keep over an array a card was pushed onto works out the
+// new card alone, and what it keeps and gives are views of their own, so an
+// owned push or replace by whoever holds one changes neither.
+test("a keep's array memo: the items past the last, and kept views of their own", async () => {
+  const { RUNTIME } = await import("../src/core-rt.ts");
+  const { arrayOf, itemsIn, pushBack, pushOwned, replaceOwned, ArrayView } = await import("../../ters/src/lang/array-view.ts");
+  const R = RUNTIME as unknown as { listAfter: (a: unknown, b: unknown) => unknown; listJoined: (a: unknown, b: unknown) => unknown; keptList: (v: unknown) => unknown };
+  const was = arrayOf([1, 2, 3]), now = pushBack(was, 4);
+  assert.deepEqual(itemsIn(R.listAfter(was, now) as never), [4]);
+  assert.equal(R.listAfter(was, arrayOf([1, 2, 3, 4])), undefined, "another buffer");
+  assert.equal(R.listAfter(now, was), undefined, "shorter");
+  const kept = R.keptList(arrayOf([10, 20])) as InstanceType<typeof ArrayView>, given = R.keptList(kept) as InstanceType<typeof ArrayView>;
+  pushOwned(given, 30);
+  replaceOwned(given, 0, 99);
+  assert.deepEqual(itemsIn(kept), [10, 20]);
+  assert.deepEqual(itemsIn(R.listJoined(kept, arrayOf([5])) as never), [10, 20, 5]);
+});

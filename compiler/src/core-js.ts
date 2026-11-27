@@ -23,7 +23,7 @@ import { keepingWhole } from "../../ters/src/lang/check-cache.ts";
 import { keysOver } from "../../ters/src/lang/def-keys.ts";
 import { overLiterals } from "../../ters/src/lang/literals-again.ts";
 import { shareCalls } from "./share-calls.ts";
-import { MEMO_SIZE, memoFuncs } from "./memo-calls.ts";
+import { listMemoFuncs, MEMO_SIZE, memoFuncs } from "./memo-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
 import { knownClosures } from "./known-closures.ts";
 import { itemPaths } from "./item-paths.ts";
@@ -265,6 +265,8 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
   const selfLoops = (e: SExpr, i: number): boolean => (e.k === "call" && e.fn === i && e.tail) || kidsOf(e).some((k) => selfLoops(k, i));
   const heapCodes = [...deep.keys()].filter((i) => [...coded.values()].some((s) => s.has(i)));
   const memo = envSet("NO_MEMO") ? new Set<number>() : memoFuncs(ir, new Set(deep.keys()));
+  const LISTWISE = new Set([PRELUDE_DEFS.keep, PRELUDE_DEFS.map, PRELUDE_DEFS["flat map"]]);
+  const listMemo = envSet("NO_MEMO") || envSet("NO_LIST_MEMO") ? new Set<number>() : listMemoFuncs(ir, new Set(deep.keys()), (d) => LISTWISE.has(typedOriginalOf(originalOf(d))));
   const parts = ir.funcs.map((f, i) => {
     if (only && !only.has(i)) return [];
     // An array of numbers sorted (C355): JavaScript's own sort, the same
@@ -291,6 +293,32 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
       const same = ps.map((p, j) => `Object.is(${m}${j}[j], ${p})`).join(" && ");
       return [`const ${[...ps.map((_, j) => `${m}${j}`), `${m}r`].map((x) => `${x} = []`).join(", ")}; let ${m}n = 0;`,
         `function ${names[i]}(${ps.join(", ")}) {\n  for (let j = 0, e = Math.min(${m}n, ${MEMO_SIZE}); j < e; j++) if (${same}) return ${m}r[j];\n  const r = ${names[i]}$m(${ps.join(", ")});\n  const j = ${m}n++ % ${MEMO_SIZE}; ${ps.map((p, j) => `${m}${j}[j] = ${p};`).join(" ")} ${m}r[j] = r;\n  return r;\n}`,
+        func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$m(`), ...plainCopy()];
+    }
+    // A keep, map or flat map's answers kept with its list and closure,
+    // and a list with items put on its end worked out for those alone
+    // (memo-calls.ts listMemoFuncs, C354 step 1).
+    if (listMemo.has(i)) {
+      const m = `${names[i]}$L`;
+      return [`const ${m} = [];`,
+        `function ${names[i]}(l0, l1) {
+  const code = l1 && l1.code, caps = l1 && l1.caps;
+  if (code === undefined || !caps) return ${names[i]}$m(l0, l1);
+  for (let j = ${m}.length - 1; j >= 0; j--) {
+    const e = ${m}[j];
+    if (e.code !== code || !R.sameCaps(e.caps, caps)) continue;
+    if (e.x === l0) return R.keptList(e.r);
+    const rest = R.listAfter(e.x, l0);
+    if (rest === undefined) continue;
+    const more = ${names[i]}$m(rest, l1);
+    if (more === R.FAIL) return more;
+    e.x = R.keptList(l0); e.caps = caps; e.r = R.keptList(R.listJoined(e.r, more));
+    return R.keptList(e.r);
+  }
+  const r = ${names[i]}$m(l0, l1);
+  if (r !== R.FAIL) { ${m}.push({ x: R.keptList(l0), code, caps, r: R.keptList(r) }); if (${m}.length > ${MEMO_SIZE}) ${m}.shift(); }
+  return R.keptList(r);
+}`,
         func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$m(`), ...plainCopy()];
     }
     if (!deep.has(i)) return [func(f, i, null), ...plainCopy()];
