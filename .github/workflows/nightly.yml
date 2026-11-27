@@ -131,6 +131,29 @@ jobs:
           echo "Seed $seed" >> "$GITHUB_STEP_SUMMARY"
           SEED=$seed node --test compiler/test/fuzz.test.ts || { echo "Seed $seed found a difference: keep it in compiler/test/fuzz-seeds.json (T18b)" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
 
+  # Past fixes put back (T18d, ters/test/injections/): each must make a
+  # test it names fail, and affected.ts must pick that test before a merge.
+  # A red here is a weak test or a hole in the selection, not a break of
+  # main: it doesn't hold the good tag.
+  injections:
+    needs: changed
+    if: needs.changed.outputs.run == 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ters/package-lock.json
+      - run: npm ci
+        working-directory: ters
+      - name: Each past fix put back is caught
+        run: node ters/test/injections.ts
+
   good:
     needs: [tests, browser]
     runs-on: ubuntu-latest
