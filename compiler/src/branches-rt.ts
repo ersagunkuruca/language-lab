@@ -270,7 +270,11 @@ const wt = (): WT | undefined => (globalThis as { process?: { getBuiltinModule?:
 // a pure together or map runs as it is written, unmeasured: such a scope
 // may have no `performance` either.
 let workers: boolean | undefined;
-const canShare = () => (workers ??= !!wt());
+// Not where no worker can start (startPool): no module to give a worker
+// (a run of the core IR in this process, as the benches' and tests' are),
+// or TERS_WORKERS=0. Searches were cut in pieces and lists made arrays
+// there for nothing (larder, C360).
+const canShare = () => (workers ??= !!wt() && process.env.TERS_WORKERS !== "0") && !!mod;
 
 // Each worker's port. A job is sent to every worker, ready or not: one
 // still starting takes what is left when it is.
