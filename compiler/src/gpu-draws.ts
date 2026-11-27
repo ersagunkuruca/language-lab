@@ -35,7 +35,7 @@ import type { Code, Id } from "../../ters/src/model.ts";
 import { withNodes } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, NUMBER, type Type } from "../../ters/src/lang/types.ts";
-import { TARGET, TRUE } from "../../ters/src/lang/std-ids.ts";
+import { LIST, TARGET, TRUE } from "../../ters/src/lang/std-ids.ts";
 import { HeldSet } from "../../ters/src/lang/prelude-ids.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { isArray, isRecord, kids, lowerScalar, type CoreIR, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
@@ -191,9 +191,10 @@ function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]
   if (capTypes.some((t) => !t)) throw new Error("reads a value whose type isn't known");
   // The captured targets, in binding order: textures it samples.
   const textures = capTypes.flatMap((t, i) => (t!.t === "con" && t!.id === TARGET ? [i] : []));
-  // The captured Arrays (G15a1, LIGHTS.md): each a storage buffer, its
-  // size read as the shader runs, so one pipeline serves any length.
-  const lists = capTypes.flatMap((t, i) => (t!.t === "con" && t!.id === ARRAY ? [i] : []));
+  // The captured Arrays (G15a1, LIGHTS.md), and Lists, which a shader
+  // holds as arrays (G15a2): each a storage buffer, its size read as the
+  // shader runs, so one pipeline serves any length.
+  const lists = capTypes.flatMap((t, i) => (t!.t === "con" && (t!.id === ARRAY || t!.id === LIST) ? [i] : []));
   let nodes = ir.code.nodes;
   const typeOf = new Map(ir.info.typeOf);
   const defs: Id[] = [];

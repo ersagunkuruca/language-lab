@@ -107,9 +107,16 @@ Ersagun measures on a real GPU later, as with G13d.
   `given`: such an array is passed on and read, never copied as a value;
   gpu-frame.ts sends it again only when its items change). One module
   serves any length (gpu-lists.test).
-- **G15a2**: a captured List goes as such an array, and a fold over it
-  (sum, map then sum, fold) lowers to a loop over its indices; rain-page's
-  lamps as a list.
+- **G15a2** (done): a captured List goes as such an array (a shader
+  holds a List as an Array; scalar.ts), and a fold over it lowers to a
+  loop over its indices, the last first, as a fold runs; a fold whose
+  cons arm reads the rest of the list is refused. A program that draws
+  on the GPU keeps its lists off the tree (library-reps.ts), whose walk a
+  shader can't take. rain-page's three lamps are a list made each tick,
+  the glass summing their glow. On SwiftShader a frame took 443 ms at 1x
+  and 42 ms at 4x, against 439 and 40 with the one lamp written in: the
+  loop of three costs little, as expected. Each drop's shine facing the
+  lamps waits for G15b, where the fireflies light the drops.
 - **G15b1**: `within` in std, as a keep, with reference.ts and LIBRARY.md
   (offered-needs-reference); rain-page's fireflies, lit forward, measured.
 - **G15b2**: the grid, a compute pass, and its `way` entry in the
