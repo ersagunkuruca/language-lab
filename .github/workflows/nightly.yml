@@ -130,6 +130,12 @@ jobs:
           seed=$(( $(date -u +%s) / 86400 ))
           echo "Seed $seed" >> "$GITHUB_STEP_SUMMARY"
           SEED=$seed node --test compiler/test/fuzz.test.ts || { echo "Seed $seed found a difference: keep it in compiler/test/fuzz-seeds.json (T18b)" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+      # Edit sequences at the night's seed (T18g) on five examples, 30 steps each.
+      - name: Edit sequences at tonight's seed
+        if: always()
+        run: |
+          seed=$(( $(date -u +%s) / 86400 ))
+          EDIT_STEPS=30 EDIT_SEQ="[[\"sort\",$seed],[\"buffer\",$seed],[\"dice\",$seed],[\"effects\",$seed],[\"turtle\",$seed]]" node --test ters/test/edit-sequences.test.ts || { echo "Seed $seed broke an edit law: keep the cut-down steps in ters/test/edit-sequences.test.ts KEPT with a row (T18g)" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
 
   # Past fixes put back (T18d, ters/test/injections/): each must make a
   # test it names fail, and affected.ts must pick that test before a merge.
