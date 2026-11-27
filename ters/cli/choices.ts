@@ -158,9 +158,7 @@ export function modeLines(given: Program, main: Id, target = "JavaScript"): stri
 // The placement entries (the third kind): where each map, keep or fold a
 // page's handler sends away may run (WHERE-IT-RUNS.md, scalar.ts
 // awayMaps): on the page's workers once it is slow, and on the GPU where
-// it has a kernel (gpu-maps.ts, `gpu`, by site) and the browser WebGPU;
-// one whose kernel's arithmetic is only close to the CPU's (`close`, G12)
-// may be held on the GPU so (`GPU close`), never put there by the compiler.
+// it has a kernel (gpu-maps.ts, `gpu`, by site) and the browser WebGPU.
 // By the function's id, with the definition it is in.
 // A command-line program's (no handler sends any away): each map, keep,
 // fold or search it shares out on worker threads once it is slow
@@ -202,16 +200,13 @@ export const POOL = { JavaScript: 3, "JavaScript page": 7, C: 15 } as const;
 const POOL_OF = { JavaScript: "worker threads", "JavaScript page": "workers", C: "threads" } as const;
 const poolLine = (main: Id, name: string, target: keyof typeof POOL) => `${main} place: ${name}'s ${POOL_OF[target]}: cores less one, at most ${POOL[target]}; among 0 to 64; target ${target}`;
 const POOLED = /^(\S+) place: .*'s (?:worker threads|workers|threads): (cores less one, at most \d+|\d+); among 0 to 64; target (JavaScript|JavaScript page|C)$/;
-// A placement on the GPU whose answers may differ from the CPU's in the
-// last bits (G12): a person's to hold, the compiler's never.
-export const CLOSE = "GPU close";
 const IN_RUNS = new Set(["map", "keep", "add", "max", "min", "with", "every", "any", "first where"]);
 // With `main`, the program's workers' entry too.
-export function placeLines(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target: "JavaScript page" | "JavaScript" = "JavaScript page", main?: Id, close: ReadonlySet<number> = new Set()): string[] {
-  const lines = sitesPlaced(ir, gpu, names, target, close);
+export function placeLines(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target: "JavaScript page" | "JavaScript" = "JavaScript page", main?: Id): string[] {
+  const lines = sitesPlaced(ir, gpu, names, target);
   return main !== undefined && lines.length ? [...lines, poolLine(main, ({ ...LIBRARY.names, ...names })[main] ?? main, ir.awayMaps?.length ? target : "JavaScript")] : lines;
 }
-function sitesPlaced(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target: string, close: ReadonlySet<number>): string[] {
+function sitesPlaced(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target: string): string[] {
   const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code);
   const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
   // A definition by its name as written: main's copy stored otherwise
@@ -225,8 +220,8 @@ function sitesPlaced(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target
     }))];
   }
   return ir.awayMaps.map((m) => {
-    const d = defOf(m.fn), on = gpu.has(m.site), near = !on && close.has(m.site);
-    return `${writtenAt(m.fn)} place: ${nameOf(d)}'s ${HOW[m.how] ?? m.how}: workers when slow${on ? ", the GPU where the browser has WebGPU" : ""}; among main thread, workers${on ? ", GPU" : near ? `, ${CLOSE}` : ""}; in ${RUNS} runs; target ${target}`;
+    const d = defOf(m.fn), on = gpu.has(m.site);
+    return `${writtenAt(m.fn)} place: ${nameOf(d)}'s ${HOW[m.how] ?? m.how}: workers when slow${on ? ", the GPU where the browser has WebGPU" : ""}; among main thread, workers${on ? ", GPU" : ""}; in ${RUNS} runs; target ${target}`;
   });
 }
 
@@ -334,12 +329,10 @@ const CHUNKED = "; in chunks of ";
 // page's, by the node; C's runs a thread, or its chunks' items.
 // And the workers or threads a program starts, by the target (`pool`).
 // And how each call of neighbours is held to find them (`near`, L280g).
-// And the maps held on the GPU though their arithmetic is only close
-// (`close`, G12), each among the page's too, on the GPU.
-export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][]; pool: [string, number][]; near: [Id, "every pair" | "k-d tree" | number][]; close: Id[] }
-export const NONE_HELD: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [], close: [] };
+export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][]; pool: [string, number][]; near: [Id, "every pair" | "k-d tree" | number][] }
+export const NONE_HELD: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [] };
 export function heldPlaces(lines: readonly string[]): HeldPlaces {
-  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [], close: [] };
+  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [] };
   for (const l of lines) {
     const near = nearHeld(l);
     if (near) { out.near.push(near); continue; }
@@ -352,7 +345,6 @@ export function heldPlaces(lines: readonly string[]): HeldPlaces {
     if (on === "worker threads" && target === "JavaScript") out.workers.push(id);
     if (on === "threads" && target === "C") out.threads.push(id);
     if ((on === "workers" || on === "GPU") && target === "JavaScript page") out.page.push([id, on]);
-    if (on === CLOSE && target === "JavaScript page") { out.page.push([id, "GPU"]); out.close.push(id); }
     if (runs) (target === "C" ? out.cRuns : out.runs).push([id, Number(runs)]);
   }
   return out;
