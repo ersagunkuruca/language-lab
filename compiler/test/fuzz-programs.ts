@@ -27,7 +27,10 @@ type Scope = Record<Ty, Id[]>;
 
 export function program(seed: number, count: number, inputs: bigint[][] = []) {
   const k = new Lang(LIBRARY.code), r = random(seed);
-  const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
+  // A library definition by name; one renamed or moved into the builtins
+  // (uppercase now takes a locale) is an error here, not an undefined id
+  // at the seeds that reach it (seed 10 did, found by T18f).
+  const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name) ?? (() => { throw new Error(`fuzz-programs.ts: no library definition "${name}"`); })();
   const call = (f: Id, ...xs: Id[]) => k.call(f, ...xs);
   let names = 0;
   const fresh = () => `v${names++}`;
@@ -317,7 +320,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(TEXT_OPS.slice, sub("T"), sub("I"), sub("I")),
           () => call(S.show, sub("F")),
           () => call(INT_OPS.show, sub("I")),
-          () => call(lib("uppercase"), sub("T")),
+          () => call(lib("ascii uppercase"), sub("T")),
           () => call(lib("repeated"), sub("T"), small(4)),
           // Abort under attempt, and an outcome taken apart again (C117).
           () => call(SHOW_ANY, call(lib("attempt"), k.thunk(() => k.if(sub("B"), call(ABORT_OP, sub("T")), sub("I"))))),
