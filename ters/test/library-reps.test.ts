@@ -12,7 +12,7 @@ import { infer } from "../src/lang/infer.ts";
 import { makeRunner, runMain, showValue, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
+import { splitByHolders, withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { COPIED_FROM } from "../src/lang/prelude-ids.ts";
 import { COMPARE, CONS, INT_OPS, LIST, NIL, PAIR_V, S, SET, SHOW_ANY } from "../src/lang/std.ts";
 import { DIVERGE, NUMBER, STRING } from "../src/lang/types.ts";
@@ -609,9 +609,11 @@ test("a page's Html lists stay as written while the rest take the chooser's row 
 // Space holds an Algebra: bounce's and spacetime's physics passes it to
 // the library's clifford code, which now stays as written, the Algebra's
 // lists with it, since no list crosses in what they're given (C196).
-// spacetime's lists are arrays, bounce's, impact's and compass's trees
-// (their cheapest), and each page or printout is the same.
-for (const [example, row] of [["spacetime", "array of List"], ["bounce", "tree of List"], ["impact", "tree of List"], ["compass", "tree of List"]]) {
+// spacetime's lists are arrays, impact's trees (their cheapest), and
+// bounce's and compass's arrays, picked by the definitions split off by
+// their own jobs, not main's appends (G12d). Each page or printout is the
+// same.
+for (const [example, row] of [["spacetime", "array of List"], ["bounce", "array of List"], ["impact", "tree of List"], ["compass", "array of List"]]) {
   test(`${example}'s lists take the chooser's row beside its Algebra's (C196)`, async () => {
     const { join } = await import("node:path");
     const { loadProgram } = await import("../src/lang/load.ts");
@@ -636,21 +638,24 @@ for (const [example, row] of [["spacetime", "array of List"], ["bounce", "tree o
 
 // `seeded` runs the function it is given and hands on its answer, as
 // `first` does, so an array passes it as it is: dice's rolls, a list made
-// under a seed, split too (C196).
+// under a seed, split too (C196). The chooser keeps dice's lists as
+// written since G12d (its own definitions' jobs pick no other), so the
+// split is asked for here with trees.
 test("a list made under a seed passes `seeded` as it is, so dice's page splits (C196)", async () => {
   const { join } = await import("node:path");
   const { loadProgram } = await import("../src/lang/load.ts");
   const p = loadProgram(join(import.meta.dirname, "../examples/dice"));
   const names = p.pres.names, info = infer(p.code, names, undefined, p.options);
   const main = p.named("main");
-  const c = withLibraryRepresentations(p.code, info, names, main, p.own.defs, [], { hostMaps: true });
+  assert.deepEqual(withLibraryRepresentations(p.code, info, names, main, p.own.defs, [], { hostMaps: true }).chosen, []);
+  const c = splitByHolders(p.code, info, names, main, p.own.defs, LIBRARY.reps.find((r) => r.name === "tree of List")!)!, checked = infer(c.code, c.names, undefined, p.options);
   assert.deepEqual(c.chosen, ["List as tree of List beside main's lists as written"]);
-  assert.deepEqual(c.info?.errors.map((e) => e.message), []);
+  assert.deepEqual(checked.errors.map((e) => e.message), []);
   const { htmlText, evaluatorCall } = await import("../src/lang/html.ts");
   const { Cells } = await import("../src/lang/cells.ts");
   const { equal } = await import("../src/lang/run.ts");
   const shown = (code: typeof p.code, i: typeof info, n: typeof names) => htmlText(runMain(code, i, main, { print: () => {}, names: n, cells: new Cells(equal) } as never), evaluatorCall);
-  assert.equal(shown(c.code, c.info!, c.names), shown(p.code, info, names));
+  assert.equal(shown(c.code, checked, c.names), shown(p.code, info, names));
 });
 
 // C271: a group whose lists cross holding lists splits off with them

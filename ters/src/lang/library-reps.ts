@@ -617,7 +617,16 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       // converted where they cross (C196: the pedal's sound beside its page).
       if (tree.of === LIST && !chosen.length && (skip.has(WHOLE_LISTS) || !listBoundary(withTrees(code, [tree]), info, defs, tree, asked))) {
         const s = options.split !== false ? splitByHolders(code, info, names, main, defs, tree) : null;
-        if (s) { keep({ split: "holders", tree: LIBRARY.reps.indexOf(tree) }); return s; }
+        // Only if the definitions split off pick it by their own jobs: the
+        // jobs that picked it for the whole may be the rest's, which keeps
+        // its lists as written (rain-page's attributes appended in main
+        // made its drops trees, whose map no page sends away, G12d).
+        // Trees only: a tree's map is never shared out (pure-branches.ts
+        // parallelLists), where an array's is.
+        const rows = [spec, ...left], again = s && tree.name === "tree of List" ? choose(code, main, rows, undefined, opaque, options.measured?.get(ty), { jobs: new Set((s.picks?.[0]?.from ?? []).flatMap((d) => uses(code, d, rows, true, opaque))), referred: new Set(uses(code, main, rows, true, opaque)) }).rep : tree;
+        if (s && again === tree) { keep({ split: "holders", tree: LIBRARY.reps.indexOf(tree) }); return s; }
+        // Another row by their jobs: chosen again without the tree.
+        if (s && again !== spec) { left.splice(left.indexOf(tree), 1); continue; }
         left.splice(left.indexOf(tree), 1);
         if (tree.name === "array of List" && left.length) continue;
         continue types;
@@ -955,7 +964,7 @@ function heldSplit(code: Code, info: Info, names: Names, main: Id, defs: Id[], h
 // that isn't data with lists among its arguments (a Cell of lists): the
 // seeds of a split (rep-split.ts), main and the rest keeping lists as
 // written. Null where the split is refused.
-function splitByHolders(code: Code, info: Info, names: Names, main: Id, defs: Id[], rep: Representation): (Chosen & { reps: Representation[] }) | null {
+export function splitByHolders(code: Code, info: Info, names: Names, main: Id, defs: Id[], rep: Representation): (Chosen & { reps: Representation[] }) | null {
   const own = new Set(defs), holds = holdsType(code, LIST);
   const isData = (id: Id) => code.nodes[(code.nodes[id] as NodeOf<"def"> | undefined)?.body ?? ""]?.kind === "typedef";
   const lists = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || t.args.some(lists) : t.t === "fn" ? [...t.params, t.ret].some(lists) : false; };
