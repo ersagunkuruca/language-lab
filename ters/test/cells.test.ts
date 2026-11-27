@@ -206,6 +206,29 @@ test("handOver writes the changed cells to the cells made in the same order", ()
   assert.equal(to.peek(d2), 0);
 });
 
+// C354: the compiled page holds its lists as arrays, the interpreted one as
+// cons cells; what's carried either way is made the other's way.
+test("handOver and carried make lists the other engine's way", async () => {
+  const { arrayOf, itemsIn, ArrayView } = await import("../src/lang/array-view.ts");
+  const { CONS, NIL } = await import("../src/lang/std.ts");
+  const cons = (...xs: unknown[]) => xs.reduceRight((l: unknown, x) => ({ tag: CONS, fields: [x, l] }), { tag: NIL, fields: [] }) as Value;
+  const state = (cards: Value) => ({ tag: "s", fields: [cards, 1] }) as unknown as Value;
+  const card = (n: number, tags: Value) => ({ tag: "c", fields: [n, tags] }) as unknown as Value;
+  const from = new Cells(equal), to = new Cells(equal);
+  from.kept = []; to.kept = [];
+  const a = from.cell(state(cons())), b = to.cell(state(arrayOf([]) as unknown as Value));
+  from.write(a, state(cons(card(1, cons("x")), card(2, cons()))));
+  assert.equal(handOver(from.kept, to.kept, to), 1);
+  const got = to.peek(b) as unknown as { fields: [InstanceType<typeof ArrayView>] };
+  assert.ok(got.fields[0] instanceof ArrayView);
+  const items = itemsIn(got.fields[0]) as { fields: [number, unknown] }[];
+  assert.deepEqual(items.map((c) => c.fields[0]), [1, 2]);
+  assert.ok(items[0].fields[1] instanceof ArrayView, "an item's own list too");
+  // Back: a compiled page's snapshot taken up by the interpreted page.
+  const back = carried(state(arrayOf([]) as unknown as Value), state(cons()), to.peek(b));
+  assert.deepEqual(back?.value, state(cons(card(1, cons("x")), card(2, cons()))));
+});
+
 // E279a: the same page's next version, edited, takes over what was done on
 // the last; an edit that adds or takes away a cell starts it afresh.
 test("handOver between versions carries only when both made as many cells", () => {

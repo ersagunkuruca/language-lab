@@ -10,7 +10,7 @@ import { infer } from "../src/lang/infer.ts";
 import { makeRunner } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY, TREES } from "../src/lang/library.ts";
-import { ARRAY_OPS, CONS, LIST, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
+import { ARRAY_OPS, CELL_OPS, CONS, LIST, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
 import { ARRAY } from "../src/lang/types.ts";
 import { merge, type Id } from "../src/model.ts";
 import { CARRIED, FOLD_OF_ITEMS } from "../src/lang/represent.ts";
@@ -30,7 +30,7 @@ test("array of List: its row, and its jobs agree with List's through items of ar
   assert.ok(rep.byType);
   assert.deepEqual(rep.hidden, { [CONS]: [1] });
   const lib = (n: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === n)!;
-  assert.deepEqual(rep.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [FOLD_OF_ITEMS]: "n", [lib("length")]: "1", [lib("append")]: "n", [lib("item at")]: "1", [lib("map")]: "n", [lib("replace at")]: "1", [lib("drop")]: "1", [lib("take")]: "1", [lib("sort")]: "n log n", [CARRIED + lib("append")]: "1", [PRELUDE_DEFS["added at end"]]: "1" });
+  assert.deepEqual(rep.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [FOLD_OF_ITEMS]: "n", [lib("length")]: "1", [lib("append")]: "n", [lib("item at")]: "1", [lib("map")]: "n", [lib("replace at")]: "1", [lib("drop")]: "1", [lib("take")]: "1", [lib("sort")]: "n log n", [CARRIED + lib("append")]: "1", [PRELUDE_DEFS["added at end"]]: "1", [CELL_OPS.each]: "n" });
   // List as written, which the chooser weighs it against (C30d3b).
   const spec = LIBRARY.reps.find((r) => r.of === LIST && r.canonical)!;
   assert.equal(spec.type, LIST);

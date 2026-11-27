@@ -17,6 +17,8 @@ import { FakeEl, FakeText, fakeDoc } from "../../ters/test/fakedom.ts";
 import { loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { coreCall } from "../src/core-rt.ts";
 import { mount as ideal } from "./board.ideal.js";
+import { represented } from "../../ters/cli/represented.ts";
+import { representationsIn } from "../../ters/src/lang/represent.ts";
 
 export type Name = "evaluator" | "core" | "ideal";
 
@@ -46,16 +48,18 @@ export function program() {
   const info = infer(p.code, p.pres.names, undefined, p.options);
   if (info.errors.length) throw new Error(`board has errors: ${info.errors.map((e) => e.message).join("; ")}`);
   const main = p.code.defs.find((d) => p.pres.names[d] === "main")!;
-  return { code: p.code, info, names: p.pres.names, main };
+  return { code: p.code, info, names: p.pres.names, main, own: p.own.defs, options: p.options };
 }
 
 export type Mount = () => FakeEl;
 
 export async function ways(): Promise<Record<Name, Mount>> {
-  const { code, info, names, main } = program();
-  // Lowered to the core IR once, and loaded on each mount's cells, which
-  // its runtime holds from the start (core-rt.ts), as core-page.ts does.
-  const ir = lowerCore(code, info, names, [main]), fi = ir.funcs.findIndex((g) => g.name === names[main] && !g.inner);
+  const { code, info, names, main, own, options } = program();
+  // Stored as a page's build stores it (lists as arrays, C354), lowered to
+  // the core IR once, and loaded on each mount's cells, which its runtime
+  // holds from the start (core-rt.ts), as core-page.ts does.
+  const r = represented({ title: "board", code, own, names, info, reps: representationsIn(code, info, names, own), options }, main, true);
+  const ir = lowerCore(r.code, r.info, r.names, [main]), fi = ir.funcs.findIndex((g) => g.name === r.names[main] && !g.inner);
   return {
     evaluator: () => {
       const cells = new Cells(equal);

@@ -2441,7 +2441,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // read as undefined, every line done).
     // each and each of do since I331: their rows get views whose Bools
     // read as booleans (core-rt.ts cellFns).
-    const handsOn = sig?.t === "fn" && sig.params.some((p) => p.t === "fn") && target !== CELL_OPS.each && target !== CELL_OPS.eachOf;
+    const handsOn = sig?.t === "fn" && sig.params.some((p) => p.t === "fn") && target !== CELL_OPS.each && target !== CELL_OPS.eachArray && target !== CELL_OPS.eachOf;
     if (deep && (!HOST_CELLS.has(target) || handsOn)) throw new Refused(`uses ${nm(target)} on data holding a Bool, which isn't lowered yet`);
     if (ts.some((t) => severalInside(t!))) throw new Refused(`uses ${nm(target)} on a function with several answers, which the evaluator's can't call yet`);
     const t = ts[ts.length - 1]!;

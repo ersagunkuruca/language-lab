@@ -32,8 +32,8 @@ import { COMPANIONS, TOGETHER } from "./together.ts";
 import { keyGroups, trefGroup, type Groups } from "./map-groups.ts";
 import { ownLibraryHolders } from "./own-holders.ts";
 import { keptMap } from "../kept.ts";
-import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS, TABLE_OPS } from "./std.ts";
-import { INT, STRING, Subst, type Type } from "./types.ts";
+import { ARRAY_OPS, CELL_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS, TABLE_OPS } from "./std.ts";
+import { ARRAY, INT, STRING, Subst, type Type } from "./types.ts";
 import type { Pins } from "./signatures.ts";
 
 // What equal, show and compare see of a value: these, given a stored one,
@@ -348,6 +348,10 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     // A type chosen per group that doesn't check is chosen whole.
     if ((r as { split?: boolean }).split) { for (const x of r.reps) skip.add("split " + x.of); continue; }
     const list = r.reps.find((x) => x.of === LIST);
+    // Lists as arrays for the whole that don't check (a sound's function
+    // given to `listen`, which takes lists, C354): split, as where the
+    // boundary refuses them.
+    if (list && r.chosen.includes(`${names[LIST] ?? LIBRARY.names[LIST]} as ${list.name}`) && !skip.has(WHOLE_LISTS)) { skip.add(WHOLE_LISTS); continue; }
     // A hash table that doesn't check gives way to the tree, not to the
     // definition.
     const table = r.reps.find((x) => x.oneHolder);
@@ -420,6 +424,8 @@ function typesIn(code: Code, info: Info, d: Id): Type[] {
   return ts;
 }
 
+// A choice that didn't check, so lists aren't held one way for the whole.
+const WHOLE_LISTS = "whole " + LIST;
 function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[], skip: Set<Id>, options: LibraryOptions): Chosen & { reps: Representation[] } {
   const chosen: Representation[] = [];
   // Where a type's rows are chosen per group (C358): each row's groups,
@@ -586,7 +592,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       // program's definitions that never sees a library type holding lists
       // (a page's Html) takes them, and the rest keep lists as written,
       // converted where they cross (C196: the pedal's sound beside its page).
-      if (tree.of === LIST && !chosen.length && !listBoundary(withTrees(code, [tree]), info, defs, tree, asked)) {
+      if (tree.of === LIST && !chosen.length && (skip.has(WHOLE_LISTS) || !listBoundary(withTrees(code, [tree]), info, defs, tree, asked))) {
         const s = options.split !== false ? splitByHolders(code, info, names, main, defs, tree) : null;
         if (s) { keep({ split: "holders", tree: LIBRARY.reps.indexOf(tree) }); return s; }
         left.splice(left.indexOf(tree), 1);
@@ -743,7 +749,9 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   // So are an asked row's own definitions (Bytes as a byte array's,
   // written on List Int), where lists go to arrays beside it.
   const rowsAsked = lists ? asked.filter((r) => plainRow(code, r)).flatMap((r) => [...Object.values(r.impl), ...(r.meaning ? [r.meaning] : []), ...(r.store ? [r.store] : [])]) : [];
-  const kept = [...made.filter((d) => !own.includes(d)), ...(boundary ? [...boundary.made, ...boundary.edges] : []), ...rowsAsked];
+  // A runtime-read type (a mesh, a page's Html) keeps its lists as written:
+  // listBoundary converts what goes into one.
+  const kept = [...made.filter((d) => !own.includes(d)), ...(boundary ? [...boundary.made, ...boundary.edges, ...RUNTIME_READ] : []), ...rowsAsked];
   // A row chosen for some groups only rewrites their sites; a type
   // reference without a named key goes by its definition's sites.
   const only = (r: Representation) => {
@@ -1030,6 +1038,8 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
   const holding = new Map<Id, boolean>();
   const holds = (id: Id): boolean => {
     if (holding.has(id)) return holding.get(id)!;
+    // A runtime-read type's lists are as written (listBoundary, C354).
+    if (RUNTIME_READ.has(id)) return false;
     holding.set(id, false);
     const td = code.nodes[(code.nodes[id] as NodeOf<"def">)?.body ?? ""];
     const names = (n: Id): boolean => {
@@ -1262,13 +1272,21 @@ const PASSES_ON = new Set<Id>([S.first, S.optional, S.all, S.seeded, S.fuel]);
 // pass them about holding arrays: a list made into one of their cases is
 // converted as a builtin's is, and only taking one apart (a field read, a
 // match) keeps List as written.
-const RUNTIME_READ = new Set<Id>(["std.frame", "std.pass", "std.mesh", "std.image"]);
+const RUNTIME_READ = new Set<Id>(["std.frame", "std.pass", "std.mesh", "std.image", "std.html", "std.attribute"]);
 // Builtins that only move values of a variable type about (C70).
-const STRUCTURAL = new Set<Id>([S.oneOf, S.fail, ...Object.values(ARRAY_OPS)]);
+// A cell keeps what it's given as it is, and each in array hands the
+// items to the program's own function (C354: a page's list as an array).
+const STRUCTURAL = new Set<Id>([S.oneOf, S.fail, ...Object.values(ARRAY_OPS), CELL_OPS.cell, CELL_OPS.formula, CELL_OPS.read, CELL_OPS.write, CELL_OPS.each, CELL_OPS.eachArray]);
 // A hash table's builtins, which hash and compare its keys but keep its
 // values as they are given (C363): a list held in its values (depot's
 // routes, crew's needs by name) may stay an array.
 const TABLE_BUILTINS = new Set<Id>(Object.values(TABLE_OPS));
+// Builtins that hand on what they're given as it is: an array written into
+// a cell is read back the same array, and `value of` answers what an
+// optional holds (C354: board's cards). Arrays only: a page carries its
+// cells over from the interpreted page, which cells.ts handOver makes
+// arrays of, not trees.
+const AS_GIVEN = new Set<Id>([CELL_OPS.cell, CELL_OPS.formula, CELL_OPS.read, CELL_OPS.write, S.valueOf]);
 // `owned`: the program's own types the rewrite leaves as they are, whose
 // lists are converted where they're read and made (rep-split.ts, C93 s3).
 // `asWritten`: definitions the program's arrays never reach, called with
@@ -1345,8 +1363,27 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
   const plainList = (p: Type, t: Type) => p.t === "con" && p.id === LIST && (t = info.subst.zonk(t)).t === "con" && t.id === LIST && !t.args.some(hasList);
   const calledBy = new Map<Id, Call>();
   for (const d of reached) for (const id of subtree(code, d)) { const n = code.nodes[id]; if (isCall(n)) calledBy.set(n.fn, n); }
+  // A runtime-read case taken apart (html's `with`): its lists are as
+  // written, so each one bound is stored where it's used, unless it goes
+  // straight into another such case (C354).
+  const madeCase = (n: Node | undefined): n is Call => !!n && isCall(n) && (() => { const f = code.nodes[n.fn]; return f?.kind === "ref" && code.nodes[f.target]?.kind === "variant" && RUNTIME_READ.has(ownerOf(f.target) ?? ""); })();
+  const apart = new Set<Id>(), straight = new Set<Id>();
   for (const d of reached) for (const id of subtree(code, d)) {
     const n = code.nodes[id];
+    if (n.kind === "arm" && RUNTIME_READ.has(ownerOf(n.variant) ?? "")) for (const b of n.binds) { const t = info.typeOf.get(b), z = t && info.subst.zonk(t); if (z?.t === "con" && z.id === LIST && !z.args.some(hasList)) apart.add(b); }
+    if (madeCase(n)) for (const a of n.args) { const x = code.nodes[a]; if (x?.kind === "ref") straight.add(a); }
+  }
+  for (const d of reached) for (const id of subtree(code, d)) {
+    const n = code.nodes[id];
+    if (n.kind === "ref" && apart.has(n.target)) {
+      if (straight.has(id)) continue;
+      const r = freshId();
+      nodes[r] = { id: r, kind: "ref", target: n.target };
+      const s = freshId();
+      nodes[s] = { id: s, kind: "ref", target: wayBack() };
+      nodes[id] = { id, kind: "call", fn: s, args: [r] };
+      continue;
+    }
     // A relation run backwards over lists stays as written; one generic in
     // what it runs (inverse's `applied`, given the pedal's bands) runs the
     // program's own code, which the rewrite changes with the rest, and an
@@ -1360,12 +1397,15 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
     if (target && code.nodes[target]?.kind === "variant" && RUNTIME_READ.has(ownerOf(target) ?? "")) {
       const c = calledBy.get(id);
       if (!c) continue;
-      const args = c.args.map((a) => { const t = info.typeOf.get(a), z = t && info.subst.zonk(t); return z?.t === "con" && z.id === LIST && !z.args.some(hasList) ? call(rep.meaning!, a) : a; });
+      const args = c.args.map((a) => { const t = info.typeOf.get(a), z = t && info.subst.zonk(t), x = code.nodes[a]; return z?.t === "con" && z.id === LIST && !z.args.some(hasList) && !(x?.kind === "ref" && apart.has(x.target)) ? call(rep.meaning!, a) : a; });
       if (args.some((a, i) => a !== c.args[i])) nodes[c.id] = { ...c, args };
       continue;
     }
     const edgeOf = target ? edge(target) : null;
     if (!target || (!edgeOf && (!SIGS[target] || code.nodes[target]?.kind === "def"))) continue;
+    // A builtin whose job the row does (each, C354): the rewrite calls the
+    // row's own.
+    if (rep.impl[target]) continue;
     const at = info.typeOf.get(id);
     if (!at || !hasList(at)) continue;
     // A builtin with a list in its type: only called, by the rules above.
@@ -1388,7 +1428,7 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
     // list of them as they are: its answer is stored whole, its items
     // already the row's (L271c).
     const ofLists = target === S.listOf && c.args.length > 0;
-    const passes = PASSES_ON.has(target) || target === S.oneOf || target === S.fail || setPasses || ofLists;
+    const passes = PASSES_ON.has(target) || (AS_GIVEN.has(target) && rep.type === ARRAY) || target === S.oneOf || target === S.fail || setPasses || ofLists;
     const sig = edgeOf ?? SIGS[target](new Subst());
     if (sig.t !== "fn") return null;
     const args = c.args.map((a, i) => {

@@ -5,7 +5,7 @@
 
 import { deadline, OutOfSteps } from "./over.ts";
 import type { Id } from "../model.ts";
-import { ArrayView } from "./array-view.ts";
+import { ArrayView, arrayOf, itemsIn } from "./array-view.ts";
 import { Table } from "./table.ts";
 import { Cells, ITEM_OPS, NoValue, changeAt, itemPathOf, listEdits, pathValue, stepsOf } from "./cells.ts";
 import { CELL_OPS, CONS, FALSE, FILE_INFO_V, FILE_KIND_V, INSTANT_V, NIL, TRUE, UNIT_V } from "./std-ids.ts";
@@ -28,6 +28,9 @@ const LISTS = { from: fromList, to: toList as (xs: Value[]) => Value };
 const LIST_VIEWS = { cons: CONS, nil: NIL, isList: (v: Value) => typeof v === "object" && (v.tag === CONS || v.tag === NIL) };
 // The evaluator's lists with them, as Cells compares values by (C162).
 export const LIST_SHAPE = { ...LISTS, views: LIST_VIEWS };
+// A list held as an array (C354, `array of List`): each in array maps its
+// items, its rows given them as they are.
+const ARRAY_LISTS = { from: (v: Value) => Array.from(itemsIn(v as unknown as ArrayView)) as Value[], to: (xs: Value[]) => arrayOf(xs) as unknown as Value };
 // The same for compiled code's rows (I331): a Bool inside an item read as
 // a boolean.
 export const LIST_SHAPE_BOOLS = { ...LISTS, views: { ...LIST_VIEWS, bools: { t: TRUE, f: FALSE } } };
@@ -47,6 +50,7 @@ export function cellOps(cells: Cells, call: (f: Value, ...xs: Value[]) => Value,
     [CELL_OPS.cell]: (v) => cells.cell(v, "cell", listsHere),
     [CELL_OPS.formula]: (f) => cells.formula(() => call(f)),
     [CELL_OPS.each]: (items, f) => cells.each(items, (x) => call(f, x), listsHere),
+    [CELL_OPS.eachArray]: (items, f) => cells.each(items, (x) => call(f, x), ARRAY_LISTS),
     [CELL_OPS.eachOf]: (items, f) => cells.eachOf(items, (x) => call(f, x), listsHere),
     // A formula that gave no value (it ran out of `with fuel`) is a read
     // with no answer; it is computed again at the next read.

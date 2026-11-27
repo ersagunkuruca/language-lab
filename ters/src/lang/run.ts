@@ -1943,7 +1943,7 @@ function start(code: Code, info: Info, def: Id, t: Type, args: Value[], rt: Runt
 // Whether what `def` reaches reads cells reactively: a formula, an each
 // or a page's watcher. When nothing does, its cells are kept plainly, the
 // State handler's way (cells.ts `plain`, L99e).
-const REACTIVE: readonly Id[] = [CELL_OPS.formula, CELL_OPS.each, CELL_OPS.eachOf];
+const REACTIVE: readonly Id[] = [CELL_OPS.formula, CELL_OPS.each, CELL_OPS.eachArray, CELL_OPS.eachOf];
 export function tracks(code: Code, def: Id): boolean {
   const reached = new Set(dependencies(code, def));
   return REACTIVE.some((op) => reached.has(op));
