@@ -269,7 +269,7 @@ ${textures.slice(1).map((_, j) => `  if (t == ${j + 1}.0) { return textureSample
   // the vertex reads the leaves it needs where they sit in it, by
   // constants the pipeline sets; an ordinary list sends only those.
   const kept = whole && !unread && nI ? { leaves: allInstance!, places: instance.map((x) => allInstance!.indexOf(x)) } : undefined;
-  const instWord = (j: number) => (kept ? `lab_inst[lab_ii * lab_iw + lab_i${j}]` : `lab_inst[lab_ii * ${nI}u + ${j}u]`);
+  const instWord = (j: number) => (kept ? `lab_inst[lab_it * lab_iw + lab_i${j}]` : `lab_inst[lab_it * ${nI}u + ${j}u]`);
   const fuel = sh.wgsl.includes("var<private> lab_fuel"), none = sh.wgsl.includes("var<private> lab_none");
   const start = `${fuel ? "  lab_fuel = 1.0e30;\n" : ""}${none ? "  lab_none = false;\n" : ""}`;
   // One varying per carried leaf.
@@ -282,6 +282,34 @@ ${textures.slice(1).map((_, j) => `  if (t == ${j + 1}.0) { return textureSample
   });
   const v = rebuilt(ff.params[0], structs, (j, kind) => (kind === "bool" ? `(o.c${j} != 0u)` : kind === carried[j].kind ? `o.c${j}` : `${kind}(o.c${j})`));
   const k = ["x", "y", "z", "w"].slice(0, colour).map((_, j) => leafAt("k", colourT, [j], structs));
+  // The placed corner of instance lab_it at corner lab_vi.
+  const placing = `${start}  let p = ${vEntry}(${[unread ? "0.0" : rebuilt(it, structs, only(allInstance!, instance, instWord)), rebuilt(ct, structs, only(allCorner!, corner, (j) => `lab_corner[lab_vi * ${nC}u + ${j}u]`)), ...capsWgsl].join(", ")});`;
+  const gaveNone = fuel || none ? [fuel ? "lab_fuel < 0.0" : "", none ? "lab_none" : ""].filter(Boolean).join(" || ") : "";
+  // Culling (G14b, CULLING.md): for each instance, whether some corner of
+  // its mesh is inside every plane of the clip volume taken one at a time,
+  // that is, whether no one plane has every corner outside it. A corner
+  // that gives no position (out of fuel) is outside every plane, as it
+  // draws nothing. Not for a draw of one instance or one sampling textures.
+  const cull = !unread && !textures.length;
+  const culling = cull ? `
+@group(0) @binding(3) var<storage, read_write> lab_kept: array<u32>;
+struct LabCull { n: u32, corners: u32 }
+@group(0) @binding(4) var<uniform> lab_cull: LabCull;
+@compute @workgroup_size(64) fn lab_cull_main(@builtin(global_invocation_id) lab_g: vec3u) {
+  _ = lab_caps[0]; _ = lab_inst[0]; _ = lab_corner[0];
+  let lab_it = lab_g.x + lab_g.y * 65535u * 64u;
+  if (lab_it >= lab_cull.n) { return; }
+  var lab_out = 63u;
+  for (var lab_vi = 0u; lab_vi < lab_cull.corners; lab_vi++) {
+${placing.replace(/^/gm, "  ")}
+    let q = ${clip};
+    var b = 0u;
+    if (q.x < -q.w) { b |= 1u; } if (q.x > q.w) { b |= 2u; } if (q.y < -q.w) { b |= 4u; } if (q.y > q.w) { b |= 8u; } if (q.z < 0.0) { b |= 16u; } if (q.z > q.w) { b |= 32u; }
+${gaveNone ? `    if (${gaveNone}) { b = 63u; }
+` : ""}    lab_out &= b;
+  }
+  lab_kept[lab_it] = select(0u, 1u, lab_out == 0u);
+}` : "";
   const wgsl = `${sh.wgsl}
 @group(0) @binding(0) var<uniform> lab_caps: array<vec4u, ${Math.max(1, Math.ceil(words / 4))}>;
 @group(0) @binding(1) var<storage, read> lab_inst: array<u32>;
@@ -293,16 +321,17 @@ ${vary.join("\n")}
 @vertex fn lab_vs(@builtin(vertex_index) lab_vi: u32, @builtin(instance_index) lab_ii: u32) -> LabPlaced {
   // Every binding read, so the layout made from the module has all three.
   _ = lab_caps[0]; _ = lab_inst[0]; _ = lab_corner[0];
-${start}  let p = ${vEntry}(${[unread ? "0.0" : rebuilt(it, structs, only(allInstance!, instance, instWord)), rebuilt(ct, structs, only(allCorner!, corner, (j) => `lab_corner[lab_vi * ${nC}u + ${j}u]`)), ...capsWgsl].join(", ")});
+  let lab_it = lab_ii; // drawn
+${placing}
   var o: LabPlaced;
   o.position = ${clip};
 ${carry.join("\n")}
-${fuel || none ? `  if (${[fuel ? "lab_fuel < 0.0" : "", none ? "lab_none" : ""].filter(Boolean).join(" || ")}) { var nan = 0x7fc00000u; o.position = vec4f(bitcast<f32>(nan)); }\n` : ""}  return o;
+${gaveNone ? `  if (${gaveNone}) { var nan = 0x7fc00000u; o.position = vec4f(bitcast<f32>(nan)); }\n` : ""}  return o;
 }
 @fragment fn lab_fs(o: LabPlaced) -> @location(0) vec4f {
 ${textures.length ? `  // The sampler and every texture in the layout, read or not.\n  _ = lab_sampler;${textures.map((_, k) => ` _ = lab_tex${k};`).join("")}\n` : ""}${start}  let k = ${fEntry}(${[v, ...capsWgsl].join(", ")});
 ${fuel || none ? `  if (${[fuel ? "lab_fuel < 0.0" : "", none ? "lab_none" : ""].filter(Boolean).join(" || ")}) { discard; }\n` : ""}  return vec4f(${k[0]}, ${k[1]}, ${k[2]}, ${colour === 4 ? k[3] : "1.0"});
-}
+}${culling}
 `;
-  return { wgsl, caps: capLeaves as Leaf[][], instance, corner, colour, ...(textures.length ? { textures } : {}), ...(kept ? { kept } : {}) };
+  return { wgsl, caps: capLeaves as Leaf[][], instance, corner, colour, ...(textures.length ? { textures } : {}), ...(kept ? { kept } : {}), ...(cull ? { cull: true as const } : {}) };
 }
