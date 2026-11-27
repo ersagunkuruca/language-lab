@@ -1353,6 +1353,11 @@ static int lab_handlers_give(int e) { (void)e; if (lab_htn) lab_hs[lab_htaken[--
   // moving the stack pointer onto its stack (one instruction per
   // processor) and switched with sigsetjmp and siglongjmp. Apple's too
   // (C294): ucontext is deprecated on macOS, and iOS builds with this.
+  // Linux's too on x86-64 and ARM64 (C326): glibc's swapcontext sets the
+  // signal mask, a system call each way (crew's scheduler, 60,000 a run:
+  // 350 -> 280 ms); its fortified siglongjmp refuses a jump onto another
+  // stack, so a program with fibers is built without _FORTIFY_SOURCE
+  // (c.ts FIBERS_FIRST).
   // Windows' own fibers there (C296): a stack switched by hand would break
   // its unwinding; each thread becomes a fiber the first time it switches.
   "fibers": { uses: [], c: `#if defined(_WIN32)
@@ -1369,7 +1374,7 @@ static void lab__cgo(lab__ctx *to) { lab__self = *to; SwitchToFiber(*to); }
 #define LAB_CMAKE(c, f, stk, n) (*(c) = CreateFiberEx(0, (n), 1, lab__cstart, (void *)(f)), (void)(stk), *(c) ? (void)0 : lab_oom())
 #define LAB_CSTACK 0
 #define LAB_CFREE(c) DeleteFiber(*(c))
-#elif defined(__ANDROID__) || defined(__APPLE__) || defined(LAB_FIBER_SJLJ)
+#elif defined(__ANDROID__) || defined(__APPLE__) || (defined(__linux__) && (defined(__x86_64__) || defined(__aarch64__))) || defined(LAB_FIBER_SJLJ)
 #include <setjmp.h>
 typedef struct { sigjmp_buf jb; void (*fn)(void); char *top; } lab__ctx;
 static void lab__cgo(lab__ctx *to) {
@@ -2120,6 +2125,10 @@ export const RT_C = new Set(Object.keys(FNS));
 // What the world needs from POSIX, before any header.
 // On Apple, strict POSIX hides stat's st_mtimespec and sysconf's
 // _SC_NPROCESSORS_ONLN, so Darwin's own names come too (C316).
+// Before any header in a program with fibers: glibc's fortified
+// siglongjmp (_FORTIFY_SOURCE, on by default in Ubuntu's and Fedora's
+// compilers) aborts the jump back onto a fiber's stack (C326).
+export const FIBERS_FIRST = "#undef _FORTIFY_SOURCE";
 export const POSIX = "#define _POSIX_C_SOURCE 200809L\n#ifdef __APPLE__\n#define _DARWIN_C_SOURCE\n#endif";
 export const WORLD_H = "#include <errno.h>\n#include <sys/stat.h>\n#include <dirent.h>";
 export const cName = (rt: string) => `lab_${rt.replace(/\./g, "_")}`;
