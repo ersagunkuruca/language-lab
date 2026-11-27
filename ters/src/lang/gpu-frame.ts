@@ -42,6 +42,10 @@ export interface Site {
   // The module has a compute entry `lab_cull_main` too (G14b,
   // gpu-draws.ts): each instance's flag, 1 where some of it may be drawn.
   cull?: true;
+  // The captured Arrays (G15a1, LIGHTS.md): capture `cap`'s items, each
+  // as `leaves`, in a storage buffer at binding 16 + r after its length.
+  // Such a capture has no words in the uniform.
+  lists?: { cap: number; leaves: Leaf[] }[];
 }
 // A compiled draw's site (its fields after the four: the site's key in
 // the page's table, and the captured values).
@@ -95,7 +99,7 @@ function put(v: Value, leaves: Leaf[], f: Float32Array, n: Int32Array, at: numbe
 const sameItems = (a: Value[] | null, b: Value[]) => a !== null && a.length === b.length && a.every((x, i) => x === b[i]);
 const words = (count: number) => { const b = new ArrayBuffer(Math.max(16, Math.ceil(count / 4) * 16)); return { b, f: new Float32Array(b), n: new Int32Array(b) }; };
 
-interface Slot { list: Value[] | null; items: GPUBuffer | null; caps: GPUBuffer | null; capsWere: string; group: GPUBindGroup | null; groupFor: unknown[]; cull?: Culling }
+interface Slot { list: Value[] | null; items: GPUBuffer | null; caps: GPUBuffer | null; capsWere: string; group: GPUBindGroup | null; groupFor: unknown[]; cull?: Culling; lists?: { was: Value[] | null; buffer: GPUBuffer | null }[] }
 // A culled draw's buffers (G14b): each instance's flag, the kept
 // instances' indices in order, drawIndexedIndirect's five words, and the
 // two passes' counts; with the bind groups made of them.
@@ -214,7 +218,7 @@ export class GpuFrames {
   }
 
   // Encodes the cull of a draw's n instances (G14b), before its pass.
-  private cull(enc: GPUCommandEncoder, slot: Slot, site: Site, kept: boolean, buffers: GPUBuffer[], n: number, corners: number, indices: number, drawn: Drawn): Culling {
+  private cull(enc: GPUCommandEncoder, slot: Slot, site: Site, kept: boolean, buffers: GPUBuffer[], n: number, corners: number, indices: number, drawn: Drawn, lists: GPUBuffer[] = []): Culling {
     const D = this.device, U = GPUBufferUsage;
     let c = slot.cull;
     if (!c || c.n < n) {
@@ -228,9 +232,10 @@ export class GpuFrames {
     const flag = this.compute(`cull\u0000${kept}\u0000${site.wgsl}`, site.wgsl, "lab_cull_main", this.placesOf(site, kept));
     const scan = this.compute("scan", KEPT_IN_ORDER, "lab_main");
     // The flagging pass's group, made again when what it binds changes.
-    if (buffers.some((b, i) => b !== c!.groupFor[i]) || !c.groups.has("flag")) {
-      c.groups.set("flag", D.createBindGroup({ layout: flag.getBindGroupLayout(0), entries: [...buffers, c.flags, c.job].map((buffer, binding) => ({ binding, resource: { buffer } })) }));
-      c.groupFor = buffers;
+    const bound = [...buffers, ...lists];
+    if (bound.length !== c.groupFor.length || bound.some((b, i) => b !== c!.groupFor[i]) || !c.groups.has("flag")) {
+      c.groups.set("flag", D.createBindGroup({ layout: flag.getBindGroupLayout(0), entries: [...[...buffers, c.flags, c.job].map((buffer, binding) => ({ binding, resource: { buffer } })), ...lists.map((buffer, r) => ({ binding: 16 + r, resource: { buffer } }))] }));
+      c.groupFor = bound;
     }
     if (!c.groups.has("scan")) c.groups.set("scan", D.createBindGroup({ layout: scan.getBindGroupLayout(0), entries: [c.flags, c.ids, c.args, c.scan].map((buffer, binding) => ({ binding, resource: { buffer } })) }));
     const p = enc.beginComputePass(), groups = Math.ceil(n / 64);
@@ -345,7 +350,21 @@ export class GpuFrames {
           slot.capsWere = said;
           drawn.bytes += u.b.byteLength;
         }
-        const culled = culling() && !!site.cull && n >= CULL_FROM ? this.cull(enc, slot, site, !!kept, [slot.caps!, instances, mesh.corners], n, mesh.n, mesh.count, drawn) : null;
+        // Each captured Array: sent again only when its items changed.
+        const lists = (site.lists ?? []).map((l, r) => {
+          const held = ((slot.lists ??= [])[r] ??= { was: null, buffer: null }), its = items(caps[l.cap]);
+          if (!held.buffer || !sameItems(held.was, its)) {
+            const per = l.leaves.length, w = words(1 + its.length * per);
+            w.n[0] = its.length;
+            its.forEach((it, i) => put(it, l.leaves, w.f, w.n, 1 + i * per));
+            if (held.buffer && held.buffer.size >= w.b.byteLength) this.device.queue.writeBuffer(held.buffer, 0, w.b);
+            else { held.buffer?.destroy(); held.buffer = this.buffer(w.b, GPUBufferUsage.STORAGE); }
+            held.was = its;
+            drawn.bytes += w.b.byteLength;
+          }
+          return held.buffer;
+        });
+        const culled = culling() && !!site.cull && n >= CULL_FROM ? this.cull(enc, slot, site, !!kept, [slot.caps!, instances, mesh.corners], n, mesh.n, mesh.count, drawn, lists) : null;
         const pipeline = this.pipeline(site, depth, format, !!kept, !!culled);
         // The textures sampled, by the names of the targets captured.
         const sampled = (site.textures ?? []).map((i) => {
@@ -353,10 +372,11 @@ export class GpuFrames {
           if (!drawnNow.has(t)) throw new Error(`the texture "${t}" is read before a pass of this frame draws it`);
           return this.textures.get(t)!;
         });
-        const want: unknown[] = [slot.caps, instances, mesh.corners, pipeline, ...sampled];
+        const want: unknown[] = [slot.caps, instances, mesh.corners, pipeline, ...sampled, ...lists];
         if (!slot.group || want.length !== slot.groupFor.length || want.some((x, i) => x !== slot.groupFor[i])) {
           const entries: GPUBindGroupEntry[] = [slot.caps!, instances, mesh.corners].map((buffer, binding) => ({ binding, resource: { buffer } }));
           if (sampled.length) entries.push({ binding: 3, resource: this.linear() }, ...sampled.map((t, k) => ({ binding: 4 + k, resource: t.createView() })));
+          entries.push(...lists.map((buffer, r) => ({ binding: 16 + r, resource: { buffer } })));
           slot.group = this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
           slot.groupFor = want;
         }

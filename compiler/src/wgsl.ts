@@ -307,7 +307,14 @@ function frameValues(lowered: CoreIR, at: number): { ir: CoreIR; count: number; 
   return { ir, count: values.size, values: run, js: body };
 }
 
-export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: number; kernel?: true } = {}): Shader {
+// `given` (G15a1, LIGHTS.md): arrays whose size only the page knows, each
+// a buffer the shader reads (a draw's captured Array): by function, the
+// buffer each array input is (r, written as the size -1 - r), and how the
+// shader reads buffer r's item i (`at`, a function of an i32) and its
+// length (an i32). Such an array is never a value of its own: it is only
+// read, passed on, or measured.
+export interface Given { entries: Map<number, number[]>; at: (r: number) => string; length: (r: number) => string }
+export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: number; kernel?: true; given?: Given } = {}): Shader {
   if (opts.frame !== undefined) {
     const plain = emitWgsl(lowered), f = frameValues(lowered, opts.frame);
     if (!f) return plain;
@@ -359,8 +366,11 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
         const op = /^array\.(\w+)\./.exec(e.fn)?.[1];
         if (op === "of") return e.args.length;
         if (op === "empty") return 0;
-        if (op === "push" || op === "pushFront") return sz(e.args[0]) + 1;
-        if (op === "rest") return Math.max(sz(e.args[0]) - 1, 0);
+        if (op === "push" || op === "pushFront" || op === "rest") {
+          const n = sz(e.args[0]);
+          if (n < 0) throw new Error(`${op === "rest" ? "takes the rest of" : "pushes onto"} an array the page gives (a shader knows its size only as it runs)`);
+          return op === "rest" ? Math.max(n - 1, 0) : n + 1;
+        }
         throw new Error("keeps an array in an array");
       }
       default: throw new Error("uses an array where a shader can't tell its size");
@@ -398,10 +408,17 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
     };
     walk(f.body);
     const r: Inst = { fn: i, key, locals, ...(isArray(f.result) ? { result: szOf(locals, f.body) } : {}) };
+    if ((r.result ?? 0) < 0) throw new Error("gives an array the page gives (a shader knows its size only as it runs)");
     sizing.delete(key);
     insts.set(key, r);
     return r;
   };
+  // The functions given the page's arrays (`given`), at those, and with
+  // them the copies they call.
+  for (const [i, sizes] of opts.given?.entries ?? []) {
+    if (bad.has(i)) continue;
+    try { sizesOf(keyOf(i, sizes)); } catch (e) { if (!(e instanceof Error)) throw e; bad.set(i, e.message); }
+  }
   // Each function that takes no array is sized on its own, and with it the
   // copies it calls; one that takes an array, by what calls it.
   funcs.forEach((f, i) => {
@@ -451,7 +468,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
   const keptSet = new Set(kept);
   const copies = [...insts.values()].filter((x) => keptSet.has(x.fn)).sort((a, b) => a.fn - b.fn || a.key.localeCompare(b.key));
   for (const i of kept) if (!insts.has(`${i}`) && !arrayParams(i)) copies.push({ fn: i, key: `${i}`, locals: new Map() });
-  const wname = new Map(copies.map((x) => [x.key, ident(funcs[x.fn].name, `_${x.key.replace("@", "_n").replace(/,/g, "_")}`)]));
+  const wname = new Map(copies.map((x) => [x.key, ident(funcs[x.fn].name, `_${x.key.replace("@", "_n").replace(/,/g, "_").replace(/-/g, "m")}`)]));
 
   // Structs for the records the kept functions use, each after the ones
   // its fields need.
@@ -686,7 +703,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
     // Only what can be called from outside a budget is a place to start.
     // A search with no answer outside any `first` isn't one either.
     funcs: kept.filter((i) => !funcs[i].budgeted && !funcs[i].partial && !isArray(funcs[i].result) && !arrayParams(i)).map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(`${i}`)!, params: funcs[i].params as GType[], result: funcs[i].result as GType })),
-    entries: new Map(kept.filter((i) => wname.has(`${i}`)).map((i) => [i, wname.get(`${i}`)!])),
+    entries: new Map(kept.flatMap((i) => { const k = opts.given?.entries.has(i) ? keyOf(i, opts.given.entries.get(i)!) : `${i}`; return wname.has(k) ? [[i, wname.get(k)!] as [number, string]] : []; })),
     refused,
     structs,
     matrices,
@@ -699,6 +716,9 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
     const L = inst.locals;
     const ty = (t: LType, e: SExpr) => tname(t, isArray(t) ? szOf(L, e) : undefined);
     const local = (j: number) => (j < f.params.length ? `p${j}` : `l${j}`);
+    // An array the page gives (`given`): its buffer's number, else null.
+    const isGiven = (j: number) => (L.get(j) ?? 0) < 0;
+    const givenOf = (e: SExpr): number | null => (e.k === "local" && isGiven(e.i) ? -1 - L.get(e.i)! : null);
     let temps = 0;
     const temp = () => `t${temps++}`;
 
@@ -752,6 +772,15 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
             pre.push(`${d}let ${a} = ${bare(ex(e.args[0], pre, d))};`);
             return n ? `${tname(at, n - 1)}(${Array.from({ length: n - 1 }, (_, j) => `${a}[${j + 1}]`).join(", ")})` : a;
           }
+          const r = op === "length" || op === "at" ? givenOf(e.args[0]) : null;
+          if (r !== null && op === "length") return opts.given!.length(r);
+          if (r !== null) {
+            // Past the end, no answer, as at a size known here.
+            const k = temp(), n = temp();
+            pre.push(`${d}let ${k} = ${bare(ex(e.args[1], pre, d))};`, `${d}let ${n} = ${opts.given!.length(r)};`);
+            pre.push(`${d}if (${k} < 0i || ${k} >= ${n}) { lab_none = true; }`);
+            return `${opts.given!.at(r)}(clamp(${k}, 0i, max(${n} - 1i, 0i)))`;
+          }
           if (op === "length") { ex(e.args[0], pre, d); return `${szOf(L, e.args[0])}i`; }
           if (op === "at") {
             // No answer past the end: the flag (scalar.ts `shader`). A var,
@@ -765,7 +794,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
         }
         case "int": return e.v === -(2n ** 31n) ? "(-2147483647i - 1i)" : `${e.v}i`;
         case "bool": return String(e.v);
-        case "local": return local(e.i);
+        case "local": if (isGiven(e.i)) throw new Error("keeps an array the page gives as a value (only at, length and calls read one)"); return local(e.i);
         case "let": {
           // Lets that end in a vector made from one vector's parts: the
           // matrix, and none of the lets (staged code, stage.ts, is this).
@@ -774,6 +803,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
           const t = tail.k === "make" ? tail.t : tail.k === "call" ? funcs[tail.fn].result : null;
           const a = t && vectorWidth(t) ? affine(e, f) : null;
           if (a && mixes(a)) return matrix(a, pre, d);
+          if (isGiven(e.i)) return ex(e.body, pre, d);
           pre.push(`${d}let ${local(e.i)} = ${bare(ex(e.value, pre, d))};`);
           return ex(e.body, pre, d);
         }
@@ -801,7 +831,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
           // A linear function of a linear function (or of staged code): one matrix.
           const a = vectorWidth(funcs[e.fn].result) && e.args.some((x) => x.k === "call" || x.k === "let") ? affine(e, f) : null;
           if (a && !a.rows.every((r) => r.c.size === 0)) return matrix(a, pre, d);
-          return `${wname.get(callKey(L, e))}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
+          return `${wname.get(callKey(L, e))}(${e.args.filter((a) => givenOf(a) === null).map((a) => bare(ex(a, pre, d))).join(", ")})`;
         }
         case "budget": {
           const s = temp(), t = temp();
@@ -834,7 +864,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
     function block(e: SExpr, to: { set: string } | "return", d: string): string[] {
       const out: string[] = [];
       if (e.k === "let") {
-        out.push(`${d}let ${local(e.i)} = ${bare(ex(e.value, out, d))};`);
+        if (!isGiven(e.i)) out.push(`${d}let ${local(e.i)} = ${bare(ex(e.value, out, d))};`);
         return [...out, ...block(e.body, to, d)];
       }
       if (e.k === "if" && !minmax(e)) {
@@ -844,7 +874,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
       if (to === "return" && e.k === "call" && e.fn === i && e.tail) {
         // The loop's next round: new values for the parameters, all
         // computed before any is changed.
-        const xs = e.args.map((a) => ex(a, out, d));
+        const xs = e.args.map((a, j) => (isGiven(j) ? `p${j}` : ex(a, out, d)));
         const ts = xs.map((x, j) => (x === `p${j}` ? null : { t: temp(), x, j }));
         for (const t of ts) if (t) out.push(`${d}let ${t.t} = ${bare(t.x)};`);
         for (const t of ts) if (t) out.push(`${d}p${t.j} = ${t.t};`);
@@ -896,9 +926,9 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
     // One from the budget per call, and per round of the loop.
     const rt = tname(f.result, inst.result);
     const spend = (d: string) => (f.spends ? [`${d}lab_fuel = lab_fuel - 1.0;`, `${d}if (lab_fuel < 0.0) { return ${rt}(); }`] : []);
-    const sig = `fn ${wname.get(inst.key)}(${f.params.map((t, j) => `${loops ? "a" : "p"}${j}: ${tname(t, L.get(j))}`).join(", ")}) -> ${rt}`;
+    const sig = `fn ${wname.get(inst.key)}(${f.params.flatMap((t, j) => (isGiven(j) ? [] : [`${loops ? "a" : "p"}${j}: ${tname(t, L.get(j))}`])).join(", ")}) -> ${rt}`;
     const body = loops
-      ? [...f.params.map((t, j) => `  var p${j} = a${j};`), "  loop {", ...spend("    "), ...block(f.body, "return", "    "), "  }"]
+      ? [...f.params.flatMap((t, j) => (isGiven(j) ? [] : [`  var p${j} = a${j};`])), "  loop {", ...spend("    "), ...block(f.body, "return", "    "), "  }"]
       : [...spend("  "), ...block(f.body, "return", "  ")];
     return [`// ${f.name}`, `${sig} {`, ...body, "}"].join("\n");
   }
