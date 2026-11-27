@@ -15,8 +15,11 @@ Every product in a drop's slide is by a power of two, so it is exact. A
 GPU may fuse a·b + c into one rounding; with exact products that gives the
 same Float32 as the CPU, so a kernel's drops are the evaluator's.
 
-Today both draws go to the GPU (their vertex and fragment functions
-lower to WGSL), and the slide runs on the CPU.
+Both draws go to the GPU: their vertex and fragment functions lower to
+WGSL. The slide is a compute kernel too (G12b), each drop crossing as
+five words, and the page runs it there once the GPU is the quicker. On
+SwiftShader's WebGPU, which runs on the CPU, it never is. Each tick still
+reads the drops back; keeping them on the GPU is G13.
 
 Credits: random numbers by the ZX81's generator (Sinclair Research, 1981);
 a fixed step after Glenn Fiedler's Fix Your Timestep (2004).

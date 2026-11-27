@@ -136,3 +136,73 @@ test("the page's second press runs the keep on the GPU: the CPU's answer, and ou
     assert.ok(walks!.submits > 0, "the second press went to the GPU");
   } finally { await browser.close(); }
 });
+
+// G12: rain-page's drops, records of Float32s, slid by a map whose
+// function captures the hand (a record holding a Bool). Its kernel takes
+// and gives each drop as words, and its arithmetic is the CPU's: every
+// product by a power of two, an Int made a number given back past 2²⁴.
+// The page here ticks on a press and says a sum of where the drops are.
+function rainPage(): string {
+  const program = join(dir, "rain");
+  cpSync(join(import.meta.dirname, "../../ters/examples/rain-page"), program, { recursive: true });
+  const s = new Session(program);
+  s.remove("main");
+  s.define("main", "function", []);
+  s.step("main", "now", "cell(touched(start pane, 320.0, 240.0))");
+  const hole = /□#(\w+)/.exec(s.view("main"))![1];
+  s.replace(hole, 'tag("main", [button("Tick", (event) => write(now, ticked(read(now)))), p([text(() => show(sum(map(read(now).drops, (d) => as float64(d.x) + 2.0 * as float64(d.y) + 4.0 * as float64(d.speed) + as float64(d.seed)))))])])');
+  s.save();
+  const out = join(program, "page.html");
+  const r = spawnSync(process.execPath, [lab, "build-web", program, "-o", out], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  return out;
+}
+test("rain-page's map of drops gets a WebGPU kernel of words: its drops as records of Float32s, the hand captured (G12)", () => {
+  const html = readFileSync(rainPage(), "utf8");
+  assert.match(html, /pageGpu\(\{0:\{how:"map",result:"words",caps:\[\],words:\{item:\[\{path:\[0,0\],kind:"f32"\}/);
+  // The drop from five words, the hand from three: its Bool, its place.
+  assert.match(html, /bitcast<i32>\(lab_xs\[i \* 5u \+ 4u\]\)/);
+  assert.match(html, /\(lab_caps\[0\] != 0u\)/);
+  assert.match(html, /lab_out\[i \* 5u \+ 4u\] = bitcast<u32>\(/);
+  // An Int made a number gives up past 2²⁴.
+  assert.match(html, /if \(x > 16777216i \|\| x < -16777216i\) \{ lab_fuel = -1\.0; \}/);
+});
+
+test("rain-page's drops slid on the GPU are the CPU's, bit for bit (G12)", { skip: !exe && "no Chromium" }, async () => {
+  const { chromium } = await import("../../ters/node_modules/playwright-core/index.mjs");
+  const browser = await chromium.launch({ executablePath: exe, args: ["--enable-unsafe-webgpu", "--enable-features=Vulkan", "--use-vulkan=swiftshader", "--use-webgpu-adapter=swiftshader"] });
+  const file = rainPage();
+  try {
+    // Six ticks with WebGPU or without; with it, the clock 100 times the
+    // real one so the first tick's map counts as worth the GPU.
+    const run = async (gpu: boolean) => {
+      const page = await browser.newPage();
+      await page.addInitScript((gpu: boolean) => {
+        const w = window as unknown as { reads: number };
+        w.reads = 0;
+        if (!gpu) { Object.defineProperty(Navigator.prototype, "gpu", { get: () => undefined }); return; }
+        const now = performance.now.bind(performance);
+        performance.now = () => now() * 100;
+        const b = (window as unknown as { GPUBuffer?: { prototype: { getMappedRange(...a: unknown[]): unknown } } }).GPUBuffer?.prototype;
+        if (b) { const read = b.getMappedRange; b.getMappedRange = function (...a: unknown[]) { w.reads++; return read.apply(this, a); }; }
+      }, gpu);
+      await page.goto(`file://${file}`);
+      const said: string[] = [];
+      for (let i = 0; i < 6; i++) {
+        const before = await page.textContent("p");
+        await page.click("button");
+        await page.waitForFunction((b: string | null) => document.querySelector("p")?.textContent !== b, before, { timeout: 10000 }).catch(() => {});
+        said.push(await page.textContent("p") ?? "");
+      }
+      const reads = await page.evaluate(() => (window as unknown as { reads: number }).reads);
+      const has = await page.evaluate(() => !!(navigator as { gpu?: unknown }).gpu);
+      await page.close();
+      return { said, reads, has };
+    };
+    const cpu = await run(false), gpu = await run(true);
+    if (!gpu.has) return;
+    assert.equal(new Set(cpu.said).size, 6, cpu.said.join(" "));
+    assert.deepEqual(gpu.said, cpu.said);
+    assert.ok(gpu.reads > 0, "ticks went to the GPU");
+  } finally { await browser.close(); }
+});
