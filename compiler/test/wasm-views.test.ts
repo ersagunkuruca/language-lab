@@ -2,7 +2,8 @@
 // array views it walks as its buffer, start and length (wasm-views.ts),
 // and makes one where a view leaves it. Here a sort (merge sort, its
 // merge walking two arrays by `rest` and building its answer by pushes)
-// and a map, on lists the compiler keeps as arrays: `ters wasi` prints what
+// and a map, on lists the compiler keeps as arrays (`sort with`: `sort`
+// on an array is the target's own since C355): `ters wasi` prints what
 // `ters run` prints, with views by value and without, and the views made
 // (TERS_COUNT_VIEWS) are fewer than half.
 
@@ -26,7 +27,7 @@ function written(): string {
   ask("open", { path: dir });
   ask("define", { name: "main", kind: "function", params: ["arguments"] });
   ask("replace", { at: "main", find: "□", text: 'n = (length(append(["a"], arguments)) - 1) * 500; □' });
-  ask("replace", { at: "main", find: "□", text: "xs = sort(map(range(n), (i) => i * (n - i))); □" });
+  ask("replace", { at: "main", find: "□", text: "xs = sort with(map(range(n), (i) => i * (n - i)), (a, b) => compare(a, b)); □" });
   ask("replace", { at: "main", find: "□", text: 'print(join all([show(length(xs)), show(item at(xs, 0, -1)), show(item at(xs, quotient(n, 2), -1)), show(item at(xs, n - 1, -1)), show(sum(map(xs, (x) => x * 2)))], " "))' });
   return dir;
 }
