@@ -16,10 +16,12 @@ GPU may fuse a·b + c into one rounding; with exact products that gives the
 same Float32 as the CPU, so a kernel's drops are the evaluator's.
 
 Both draws go to the GPU: their vertex and fragment functions lower to
-WGSL. The slide is a compute kernel too (G12b), each drop crossing as
-five words, and the page runs it there once the GPU is the quicker. On
-SwiftShader's WebGPU, which runs on the CPU, it never is. Each tick still
-reads the drops back; keeping them on the GPU is G13.
+WGSL. The slide has a compute kernel too (G12b), each drop crossing as
+five words, but the page as written doesn't use it yet. Ticking on every
+frame, its drops are stored as a tree of List, and then no map is sent
+away (BACKLOG G12d). Ticked from a button instead, the drops stay a list,
+and the map goes to the GPU once the GPU is the quicker (gpu-maps.test).
+Keeping the drops on the GPU between ticks is G13.
 
 Credits: random numbers by the ZX81's generator (Sinclair Research, 1981);
 a fixed step after Glenn Fiedler's Fix Your Timestep (2004).
