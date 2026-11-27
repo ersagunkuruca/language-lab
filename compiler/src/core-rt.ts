@@ -491,6 +491,11 @@ function hostFn(name: string, cells?: Record<Id, (...xs: Value[]) => Value | und
 }
 // scalar.ts boolShapes read back: a shape for each input, then the answer.
 type BoolShape = null | "b" | { a: BoolShape } | { t: Record<Id, BoolShape[]> };
+// A compiled Bool (true or false, or 1 or 0) as the evaluator's.
+const asBool = (x: unknown) => (typeof x === "object" && x !== null ? x : { tag: x ? TRUE : FALSE, fields: [] });
+// Read once for each text: a closure is made per call.
+const shapesRead = new Map<string, BoolShape[]>();
+const shapesOf = (text: string): BoolShape[] => { let sh = shapesRead.get(text); if (!sh) shapesRead.set(text, sh = boolShapesOf(text)); return sh; };
 export function boolShapesOf(text: string): BoolShape[] {
   const { n, r } = JSON.parse(decodeURIComponent(text)) as { n: ("b" | { a: number } | { t: Record<Id, number[]> })[]; r: number[] };
   const nodes: BoolShape[] = n.map((x) => (x === "b" ? "b" : "a" in x ? { a: null } : { t: {} }));
@@ -859,7 +864,9 @@ export const RUNTIME = {
   // page handler that waits does; called from outside, the rest keeps
   // the answer, and a wait goes on by it later (core-rt.ts worldFn).
   // `d` (I245): given the closure, its derivative's closure.
-  closure: (code: (...xs: unknown[]) => unknown, caps: unknown[], src?: { lambda: Id; binders: Id[]; bools: number[] } | { prim: Id }, rest?: boolean, d?: (c: unknown) => unknown) => {
+  // A capture holding a Bool inside is turned along `turn`'s paths
+  // (scalar.ts boolShapes), and only when the evaluator first looks.
+  closure: (code: (...xs: unknown[]) => unknown, caps: unknown[], src?: { lambda: Id; binders: Id[]; bools: number[]; turn?: string } | { prim: Id }, rest?: boolean, d?: (c: unknown) => unknown) => {
     // Called from outside (a page's mount, the host): the first answer,
     // and none is FAIL.
     const whole = (...xs: unknown[]) => { let out: unknown = FAIL; RUNTIME.ck(code(c, ...xs, (v: unknown) => { out = v; return true; })); if (out === FAIL) throw FAIL; return out; };
@@ -870,7 +877,16 @@ export const RUNTIME = {
     c.caps = caps;
     c.code = code;
     c.d = d;
-    if (src) Object.assign(c, { [META]: "prim" in src ? src : { lambda: src.lambda, env: new Map(src.binders.map((b, j) => [b, src.bools.includes(j) ? { tag: caps[j] ? TRUE : FALSE, fields: [] } : caps[j]])) } });
+    if (src && "prim" in src) Object.assign(c, { [META]: src });
+    else if (src && !src.turn) Object.assign(c, { [META]: { lambda: src.lambda, env: new Map(src.binders.map((b, j) => [b, src.bools.includes(j) ? { tag: caps[j] ? TRUE : FALSE, fields: [] } : caps[j]])) } });
+    else if (src) {
+      let env: Map<Id, unknown> | undefined;
+      const turn = src.turn!;
+      Object.assign(c, { [META]: { lambda: src.lambda, get env() {
+        const sh = shapesOf(turn);
+        return (env ??= new Map(src.binders.map((b, j) => [b, src.bools.includes(j) ? { tag: caps[j] ? TRUE : FALSE, fields: [] } : turnedBy(caps[j], asBool, sh[j] ?? null)])));
+      } } });
+    }
     return c;
   },
   show: showFloat,
