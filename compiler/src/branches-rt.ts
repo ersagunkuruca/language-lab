@@ -23,7 +23,7 @@
 // Prior art: Cilk's work stealing (Blumofe et al. 1995), here with one
 // claim per branch, as the branches are few.
 
-import { CONS, NIL } from "../../ters/src/lang/std-ids.ts";
+import { CONS, NIL, TRUE } from "../../ters/src/lang/std-ids.ts";
 import { ArrayView, arrayOf } from "../../ters/src/lang/array-view.ts";
 import { PairMap, Table } from "../../ters/src/lang/table.ts";
 import { counted, OutOfSteps, setStepsLeft, stepsLeft, toList } from "../../ters/src/lang/run-values.ts";
@@ -984,7 +984,7 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
   // A record of Ints's (C42g) each field's, given back as a record like z.
   if (on === "GPU" ? !!gpuSites[site] && !!(globalThis as { navigator?: { gpu?: unknown } }).navigator?.gpu : on !== "workers" && gpuWorth(site, items.length)) {
     const m = gpuSites[site], ids = how === "with" ? m.hows?.map((h) => IDENTITY[h]) : isFold(how) ? [IDENTITY[how]] : [];
-    const a = int32s(items), c = ids && capsOf(f, m, ids);
+    const a = m.words ? wordsOf(items, m.words.item) : int32s(items), c = m.words ? capWords(f, m.words.caps) : ids && capsOf(f, m, ids);
     if (a && c) return gpuMap(items, a, c, xs, f, site, isFold(how) ? (vs) => k((vs as Int[]).reduce(both(how, join), z as Int)) : (vs) => k(sameKind(xs, vs)), () => k(inTurn()), how === "with" ? z : undefined);
   }
   // Held on the workers: started now, for these items.
@@ -1008,7 +1008,9 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
 
 // A page's maps on the GPU (C61 d′, gpu-maps.ts): each site's kernel,
 // and what an item took there and on the CPU, to keep the quicker.
-interface GpuMap { how: "map" | "keep" | "add" | "max" | "min" | "with"; result: "int" | "bool"; wgsl: string; caps: ("int" | "bool")[]; hows?: ("add" | "max" | "min")[] }
+// `words` (G12): a map or keep of records, each leaf a 4-byte word.
+type Leaf = { path: number[]; kind: "f32" | "i32" | "bool" };
+interface GpuMap { how: "map" | "keep" | "add" | "max" | "min" | "with"; result: "int" | "bool" | "words"; wgsl: string; caps: ("int" | "bool")[]; hows?: ("add" | "max" | "min")[]; words?: { item: Leaf[]; caps: Leaf[][]; out: Leaf[] } }
 // A fold's kernel is its item's arm, given the rest's Int as the join's
 // identity, first among what it captured (C42f, gpu-maps.ts); a record
 // of Ints's each field's (C42g).
@@ -1038,6 +1040,55 @@ function int32s(items: unknown[]): Int32Array | null {
   for (let i = 0; i < items.length; i++) { const x = items[i]; if (typeof x !== "number" || (x | 0) !== x) return null; a[i] = x; }
   return a;
 }
+// A leaf of a value: its fields along the path, a compiled record's fK
+// or the evaluator's fields[K].
+const leafOf = (v: unknown, path: number[]): unknown => {
+  for (const k of path) { const r = v as { fields?: unknown[] } & Record<string, unknown>; v = r[`f${k}`] ?? r.fields?.[k]; }
+  return v;
+};
+// Values as words, a leaf each (G12): a Float32 an f32, an Int an i32
+// where it fits, a Bool 1 or 0. Null where one isn't what the kernel takes.
+function wordsOf(values: unknown[], leaves: Leaf[]): Uint32Array | null {
+  const w = new Uint32Array(Math.max(1, values.length * leaves.length)), f = new Float32Array(w.buffer), n = new Int32Array(w.buffer), k = leaves.length;
+  for (let i = 0; i < values.length; i++) {
+    for (let j = 0; j < k; j++) {
+      const l = leaves[j], x = leafOf(values[i], l.path);
+      if (l.kind === "f32") { if (typeof x !== "number") return null; f[i * k + j] = x; }
+      else if (l.kind === "i32") { if (typeof x !== "number" || (x | 0) !== x) return null; n[i * k + j] = x; }
+      else w[i * k + j] = x === true || (x as { tag?: unknown } | null)?.tag === TRUE ? 1 : 0;
+    }
+  }
+  return w;
+}
+// What a function captured as words, each capture's leaves after another's.
+function capWords(f: Fn, caps: Leaf[][]): Uint32Array | null {
+  const cs = (f as Closure).caps ?? [];
+  if (cs.length !== caps.length) return null;
+  const parts = cs.map((c, j) => wordsOf([c], caps[j]));
+  if (parts.some((p) => !p)) return null;
+  const out = new Uint32Array(Math.max(1, caps.reduce((a, c) => a + c.length, 0)));
+  let at = 0;
+  parts.forEach((p, j) => { out.set(p!.subarray(0, caps[j].length), at); at += caps[j].length; });
+  return out;
+}
+// A value made like `like`, its leaves the words (G12): each record along
+// the leaves' paths made again of its class, the rest kept.
+function madeLike(like: unknown, leaves: Leaf[], words: Uint32Array, at: number, depth = 0): unknown {
+  if (leaves.length === 1 && leaves[0].path.length === depth) {
+    const w = words[at], l = leaves[0];
+    return l.kind === "f32" ? new Float32Array(new Uint32Array([w]).buffer)[0] : l.kind === "i32" ? w | 0 : w === 1;
+  }
+  const r = like as { fields?: unknown[] } & Record<string, unknown>, fs: unknown[] = [];
+  const count = Object.prototype.hasOwnProperty.call(r, "fields") ? r.fields!.length : Object.keys(r).filter((x) => /^f\d+$/.test(x)).length;
+  for (let k = 0; k < count; k++) fs.push(r[`f${k}`] ?? r.fields?.[k]);
+  for (let k = 0, j = 0; k < count; k++) {
+    const mine: Leaf[] = [];
+    const start = j;
+    while (j < leaves.length && leaves[j].path[depth] === k) mine.push(leaves[j++]);
+    if (mine.length) fs[k] = madeLike(fs[k], mine, words, at + start, depth + 1);
+  }
+  return recordLike(like, fs);
+}
 // What the function captured, as i32s (a Bool 0 or 1), where each is
 // what the kernel takes.
 function capsOf(f: Fn, m: GpuMap, first: number[]): Int32Array | null {
@@ -1054,9 +1105,9 @@ function capsOf(f: Fn, m: GpuMap, first: number[]): Int32Array | null {
 // A record of the type of r, of these fields: as compiled JavaScript
 // makes it (core-js.ts, a class of fields f0, f1, …), or as the runtime's
 // data, fields and all.
-function recordLike(r: unknown, fields: number[]): unknown {
+function recordLike(r: unknown, fields: unknown[]): unknown {
   if (Object.prototype.hasOwnProperty.call(r, "fields")) return Object.assign(Object.create(Object.getPrototypeOf(r)), r, { fields });
-  return new (r as { constructor: new (...a: number[]) => unknown }).constructor(...fields);
+  return new (r as { constructor: new (...a: unknown[]) => unknown }).constructor(...fields);
 }
 // Whether this site's map goes to the GPU now: one that took over 5 ms
 // and had 1,000 items on the CPU tries it once, and keeps it while it is
@@ -1074,11 +1125,12 @@ function gpuWorth(site: number, n: number): boolean {
 // GPU gave back worked out here, in order; the steps spent from the
 // handler's, the run out of them where in order their sum passes it.
 // A record's fields (C42g, like: a record of the type) come k to an item.
-function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknown, f: Fn, site: number, done: (vs: unknown[]) => unknown, inTurn: () => unknown, like?: unknown): unknown {
+function gpuMap(items: unknown[], xs32: Int32Array | Uint32Array, caps: Int32Array | Uint32Array, xs: unknown, f: Fn, site: number, done: (vs: unknown[]) => unknown, inTurn: () => unknown, like?: unknown): unknown {
   // Each item's budget at most 2²⁴, which an f32 counts down exactly; one
   // that takes more is given back.
-  const m = gpuSites[site], left = stepsLeft(), budget = Math.min(left ?? 16777216, 16777216), n = items.length, t0 = performance.now(), k = m.hows?.length ?? 1;
+  const m = gpuSites[site], left = stepsLeft(), budget = Math.min(left ?? 16777216, 16777216), n = items.length, t0 = performance.now(), k = m.words?.out.length ?? m.hows?.length ?? 1;
   let out: Int32Array | undefined, spent: Float32Array | undefined;
+  // Each item's words in, each answer's out (a record's leaves, G12).
   const answered = (async () => {
     const g = await gpuOf();
     if (!g) return;
@@ -1087,7 +1139,7 @@ function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknow
     if (!g.pipes.has(site)) g.pipes.set(site, dev.createComputePipelineAsync({ layout: "auto", compute: { module: dev.createShaderModule({ code: m.wgsl }), entryPoint: "lab_main" } }));
     const pipe = await g.pipes.get(site)! as { getBindGroupLayout(i: number): unknown };
     const bytes = Math.max(4, n * 4), outBytes = bytes * k;
-    const ins = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_DST }), outs = dev.createBuffer({ size: outBytes, usage: STORAGE | COPY_SRC }), steps = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC | COPY_DST });
+    const ins = dev.createBuffer({ size: Math.max(4, xs32.byteLength), usage: STORAGE | COPY_DST }), outs = dev.createBuffer({ size: outBytes, usage: STORAGE | COPY_SRC }), steps = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC | COPY_DST });
     const capped = dev.createBuffer({ size: caps.byteLength, usage: STORAGE | COPY_DST });
     dev.queue.writeBuffer(capped, 0, caps);
     const job = dev.createBuffer({ size: 16, usage: UNIFORM | COPY_DST }), back = dev.createBuffer({ size: outBytes + bytes, usage: MAP_READ | COPY_DST });
@@ -1096,7 +1148,7 @@ function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknow
     // Each item's steps −1 till the kernel writes them: one it never ran
     // is worked out here.
     dev.queue.writeBuffer(ins, 0, xs32); dev.queue.writeBuffer(job, 0, new Uint8Array(head)); dev.queue.writeBuffer(steps, 0, new Float32Array(Math.max(1, n)).fill(-1));
-    const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: (m.caps.length ? [ins, outs, steps, job, capped] : [ins, outs, steps, job]).map((b, binding) => ({ binding, resource: { buffer: b } })) });
+    const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: ((m.words ? m.words.caps.some((c) => c.length) : m.caps.length) ? [ins, outs, steps, job, capped] : [ins, outs, steps, job]).map((b, binding) => ({ binding, resource: { buffer: b } })) });
     const enc = dev.createCommandEncoder(), p = enc.beginComputePass(), groups = Math.ceil(n / 64);
     p.setPipeline(pipe); p.setBindGroup(0, bg); p.dispatchWorkgroups(Math.min(groups, 65535), Math.ceil(groups / 65535)); p.end();
     enc.copyBufferToBuffer(outs, 0, back, 0, outBytes); enc.copyBufferToBuffer(steps, 0, back, outBytes, bytes);
@@ -1127,7 +1179,7 @@ function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknow
         }
       } else {
         if (left !== null) { used += spent[i]; if (used > left) { setStepsLeft(-1); throw new OutOfSteps(); } }
-        v = m.how === "keep" ? out[i] === 1 : like !== undefined ? recordLike(like, Array.from(out.subarray(i * k, i * k + k))) : out[i];
+        v = m.how === "keep" ? out[i * k] === 1 : m.words ? madeLike(items[i], m.words.out, new Uint32Array(out.buffer, out.byteOffset), i * k) : like !== undefined ? recordLike(like, Array.from(out.subarray(i * k, i * k + k))) : out[i];
       }
       if (m.how === "keep") { if (v) kept.push(items[i]); } else kept.push(v);
     }

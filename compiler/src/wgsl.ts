@@ -195,6 +195,20 @@ const POW = `fn lab_pow(x: f32, y: f32) -> f32 {
 
 // The evaluator's mod: the remainder takes the sign of b (WGSL's % takes
 // a's), so mod(−1, 3) is 2, as in std.ts.
+// An Int as an f32 rounded to the nearest as the CPU rounds it (G12):
+// WGSL may round f32(x) either way where x needs more than 24 bits, so
+// its top bits (exact) and its last 8 (exact) are added, and an addition
+// is correctly rounded.
+const ITOF = `fn lab_itof(x: i32) -> f32 {
+  return f32(x & ~255i) + f32(x & 255i);
+}`;
+// In a map's kernel (gpu-maps.ts, G12) an Int past 2²⁴ gives up as one
+// past 32 bits does, so an Int made a number is the CPU's Float64 exactly.
+const ITOF_EXACT = `fn lab_itof(x: i32) -> f32 {
+  if (x > 16777216i || x < -16777216i) { lab_fuel = -1.0; }
+  return f32(x);
+}`;
+
 const MOD = `fn lab_mod(a: f32, b: f32) -> f32 {
   return a - b * floor(a / b);
 }`;
@@ -293,7 +307,7 @@ function frameValues(lowered: CoreIR, at: number): { ir: CoreIR; count: number; 
   return { ir, count: values.size, values: run, js: body };
 }
 
-export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: number } = {}): Shader {
+export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: number; kernel?: true } = {}): Shader {
   if (opts.frame !== undefined) {
     const plain = emitWgsl(lowered), f = frameValues(lowered, opts.frame);
     if (!f) return plain;
@@ -649,16 +663,18 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
   const text = copies.map((x) => func(funcs[x.fn], x));
   const needsPow = kept.some((i) => usesOp(funcs[i].body, "pow"));
   const needsMod = kept.some((i) => usesOp(funcs[i].body, "mod"));
+  const needsItof = kept.some((i) => usesOp(funcs[i].body, "itof"));
   // power multiplies with lab_imul.
   const intOps = (Object.keys(INT_HELPERS) as Op[]).filter((op) => kept.some((i) => usesOp(funcs[i].body, op) || (op === "imul" && usesOp(funcs[i].body, "ipow"))));
   const flags = (e: SExpr): boolean => e.k === "attempt" || (e.k === "zero" && !!e.none) || (e.k === "op" && NONE_OPS.has(e.op)) || (e.k === "rt" && /^array\.at\./.test(e.fn)) || kids(e).some(flags);
   const needsNone = kept.some((i) => flags(funcs[i].body));
-  const needsFuel = intOps.length > 0 || kept.some((i) => funcs[i].spends || budgets(funcs[i].body));
+  const needsFuel = intOps.length > 0 || (needsItof && !!opts.kernel) || kept.some((i) => funcs[i].spends || budgets(funcs[i].body));
   const wgsl = [
     "// Generated from the scalar profile by compiler/src/wgsl.ts.",
     ...(opts.frameCount ? [`// What depends on the time alone, worked out once a frame (C175).\nstruct LabFrame { v: array<vec4f, ${Math.ceil(opts.frameCount / 4)}> }\n@group(1) @binding(0) var<uniform> lab_frame: LabFrame;`] : []),
     ...(needsPow ? [POW] : []),
     ...(needsMod ? [MOD] : []),
+    ...(needsItof ? [opts.kernel ? ITOF_EXACT : ITOF] : []),
     ...(needsFuel ? ["// What's left of the innermost budget: below 0 once it ran out.\nvar<private> lab_fuel: f32;"] : []),
     ...(needsNone ? ["// Set when a search has no answer; `first` looks at it (scalar.ts `shader`).\nvar<private> lab_none: bool;"] : []),
     ...intOps.map((op) => INT_HELPERS[op]),
@@ -800,7 +816,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
           if (INFIX[e.op]) return `(${xs[0]} ${INFIX[e.op]} ${xs[1]})`;
           if (e.op === "neg") return `(-${xs[0]})`;
           if (e.op === "not") return `(!${xs[0]})`;
-          if (e.op === "itof") return `f32(${bare(xs[0])})`;
+          if (e.op === "itof") return `lab_itof(${bare(xs[0])})`;
           if (INT_CALL[e.op]) return `${INT_CALL[e.op]}(${xs.map(bare).join(", ")})`;
           if (e.op === "pow") {
             const y = e.args[1];
