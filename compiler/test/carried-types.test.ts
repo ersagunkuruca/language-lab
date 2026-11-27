@@ -29,6 +29,18 @@ const NO_MAIN = new Set(["archive", "mandelbrot", "quadratic", "raymarch", "rmol
 // differed while its checks again lost what made `nth` end). When one is
 // added, take it off once it comes out the same.
 const KNOWN: Record<string, string> = {};
+// Known not to compile, with what the compiler says: both ways must refuse
+// it so. When one compiles, take it off. chomsky's `found within` runs under
+// `with fuel(n, …)` with n an argument (row C367).
+const REFUSED: Record<string, string> = { chomsky: "has a budget that isn't a number written down" };
+
+function refused(name: string, recheck: boolean): string {
+  const env = { ...process.env };
+  if (recheck) env.TERS_RECHECK = "1"; else delete env.TERS_RECHECK;
+  const r = spawnSync(process.execPath, [lab, "compile", join(examples, name), "-o", join(dir, `${name}.mjs`)], { encoding: "utf8", env, timeout: 300_000 });
+  assert.notEqual(r.status, 0, `${name}${recheck ? " (TERS_RECHECK=1)" : ""} compiles now: take it off REFUSED`);
+  return r.stderr;
+}
 
 function compiled(name: string, recheck: boolean): string {
   const out = join(dir, `${name}${recheck ? ".re" : ""}.mjs`);
@@ -59,6 +71,10 @@ const only = process.env.CARRIED_ONLY?.split(",");
 
 for (const name of only ?? sweep(all)) {
   test(`${name} compiles to the same module with its types carried as checked again`, () => {
+    if (REFUSED[name]) {
+      for (const recheck of [false, true]) assert.ok(refused(name, recheck).includes(REFUSED[name]), `${name} is refused otherwise now`);
+      return;
+    }
     const carried = canonical(compiled(name, false)), rechecked = canonical(compiled(name, true));
     if (KNOWN[name]) {
       assert.notEqual(carried, rechecked, `${name} is the same both ways now: take it off KNOWN`);
