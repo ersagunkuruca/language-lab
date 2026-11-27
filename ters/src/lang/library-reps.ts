@@ -32,7 +32,7 @@ import { COMPANIONS, TOGETHER } from "./together.ts";
 import { keyGroups, trefGroup, type Groups } from "./map-groups.ts";
 import { ownLibraryHolders } from "./own-holders.ts";
 import { keptMap } from "../kept.ts";
-import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
+import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS, TABLE_OPS } from "./std.ts";
 import { INT, STRING, Subst, type Type } from "./types.ts";
 import type { Pins } from "./signatures.ts";
 
@@ -559,10 +559,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
         const opaque = [...asked.flatMap((r) => Object.keys(r.impl)), ...replaced(), ...edges];
         const per = g.heads.map((h) => [h, choose(code, main, [spec, ...left], undefined, opaque, undefined, { jobs: new Set([...g.of].filter(([, x]) => x === h).map(([id]) => target(id))), referred }).rep] as const);
         const rowsOf = new Set(per.map(([, r]) => r));
-        // Not where a hash table would hold lists (depot's routes): the
-        // table's builtins count as reading all they hold (generic), so
-        // lists after it would stay as written.
-        if (rowsOf.size > 1 && !rowsOf.has(spec) && !([...rowsOf].some((r) => r.oneHolder) && listsInValues(code, info, defs, ty)) && !keyed(info, defs, code, ty) && [...rowsOf].every((r) => !generic(info, defs, code, r) && plainBoundary(code, defs, r))) {
+        if (rowsOf.size > 1 && !rowsOf.has(spec) && !keyed(info, defs, code, ty) && [...rowsOf].every((r) => !generic(info, defs, code, r) && plainBoundary(code, defs, r))) {
           for (const r of rowsOf) { pick(r); groupsOf.set(r, new Set(per.filter(([, x]) => x === r).map(([h]) => h))); }
           sites = g;
           continue;
@@ -1139,15 +1136,10 @@ function keyed(info: Info, defs: Id[], code: Code, of: Id): boolean {
 // there or in a definition it hands them to (`looked`). `map`, `first`,
 // `keep` and `sort by` pass their items on unseen, so a map over pairs
 // that hold a map keeps the trees.
-// Whether a value of `ty` (a Map) in the program's definitions holds a
-// list: its second argument, or a type holding one.
-function listsInValues(code: Code, info: Info, defs: Id[], ty: Id): boolean {
-  const inside = holdsType(code, LIST);
-  const has = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || inside(t.id) || t.args.some(has) : t.t === "fn" ? [...t.params, t.ret].some(has) : false; };
-  const values = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? (t.id === ty && !!t.args[1] && has(t.args[1])) || t.args.some(values) : t.t === "fn" ? [...t.params, t.ret].some(values) : false; };
-  return defs.some((d) => typesIn(code, info, d).some(values));
-}
-
+// The value variable of a hash table builtin's type (its table's second
+// argument), and a type with that variable unseen.
+const valueVar = (t: Type): number | undefined => { const tb = t.t === "fn" ? t.params[0] : undefined; const v = tb?.t === "con" ? tb.args[1] : undefined; return v?.t === "var" ? v.v : undefined; };
+const without = (t: Type, v: number): Type => (t.t === "var" ? (t.v === v ? { t: "con", id: "", args: [] } : t) : t.t === "con" ? { ...t, args: t.args.map((x) => without(x, v)) } : t.t === "fn" ? { ...t, params: t.params.map((x) => without(x, v)), ret: without(t.ret, v) } : t);
 function generic(info: Info, defs: Id[], code: Code, rep: Representation): boolean {
   // A list is in nearly every type's definition (a Set, a Map, a record
   // with a list field), so for List the types' definitions count too.
@@ -1173,7 +1165,9 @@ function generic(info: Info, defs: Id[], code: Code, rep: Representation): boole
     if (scheme?.type.t !== "fn") return false;
     // A builtin is looked at as before; a definition, by what it looks at.
     const vs = code.nodes[(f as NodeOf<"ref">).target]?.kind === "def" ? looks((f as NodeOf<"ref">).target) : null;
-    const params = scheme.type.params;
+    // A hash table's builtin doesn't see its values.
+    const v = TABLE_BUILTINS.has((f as NodeOf<"ref">).target) ? valueVar(scheme.type) : undefined;
+    const params = v === undefined ? scheme.type.params : scheme.type.params.map((p) => without(p, v));
     return n.args.some((a, i) => !!params[i] && !!info.typeOf.get(a) && open(vs ? seen(params[i], vs) : params[i], info.typeOf.get(a)!));
   }));
 }
@@ -1220,7 +1214,9 @@ function looked(code: Code, info: Info): (def: Id) => Set<number> {
       const target = code.nodes[n.target];
       // equal, show, compare, or a builtin we don't read: all it's given.
       if (target?.kind !== "def") {
-        if (LOOKS.has(n.target) || (SIGS[n.target] && !PASSES_ON.has(n.target) && !STRUCTURAL.has(n.target))) { const t = zonk(at); if (t.t === "fn") t.params.forEach((p) => add(varsOf(p, new Set()))); }
+        // (A hash table's builtin, only its keys.)
+        if (TABLE_BUILTINS.has(n.target)) { const t = zonk(at), tb = t.t === "fn" && t.params[0] ? zonk(t.params[0]) : undefined; if (tb?.t === "con" && tb.args[0]) add(varsOf(tb.args[0], new Set())); }
+        else if (LOOKS.has(n.target) || (SIGS[n.target] && !PASSES_ON.has(n.target) && !STRUCTURAL.has(n.target))) { const t = zonk(at); if (t.t === "fn") t.params.forEach((p) => add(varsOf(p, new Set()))); }
         continue;
       }
       const g = self(n.target);
@@ -1266,6 +1262,10 @@ const PASSES_ON = new Set<Id>([S.first, S.optional, S.all, S.seeded, S.fuel]);
 const RUNTIME_READ = new Set<Id>(["std.frame", "std.pass", "std.mesh", "std.image"]);
 // Builtins that only move values of a variable type about (C70).
 const STRUCTURAL = new Set<Id>([S.oneOf, S.fail, ...Object.values(ARRAY_OPS)]);
+// A hash table's builtins, which hash and compare its keys but keep its
+// values as they are given (C363): a list held in its values (depot's
+// routes, crew's needs by name) may stay an array.
+const TABLE_BUILTINS = new Set<Id>(Object.values(TABLE_OPS));
 // `owned`: the program's own types the rewrite leaves as they are, whose
 // lists are converted where they're read and made (rep-split.ts, C93 s3).
 // `asWritten`: definitions the program's arrays never reach, called with
