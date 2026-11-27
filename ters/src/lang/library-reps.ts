@@ -1089,7 +1089,10 @@ function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representati
     if (k.t !== "con") return false;
     const inner = (a: Type) => { const z = info.subst.zonk(a); return z.t === "var" ? dataKeys : hashable(z, within); };
     if (k.id === INT || k.id === STRING) return true;
-    if (/^std\.tuple\d+$/.test(k.id)) return k.args.every(inner);
+    // A tuple's part generic as its own key is (rota's `offs of`, a Set
+    // of (Text, a) for any Number): fixed where it is used, and checked
+    // there.
+    if (/^std\.tuple\d+$/.test(k.id)) return k.args.every((a) => info.subst.zonk(a).t === "var" || inner(a));
     const d = code.nodes[k.id], td = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
     if (td?.kind !== "typedef" || td.effect || td.interface) return false;
     if (dataKeys && (k.id === row.of || tabled.has(k.id))) return false;
