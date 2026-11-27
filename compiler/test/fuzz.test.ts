@@ -17,6 +17,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeRunner, toList, type Value } from "../../ters/src/lang/run.ts";
 import { norm } from "../../ters/src/lang/int.ts";
@@ -31,7 +32,13 @@ import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts"
 import { infer } from "../../ters/src/lang/infer.ts";
 import { checkOptions } from "../../ters/src/lang/load.ts";
 
-const SEED = Number(process.env.SEED ?? 1), COUNT = Number(process.env.FUZZ ?? 40);
+const COUNT = Number(process.env.FUZZ ?? 40);
+// The seeds (T18b): SEED=n alone, or seed 1 and every seed kept in
+// fuzz-seeds.json, a seed some night's run found a difference at (the
+// Nightly runs the night's seed too). A kept seed stays until its bug is
+// fixed and the definition that showed it has a test of its own.
+const kept = (JSON.parse(readFileSync(join(import.meta.dirname, "fuzz-seeds.json"), "utf8")) as { seeds: { seed: number }[] }).seeds.map((k) => k.seed);
+const SEEDS = process.env.SEED ? [Number(process.env.SEED)] : [1, ...kept.filter((k) => k !== 1)];
 
 // The inputs every definition is called with.
 // The last: Ints past 64 bits and a Float64 near the top (C115).
@@ -43,7 +50,7 @@ const SEED = Number(process.env.SEED ?? 1), COUNT = Number(process.env.FUZZ ?? 4
 const LONG = Number(process.env.FUZZ_LONG ?? 0);
 const INPUTS: [number, bigint, bigint[]][] = [[0, 0n, []], [2.5, 3n, [1n, 2n, 3n]], [-1, -2n, [5n, -4n]], [1e300, 2n ** 64n + 1n, [2n ** 62n, -(2n ** 63n), 7n]], ...(LONG ? [[0.5, 1n, Array.from({ length: LONG }, (_, i) => BigInt((i * 7919) % 201 - 100))] as [number, bigint, bigint[]]] : [])];
 
-test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C give the same text (C101, seed ${SEED})`, async () => {
+for (const SEED of SEEDS) test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C give the same text (C101, seed ${SEED})`, async () => {
   const p = program(SEED, COUNT, INPUTS.map(([, , xs]) => xs));
   assert.deepEqual(p.info.errors.map((e) => e.message), [], `seed ${SEED}`);
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });

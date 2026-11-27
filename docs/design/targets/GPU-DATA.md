@@ -76,8 +76,9 @@ the item it still has. With the items on the GPU it has none. So:
 So every answer is the evaluator's, bit for bit (G12's exactness, and
 G12c's `GPU close` where a person held it so).
 
-As built in G13b, a tick always reads back each item's steps (n floats,
-80 KB for rain-page's drops against 480 KB of answers and steps). Where
+As built in G13b, a tick always read back each item's steps (n floats,
+80 KB for rain-page's drops against 480 KB of answers and steps); since
+G13c3 a kept tick reads back 12 bytes, the steps summed on the GPU. Where
 one was given back, the answers come back too and the tick's list is an
 ordinary one, sent up again by the next kernel or draw that takes it. The
 4-byte count, for a map that surely ends, is left for G13c.
@@ -96,13 +97,15 @@ ordinary one, sent up again by the next kernel or draw that takes it. The
   only while the frames draw with WebGPU. The program's decisions say so
   as a placement entry (`Pane's drops: GPU between ticks; among CPU, GPU
   between ticks`), and a person can hold one on the CPU.
-- **G13c** (G13c1, G13c2 done): what a kept list costs where it isn't
+- **G13c** (done): what a kept list costs where it isn't
   kept. G13c1: the kernel's steps aren't filled before a run; every item's
   run writes its own. G13c2: the draw reads the leaves it needs by their
   place (pipeline constants, gpu-draws.ts `kept`), so an ordinary list of
   drops sends the 3 words the vertex reads and a kept one is bound as its
-  5. Left: the 4-byte count of given-back items, in place of the steps,
-  where the map surely ends.
+  5. G13c3: a kept tick's steps are summed on the GPU (how many were
+  given back, and the others' steps as a 64-bit sum, branches-rt.ts
+  `SUMMED`): 12 bytes come back, not 4 an item; the steps and answers
+  only where an item was given back.
 - **G13d**: rain-page measured: CPU time a tick and bytes moved, against a
   hand-written WebGPU rain.
 

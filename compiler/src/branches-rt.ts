@@ -1052,6 +1052,24 @@ const gpuOf = (): Promise<Gpu | null> => (gpu ??= (async () => {
 })());
 // WebGPU's usage flags, as numbers (GPUBufferUsage, GPUMapMode).
 const STORAGE = 0x80, COPY_SRC = 0x4, COPY_DST = 0x8, UNIFORM = 0x40, MAP_READ = 0x1;
+// A kernel's steps summed (G13c3): how many items it gave back (a step of
+// −1), and the steps the others spent, a 64-bit sum as two u32s (each
+// item's steps a whole number below 2²⁴, so exactly the CPU's sum). A kept
+// list's tick needs only these 12 bytes back, not every item's steps.
+const SUMMED = `@group(0) @binding(0) var<storage, read> lab_spent: array<f32>;
+@group(0) @binding(1) var<storage, read_write> lab_sum: array<atomic<u32>, 3>;
+struct LabJob { budget: f32, n: u32 }
+@group(0) @binding(2) var<uniform> lab_job: LabJob;
+@compute @workgroup_size(64) fn lab_main(@builtin(global_invocation_id) g: vec3u) {
+  let i = g.x + g.y * 65535u * 64u;
+  if (i >= lab_job.n) { return; }
+  let s = lab_spent[i];
+  if (s < 0.0) { atomicAdd(&lab_sum[0], 1u); return; }
+  let x = u32(s);
+  let was = atomicAdd(&lab_sum[1], x);
+  if (was + x < was) { atomicAdd(&lab_sum[2], 1u); }
+}
+`;
 // The items as i32s, where each is an Int that fits.
 function int32s(items: unknown[]): Int32Array | null {
   const a = new Int32Array(items.length);
@@ -1152,7 +1170,7 @@ function gpuMap(given: { items: unknown[]; words: Int32Array | Uint32Array } | G
   // that takes more is given back.
   const held = isGpuItems(given) ? given : null, m = gpuSites[site], left = stepsLeft(), budget = Math.min(left ?? 16777216, 16777216), n = held ? held.n : (given as { items: unknown[] }).items.length, t0 = performance.now(), k = m.words?.out.length ?? m.hows?.length ?? 1;
   let items: unknown[] | null = held ? null : (given as { items: unknown[] }).items;
-  let out: Int32Array | undefined, spent: Float32Array | undefined, stayed: GpuItems | undefined;
+  let out: Int32Array | undefined, spent: Float32Array | undefined, stayed: GpuItems | undefined, total = 0, ran = false;
   // Each item's words in, each answer's out (a record's leaves, G12).
   const answered = (async () => {
     const g = await gpuOf();
@@ -1162,15 +1180,18 @@ function gpuMap(given: { items: unknown[]; words: Int32Array | Uint32Array } | G
     if (!g.pipes.has(site)) g.pipes.set(site, dev.createComputePipelineAsync({ layout: "auto", compute: { module: dev.createShaderModule({ code: m.wgsl }), entryPoint: "lab_main" } }));
     const pipe = await g.pipes.get(site)! as { getBindGroupLayout(i: number): unknown };
     const bytes = Math.max(4, n * 4), outBytes = bytes * k, stay = !!kept && !!m.words;
+    if (stay && !g.pipes.has(-1)) g.pipes.set(-1, dev.createComputePipelineAsync({ layout: "auto", compute: { module: dev.createShaderModule({ code: SUMMED }), entryPoint: "lab_main" } }));
+    const summer = stay ? await g.pipes.get(-1)! as { getBindGroupLayout(i: number): unknown } : null;
     let ins: GpuBuf;
     if (held) ins = held.buffer as GpuBuf;
     else { const w = (given as { words: Int32Array | Uint32Array }).words; ins = dev.createBuffer({ size: Math.max(4, w.byteLength), usage: STORAGE | COPY_DST }); dev.queue.writeBuffer(ins, 0, w); }
     const outs = dev.createBuffer({ size: outBytes, usage: STORAGE | COPY_SRC }), steps = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC });
     const capped = dev.createBuffer({ size: caps.byteLength, usage: STORAGE | COPY_DST });
     dev.queue.writeBuffer(capped, 0, caps);
-    // Kept on the GPU, only the steps come back, then the answers only
-    // where an item was given back.
-    const job = dev.createBuffer({ size: 16, usage: UNIFORM | COPY_DST }), back = dev.createBuffer({ size: (stay ? 0 : outBytes) + bytes, usage: MAP_READ | COPY_DST });
+    // Kept on the GPU, only the steps' sum comes back, then the steps and
+    // answers only where an item was given back.
+    const job = dev.createBuffer({ size: 16, usage: UNIFORM | COPY_DST }), back = dev.createBuffer({ size: stay ? 12 : outBytes + bytes, usage: MAP_READ | COPY_DST });
+    const sum = stay ? dev.createBuffer({ size: 12, usage: STORAGE | COPY_SRC }) : null;
     const head = new ArrayBuffer(16);
     new Float32Array(head, 0, 1)[0] = budget; new Uint32Array(head, 4, 1)[0] = n;
     // The kernel writes every item's steps, −1 for one given back, so
@@ -1179,20 +1200,34 @@ function gpuMap(given: { items: unknown[]; words: Int32Array | Uint32Array } | G
     const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: ((m.words ? m.words.caps.some((c) => c.length) : m.caps.length) ? [ins, outs, steps, job, capped] : [ins, outs, steps, job]).map((b, binding) => ({ binding, resource: { buffer: b } })) });
     const enc = dev.createCommandEncoder(), p = enc.beginComputePass(), groups = Math.ceil(n / 64);
     p.setPipeline(pipe); p.setBindGroup(0, bg); p.dispatchWorkgroups(Math.min(groups, 65535), Math.ceil(groups / 65535)); p.end();
-    if (!stay) enc.copyBufferToBuffer(outs, 0, back, 0, outBytes);
-    enc.copyBufferToBuffer(steps, 0, back, stay ? 0 : outBytes, bytes);
+    if (summer) {
+      const c = enc.beginComputePass();
+      c.setPipeline(summer);
+      c.setBindGroup(0, dev.createBindGroup({ layout: summer.getBindGroupLayout(0), entries: [steps, sum!, job].map((b, binding) => ({ binding, resource: { buffer: b } })) }));
+      c.dispatchWorkgroups(Math.min(groups, 65535), Math.ceil(groups / 65535)); c.end();
+      enc.copyBufferToBuffer(sum!, 0, back, 0, 12);
+    } else {
+      enc.copyBufferToBuffer(outs, 0, back, 0, outBytes);
+      enc.copyBufferToBuffer(steps, 0, back, outBytes, bytes);
+    }
     dev.queue.submit([enc.finish()]);
-    const mine = [steps, job, capped, back, ...(held ? [] : [ins])];
+    const mine = [job, capped, back, ...(sum ? [sum] : []), ...(held ? [] : [ins])];
     const wrong = await dev.popErrorScope();
-    if (wrong) { for (const b of [...mine, outs]) b.destroy(); if (held) items = await held.items(); return; }
+    if (wrong) { for (const b of [...mine, steps, outs]) b.destroy(); if (held) items = await held.items(); return; }
     await back.mapAsync(MAP_READ);
     const all = back.getMappedRange().slice(0);
     back.unmap();
     for (const b of mine) b.destroy();
-    spent = new Float32Array(all, stay ? 0 : outBytes, n);
-    if (!stay) { out = new Int32Array(all, 0, n * k); if (held) items = await held.items(); return; }
     let gave = false;
-    for (let i = 0; i < n && !gave; i++) gave = spent[i] < 0;
+    if (stay) {
+      const [given, lo, hi] = new Uint32Array(all, 0, 3);
+      gave = given > 0;
+      total = hi * 4294967296 + lo;
+      if (gave) spent = new Float32Array(await bufferWords(steps, bytes), 0, n);
+    } else spent = new Float32Array(all, outBytes, n);
+    steps.destroy();
+    ran = true;
+    if (!stay) { out = new Int32Array(all, 0, n * k); if (held) items = await held.items(); return; }
     // Kept: the answers as a list on the GPU, made of the first item's
     // kind when read back.
     const first = held ? null : items![0];
@@ -1206,11 +1241,11 @@ function gpuMap(given: { items: unknown[]; words: Int32Array | Uint32Array } | G
   })().catch(() => undefined);
   const finish = (): unknown => {
     // No GPU after all: in turn, and never again here.
-    if (!spent || (!out && !stayed)) { gpuSites = { ...gpuSites }; delete gpuSites[site]; return inTurn(items ?? []); }
+    if (!ran || (!out && !stayed)) { gpuSites = { ...gpuSites }; delete gpuSites[site]; return inTurn(items ?? []); }
     gpuMapsRun++;
     let used = 0;
     if (stayed) {
-      if (left !== null) { for (let i = 0; i < n; i++) used += spent[i]; if (used > left) { setStepsLeft(-1); throw new OutOfSteps(); } setStepsLeft(left - used); }
+      if (left !== null) { used = total; if (used > left) { setStepsLeft(-1); throw new OutOfSteps(); } setStepsLeft(left - used); }
       gpuPerItem[site] = (performance.now() - t0) / Math.max(1, n);
       return kept!(stayed);
     }
@@ -1218,7 +1253,7 @@ function gpuMap(given: { items: unknown[]; words: Int32Array | Uint32Array } | G
     const answers: unknown[] = [];
     for (let i = 0; i < n; i++) {
       let v: unknown;
-      if (spent[i] < 0) {
+      if (spent![i] < 0) {
         // Given back: worked out here, from the steps left.
         if (left === null) v = f(its[i]);
         else {
@@ -1227,7 +1262,7 @@ function gpuMap(given: { items: unknown[]; words: Int32Array | Uint32Array } | G
           used += u.n;
         }
       } else {
-        if (left !== null) { used += spent[i]; if (used > left) { setStepsLeft(-1); throw new OutOfSteps(); } }
+        if (left !== null) { used += spent![i]; if (used > left) { setStepsLeft(-1); throw new OutOfSteps(); } }
         v = m.how === "keep" ? words[i * k] === 1 : m.words ? madeLike(its[i], m.words.out, new Uint32Array(words.buffer, words.byteOffset), i * k) : like !== undefined ? recordLike(like, Array.from(words.subarray(i * k, i * k + k))) : words[i];
       }
       if (m.how === "keep") { if (v) answers.push(its[i]); } else answers.push(v);
