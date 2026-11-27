@@ -28,6 +28,7 @@ import { emitWasm, fromText, instantiate, toInt } from "../src/wasm.ts";
 import { FAIL, Unsupported, loadCoreJs } from "../src/core-js.ts";
 import { build, skip } from "./c-harness.ts";
 import { program } from "./fuzz-programs.ts";
+import { shrunk } from "./fuzz-shrink.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { checkOptions } from "../../ters/src/lang/load.ts";
@@ -50,27 +51,34 @@ const SEEDS = process.env.SEED ? [Number(process.env.SEED)] : [1, ...kept.filter
 const LONG = Number(process.env.FUZZ_LONG ?? 0);
 const INPUTS: [number, bigint, bigint[]][] = [[0, 0n, []], [2.5, 3n, [1n, 2n, 3n]], [-1, -2n, [5n, -4n]], [1e300, 2n ** 64n + 1n, [2n ** 62n, -(2n ** 63n), 7n]], ...(LONG ? [[0.5, 1n, Array.from({ length: LONG }, (_, i) => BigInt((i * 7919) % 201 - 100))] as [number, bigint, bigint[]]] : [])];
 
-for (const SEED of SEEDS) test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C give the same text (C101, seed ${SEED})`, async () => {
-  const p = program(SEED, COUNT, INPUTS.map(([, , xs]) => xs));
-  assert.deepEqual(p.info.errors.map((e) => e.message), [], `seed ${SEED}`);
+type Program = ReturnType<typeof program>;
+// A difference: definition g<i> on input j, in an engine (its tag says
+// through which representations), and how it reads.
+export type Difference = { i: number; j: number; engine: string; text: string };
+
+// Every engine on p's definitions (`only`: those of these indices), each
+// compared with the evaluator; throws where an engine refuses p.
+async function compare(p: Program, SEED: number, only?: number[]) {
+  const pick = only ?? p.defs.map((_, i) => i);
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const args = (x: number, n: bigint, xs: bigint[]): Value[] => [x, norm(n), toList(xs.map(norm))];
   const said = (i: number, inp: unknown[]) => `seed ${SEED}, g${i}(${inp.map(String).join(", ")})`;
   // A stop (an overflow) is "stop" on every engine; its words may differ.
   const stopped = (f: () => unknown): unknown => { try { return f(); } catch { return "stop"; } };
-  const want = p.defs.map(({ def }) => INPUTS.map(([x, n, xs]) => stopped(() => {
-    for (const v of r.call(r.value(def), ...args(x, n, xs))) return v as unknown as string;
+  const want: unknown[][] = [];
+  for (const i of pick) want[i] = INPUTS.map(([x, n, xs]) => stopped(() => {
+    for (const v of r.call(r.value(p.defs[i].def), ...args(x, n, xs))) return v as unknown as string;
     return "no answer";
-  })));
+  }));
 
   // Every difference, by engine, so one run shows them all.
-  const differ: string[] = [];
+  const differ: Difference[] = [];
   // What JavaScript from the core IR doesn't run yet (C137c).
   const unsupported = new Set<string>(); let compared = 0;
   // An overflow nobody uses may not be reported (FLOAT-VALUES-2026-11-01
   // §2): where the evaluator stops, a compiled engine that checked later
   // may give an answer. The other way round is a difference.
-  const check = (got: unknown, i: number, j: number, engine: string) => { if (got !== want[i][j] && want[i][j] !== "stop") differ.push(`${said(i, INPUTS[j])} in ${engine}: ${String(got)}, the evaluator ${String(want[i][j])}`); };
+  const check = (got: unknown, i: number, j: number, engine: string) => { if (got !== want[i][j] && want[i][j] !== "stop") differ.push({ i, j, engine, text: `${said(i, INPUTS[j])} in ${engine}: ${String(got)}, the evaluator ${String(want[i][j])}` }); };
 
   // Each engine on a program: the one generated, or the one with the
   // representations the chooser picks (C118).
@@ -78,7 +86,7 @@ for (const SEED of SEEDS) test(`generated programs: the evaluator, compiled Java
   // list stored another way never comes in from outside.
   type Built = { code: typeof p.code; info: typeof p.info; names: typeof p.names };
   const engines = async (q: Built, tag: string, js = true, native = true, entry = false) => {
-    const roots = entry ? p.entries : p.defs.map((d) => d.def), name = (i: number) => `${entry ? "e" : "g"}${i}`;
+    const roots = pick.map((i) => (entry ? p.entries[i] : p.defs[i].def));
     // JavaScript printed from the core IR (C137c), lowered as `ters compile
     // --core` lowers it (`host`: the evaluator's builtins where the core IR
     // has none). What it can't run yet throws Unsupported, and isn't compared.
@@ -86,7 +94,8 @@ for (const SEED of SEEDS) test(`generated programs: the evaluator, compiled Java
     const hosted = lowerScalar(q.code, q.info, q.names, roots, { data: true, host: true });
     assert.deepEqual([...hosted.refused.entries()].map(([d, why]) => `${q.names[d]}: ${why}`), [], `seed ${SEED}${tag}, host`);
     const cj = loadCoreJs(hosted);
-    roots.map((def) => hosted.funcs.findIndex((g) => g.def === def && !g.inner)).forEach((fi, i) => INPUTS.forEach(([x, n, xs], j) => {
+    roots.map((def) => hosted.funcs.findIndex((g) => g.def === def && !g.inner)).forEach((fi, at) => INPUTS.forEach(([x, n, xs], j) => {
+      const i = pick[at];
       let got: unknown;
       try { got = cj[fi](x, norm(n), entry ? norm(BigInt(j)) : toList(xs.map(norm))); } catch (e) {
         if (e instanceof Unsupported) { unsupported.add(e.message); return; }
@@ -109,8 +118,8 @@ for (const SEED of SEEDS) test(`generated programs: the evaluator, compiled Java
       const maker = (v: Id) => { const c = t.cases.find((x) => x.variant === v)!; return (w[`${t.name}.${c.name}(${t.key})`] ?? w[`${t.name}.${c.name}`]) as (...a: unknown[]) => unknown; };
       return xs.reduceRight<unknown>((l, x) => maker(CONS)(toInt(w, x), l), maker(NIL)());
     };
-    fns.forEach((fi, i) => {
-      const f = lowered.funcs[fi];
+    fns.forEach((fi, at) => {
+      const f = lowered.funcs[fi], i = pick[at];
       INPUTS.forEach(([x, n, xs], j) => {
         check(stopped(() => fromText(w, w[f.name](x, toInt(w, n), entry ? toInt(w, BigInt(j)) : list(xs, f.params[2])) as never)), i, j, `WebAssembly${tag}`);
       });
@@ -121,10 +130,10 @@ for (const SEED of SEEDS) test(`generated programs: the evaluator, compiled Java
     const calls = fns.flatMap((fi) => INPUTS.map(([x, n, xs], j): [number, Value[]] => [fi, entry ? [x, norm(n), norm(BigInt(j))] : args(x, n, xs)]));
     const got = build(lowered)(calls);
     calls.forEach(([fi], c) => {
-      const [i, j] = [Math.floor(c / INPUTS.length), c % INPUTS.length];
+      const [i, j] = [pick[Math.floor(c / INPUTS.length)], c % INPUTS.length];
       const v = got[c].value as unknown;
       check(v && typeof v === "object" && "aborted" in v ? "stop" : v, i, j, `C${tag}`);
-      if (got[c].live !== 0) differ.push(`${said(i, INPUTS[j])} in C${tag}: ${got[c].live} cells left (${lowered.funcs[fi].name})`);
+      if (got[c].live !== 0) differ.push({ i, j, engine: `C${tag}, cells`, text: `${said(i, INPUTS[j])} in C${tag}: ${got[c].live} cells left (${lowered.funcs[fi].name})` });
     });
     }
   };
@@ -140,7 +149,7 @@ for (const SEED of SEEDS) test(`generated programs: the evaluator, compiled Java
     const tag = ` (${c.chosen.join(", ")})`;
     if (hostMaps) {
       const rc = makeRunner(c.code, info, { print: () => {}, names: c.names });
-      p.entries.forEach((e, i) => INPUTS.forEach(([x, n], j) => check(stopped(() => { for (const v of rc.call(rc.value(e), x, norm(n), norm(BigInt(j)))) return v as unknown as string; return "no answer"; }), i, j, `the evaluator${tag}`)));
+      pick.forEach((i) => INPUTS.forEach(([x, n], j) => check(stopped(() => { for (const v of rc.call(rc.value(p.entries[i]), x, norm(n), norm(BigInt(j)))) return v as unknown as string; return "no answer"; }), i, j, `the evaluator${tag}`)));
     }
     await engines({ code: c.code, info, names: c.names }, tag, hostMaps, !hostMaps, true);
   }
@@ -153,6 +162,15 @@ for (const SEED of SEEDS) test(`generated programs: the evaluator, compiled Java
       await engines({ code: c.code, info, names: c.names }, ` (${c.chosen.join(", ")})`, false, true, true);
     }
   }
+  return { differ, compared, unsupported };
+}
+
+for (const SEED of SEEDS) test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C give the same text (C101, seed ${SEED})`, async () => {
+  const p = program(SEED, COUNT, INPUTS.map(([, , xs]) => xs));
+  assert.deepEqual(p.info.errors.map((e) => e.message), [], `seed ${SEED}`);
+  const { differ, compared, unsupported } = await compare(p, SEED);
   console.log(`seed ${SEED}: JavaScript from the core IR compared ${compared}${unsupported.size ? `, skipped ${[...unsupported].join(", ")}` : ""}`);
-  assert.deepEqual(differ, []);
+  // The first difference cut down (T18c), unless SHRINK=0.
+  if (differ.length && process.env.SHRINK !== "0") console.log(await shrunk(p, differ[0], (q, i) => compare(q, SEED, [i]).then((c) => c.differ)));
+  assert.deepEqual(differ.map((d) => d.text), []);
 });

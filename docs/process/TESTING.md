@@ -492,3 +492,5 @@ T18g. T18a: `node ters/test/reach.ts [test]` prints, from the test map, how much
 files it never enters (default: the generated programs, 65% and 45% on 11-27).
 T18b: the Nightly's `seed` job runs the generated programs at the night's seed; a seed that
 finds a difference goes into `compiler/test/fuzz-seeds.json`, replayed by every run.
+T18c: a run that finds a difference prints its first one cut down (compiler/test/fuzz-shrink.ts,
+`SHRINK=0` skips it).
