@@ -1,7 +1,8 @@
 // Where a definition can run, told from types (L22b, REVIEW-2026-10-22b
 // §5): as an effect is inferred and a caller sees it in the callee's type,
 // a definition that takes or gives what a shader can't hold (a Text, a
-// List or another type of several cases, a function) can't run on the GPU.
+// type of several cases, a function, a List given back; a List taken is
+// held as an Array) can't run on the GPU.
 // This is read off the checked types, with no lowering, so the editor
 // tells it at once. (Not its callers: a call given a list written out is
 // one the lowering can unroll, as calculus's parabola calls polynomial.)
@@ -17,13 +18,16 @@
 import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
-import { ABORT, BOOL } from "./std.ts";
+import { ABORT, BOOL, LIST } from "./std.ts";
 import { CHOICE, DIVERGE, STRING, type Type } from "./types.ts";
 
 // Why a type can't be held in a shader, or null when nothing in it says so.
 // A type variable says nothing: a call gives it a type.
-function notHeld(code: Code, names: Names, t: Type, inside: Id[] = []): string | null {
+// A List taken is held as an Array (G15a2, scalar.ts), so only its items
+// say; one given is still refused.
+function notHeld(code: Code, names: Names, t: Type, inside: Id[] = [], taken = false): string | null {
   if (t.t === "var") return null;
+  if (taken && t.t === "con" && t.id === LIST) return t.args.map((a) => notHeld(code, names, a, inside)).find((x) => x) ?? null;
   if (t.t === "fn") return "a function (that needs closures)";
   if (t.id === STRING) return names[STRING] ?? "Text";
   const td = code.nodes[(code.nodes[t.id] as NodeOf<"def"> | undefined)?.body ?? ""];
@@ -46,7 +50,7 @@ export function gpuRefusals(code: Code, info: Info, names: Names, defs: Id[]): M
     // Its effects first, as the lowering tells them (scalar.ts).
     const effs = gpuEffects(code, subst.resolveRow(t.eff).effs);
     if (effs.length) { own.set(d, `has effects (${effs.map((e) => names[e] ?? e).join(", ")})`); continue; }
-    const why = [...t.params, t.ret].map((p) => notHeld(code, names, p)).find((x) => x);
+    const why = [...t.params.map((p) => notHeld(code, names, p, [], true)), notHeld(code, names, t.ret)].find((x) => x);
     if (why) own.set(d, `takes or gives ${why}`);
   }
   return own;

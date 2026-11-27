@@ -52,11 +52,14 @@ export function defunctionalise(ir: CoreIR): void {
   for (const r of ir.records) r.fields = r.fields.map((x) => ({ ...x, t: ty(x.t) }));
   for (const a of ir.arrays) a.item = ty(a.item);
   // A value of type t no closure gives: zeros.
-  const zero = (t: LType): SExpr => {
+  // A record holding itself (a closure capturing one of its own kind) has
+  // no zeros, as it has no end: refused, never walked forever.
+  const zero = (t: LType, inside: ReadonlySet<LType> = new Set()): SExpr => {
     if (t === "f64") return { k: "num", v: 0 };
     if (t === "i32") return { k: "bool", v: false };
     if (t === "int32" || t === "i64") return { k: "int", v: 0n };
-    if (isRecord(t)) return { k: "make", t, args: t.fields.map((x) => zero(x.t)) };
+    if (isRecord(t) && inside.has(t)) throw new Undefunctionalised("captures a function value of its own kind, which has no end");
+    if (isRecord(t)) return { k: "make", t, args: t.fields.map((x) => zero(x.t, new Set([...inside, t]))) };
     throw new Undefunctionalised(`captures ${isArray(t) ? "an array" : "a value"} a function value can't hold here`);
   };
 
