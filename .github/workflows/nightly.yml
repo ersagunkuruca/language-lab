@@ -105,6 +105,32 @@ jobs:
       - name: The browser tests
         run: node ters/test/affected.ts --all --browser-only
 
+  # The generated programs at the night's seed (T18b): seed 1 and the kept
+  # seeds run with the other tests; this one moves every night (days since
+  # 1970), so each night tries 40 definitions no run has tried. A red here
+  # is a bug the generator found, not a break of main: it doesn't hold the
+  # good tag. Keep the seed in compiler/test/fuzz-seeds.json with the row
+  # that fixes it.
+  seed:
+    needs: changed
+    if: needs.changed.outputs.run == 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ters/package-lock.json
+      - run: npm ci
+        working-directory: ters
+      - name: The generated programs at tonight's seed
+        run: |
+          seed=$(( $(date -u +%s) / 86400 ))
+          echo "Seed $seed" >> "$GITHUB_STEP_SUMMARY"
+          SEED=$seed node --test compiler/test/fuzz.test.ts || { echo "Seed $seed found a difference: keep it in compiler/test/fuzz-seeds.json (T18b)" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+
   good:
     needs: [tests, browser]
     runs-on: ubuntu-latest
