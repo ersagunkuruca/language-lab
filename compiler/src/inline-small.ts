@@ -14,6 +14,11 @@
 import { kids, mapKids, mapLocals, tidied, type CoreIR, type SExpr } from "./scalar.ts";
 import { PURE_OPS, pureFuncs, pureTree, SAFE_RT } from "./share-calls.ts";
 import { COLUMN_READ } from "./kept-arrays.ts";
+import { originalOf, PRELUDE_DEFS, typedOriginalOf } from "../../ters/src/lang/prelude-ids.ts";
+
+// Kept a call of its own: its answers are kept with its inputs on a page
+// (memo-calls.ts addedMemoFuncs, C354d).
+const keptCall = (def: string) => typedOriginalOf(originalOf(def)) === PRELUDE_DEFS["set tree added all"];
 
 const SMALL = 40;
 const size = (e: SExpr): number => 1 + kids(e).reduce((n, k) => n + size(k), 0);
@@ -51,8 +56,8 @@ const stops = (e: SExpr): boolean => (e.k === "call" && !!e.cps) || e.k === "han
 // the flock's and greenhouse's loops over arrays of records).
 export function inlineSmall(ir: CoreIR, inLoops = false): number {
   const pure = pureFuncs(ir);
-  const small = ir.funcs.map((g, i) => !inLoops && pure.has(i) && !g.inner && size(g.body) <= SMALL && plainBody(g.body, pure) && !calls(g.body, i));
-  const reader = ir.funcs.map((g, i) => inLoops && !g.inner && size(g.body) <= SMALL && readTree(g.body, pure) && !calls(g.body, i));
+  const small = ir.funcs.map((g, i) => !inLoops && !keptCall(g.def) && pure.has(i) && !g.inner && size(g.body) <= SMALL && plainBody(g.body, pure) && !calls(g.body, i));
+  const reader = ir.funcs.map((g, i) => inLoops && !keptCall(g.def) && !g.inner && size(g.body) <= SMALL && readTree(g.body, pure) && !calls(g.body, i));
   let changed = 0;
   ir.funcs.forEach((f, fi) => {
     // Not into a function that may stop and go on later (a call that keeps
@@ -114,7 +119,7 @@ export function inlineCalls(ir: CoreIR, divergent: (i: number) => boolean): numb
     }
     return kids(e).every(plain);
   };
-  const can = ir.funcs.map((g, i) => !g.inner && !g.partial && !g.spends && !g.budgeted && !g.multi && !g.piece && !g.value && g.bail === undefined && !divergent(i) && !reach[i].has(i) && plain(g.body));
+  const can = ir.funcs.map((g, i) => !keptCall(g.def) && !g.inner && !g.partial && !g.spends && !g.budgeted && !g.multi && !g.piece && !g.value && g.bail === undefined && !divergent(i) && !reach[i].has(i) && plain(g.body));
   // Tail calls inside a body put where its call wasn't one aren't any more.
   const untail = (e: SExpr): SExpr => { const r = mapKids(e, untail); return (r.k === "call" || r.k === "apply") && r.tail ? { ...r, tail: false } : r; };
   let changed = 0;

@@ -254,7 +254,12 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
   const filtered = (name: string, keep: (inB: Id) => Id) => def(name, ["a", "b"], (a, b) => addAll(k.call(prelude("keep"), k.call(s.list, a), k.fn(["item"], (x) => keep(k.call(s.has, b, x)))), k.x(s.tip)));
   const setOf = (f: (a: Id, b: Id) => Id, name: string) => def(name, ["a", "b"], (a, b) => f(k.call(setMeaning, a), k.call(setMeaning, b)));
   const matchSet = def("match set tree", ["tree", "set of"], (t, f) => k.call(f, k.call(s.list, t)));
-  const ofItems = def("set tree of items", ["items"], (xs) => addAll(xs, k.x(s.tip)));
+  // Items added to a tree, written as its own definition so a page's view
+  // run again over a list a card was pushed onto adds only the new items
+  // to what it gave before (compiler/src/memo-calls.ts addedMemoFuncs,
+  // C354): the same set whichever order they go in.
+  const addedAll = def("set tree added all", ["items", "tree"], (xs, t) => addAll(xs, t));
+  const ofItems = def("set tree of items", ["items"], (xs) => k.call(addedAll, xs, k.x(s.tip)));
   const setImpl: Record<Id, Id> = {
     [SET_V]: ofItems,
     match: matchSet,
