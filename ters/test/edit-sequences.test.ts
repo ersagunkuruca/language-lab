@@ -8,12 +8,15 @@ import { mergeLaws, run, show, shrunk, startOf, steps, type Op } from "./edit-se
 
 const RUNS: [string, number][] = process.env.EDIT_SEQ ? JSON.parse(process.env.EDIT_SEQ) : [["collatz", 1], ["sort", 2], ["wc", 3]];
 const STEPS = Number(process.env.EDIT_STEPS ?? 16);
-// Sequences a run cut down, kept until the row that fixes them is done:
-// each runs as a todo naming its row.
-const KEPT: { example: string; steps: string; row: string }[] = [
+// Sequences a run cut down, each named by its row: a todo while the row is
+// open, then kept as a test of the fix.
+const KEPT: { example: string; steps: string; row: string; open?: true }[] = [
   // buffer seed 14, 30 steps: `match k` made `match 0` in `edited` gives it
-  // Diverge; the session's check says nothing, the program read back from
-  // its files says `final` performs it.
+  // Diverge; the session's check said nothing, the program read back from
+  // its files said `final` performs it. Two causes (I387): the modes'
+  // slots of a program derived from one kept a node the edit changed as
+  // what it was (modes.ts), and the check cache kept `final` by edited's
+  // type though its check read edited's body (check-cache.ts).
   { example: "buffer", steps: "literal 425 510, literal 425 931", row: "I387" },
 ];
 
@@ -29,7 +32,7 @@ for (const [example, seed] of RUNS) test(`${example}: edit sequences keep their 
   console.log(`${example} seed ${seed}: ${a.kept} and ${b.kept} of ${STEPS} steps made`);
 });
 
-for (const k of KEPT) test(`${k.example}: ${k.steps} keeps the laws (T18g)`, { todo: `kept until ${k.row}` }, () => {
+for (const k of KEPT) test(`${k.example}: ${k.steps} keeps the laws (T18g, ${k.row})`, k.open ? { todo: `kept until ${k.row}` } : {}, () => {
   const seq = k.steps.split(", ").map((x) => { const [op, a, b] = x.split(" "); return { op: op as Op, a: Number(a), b: Number(b) }; });
   assert.equal(run(k.example, seq).broken?.text ?? null, null);
 });
