@@ -437,7 +437,7 @@ export function freeLocals(e: SExpr): number[] {
 // are; or a builtin. The evaluator's solver looks inside a function it is
 // given (relate.ts fromValue), so the printed closure carries this as the
 // evaluator's closures do (run.ts META). Other printers ignore it.
-export type ClosureSrc = { lambda: Id; binders: Id[]; bools: number[] } | { prim: Id };
+export type ClosureSrc = { lambda: Id; binders: Id[]; bools: number[]; turn?: string } | { prim: Id };
 export type SExpr =
   | { k: "num"; v: number }
   | { k: "int"; v: bigint }
@@ -4293,7 +4293,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     let inner = new Map(n.params.map((p, j) => [p, j + 1]));
     const lets = free.map((b, j) => { const i = g.locals.push(caps[j]) - 1; inner = new Map(inner).set(b, i); return { i, value: { k: "cap", t, shape, i: j } as SExpr }; });
     g.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(n.body, inner, g, true));
-    const src: ClosureSrc | undefined = opts.host && !caps.some((c) => typeof c === "object" && boolInside(c)) ? { lambda: n.id, binders: free, bools: caps.flatMap((c, j) => (c === "i32" ? [j] : [])) } : undefined;
+    // A capture holding a Bool inside (a record with one) is turned to the
+    // evaluator's along its type's paths (`turn`, boolShapes) when the
+    // evaluator looks inside: rain-page's wipe, captured by the map of its
+    // drops (G12).
+    const src: ClosureSrc | undefined = opts.host ? { lambda: n.id, binders: free, bools: caps.flatMap((c, j) => (c === "i32" ? [j] : [])), ...(caps.some((c) => typeof c === "object" && boolInside(c)) ? { turn: boolShapes(caps) } : {}) } : undefined;
     const d = derivativeOf.has(n.id) ? maker(derivativeOf.get(n.id)!, t, shape, free, caps, f.name) : undefined;
     return { k: "closure", t, fn: gi, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })), ...(src ? { src } : {}), ...(d !== undefined ? { d } : {}) };
   }
