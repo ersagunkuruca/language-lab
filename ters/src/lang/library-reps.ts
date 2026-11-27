@@ -50,7 +50,7 @@ import { keyGroups, trefGroup, type Groups } from "./map-groups.ts";
 import { ownLibraryHolders } from "./own-holders.ts";
 import { keptMap } from "../kept.ts";
 import { ARRAY_OPS, CELL_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, POOL, S, SET, SET_TYPE, SHOW_ANY, SIGS, TABLE_OPS } from "./std.ts";
-import { ARRAY, INT, STRING, Subst, type Type } from "./types.ts";
+import { ARRAY, INT, STRING, Subst, freeVars, type Type } from "./types.ts";
 import type { Pins } from "./signatures.ts";
 
 // What equal, show and compare see of a value: these, given a stored one,
@@ -539,7 +539,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
         || (options.tables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r, tabled(), options.dataKeys))));
     if (hold !== undefined) {
       // Held: that row, where the chooser could have picked it (L280c).
-      const row = rows.find((r) => r.name === hold) ?? refuse(LIBRARY.reps.find((r) => r.of === ty && r.name === hold)?.oneHolder ? "a map or set here has more than one holder, so a put in place could be seen"
+      const row = rows.find((r) => r.name === hold) ?? refuse(LIBRARY.reps.find((r) => r.of === ty && r.name === hold)?.oneHolder ? "a map or set here has more than one holder, so a put in place could be seen, or keys that aren't hashed"
         : ty === LIST && hold === "tree of List" ? "it runs something on lists backwards, which the chooser leaves as written" : "the chooser can't pick it here");
       if (!uses(code, main, [spec, row], false, replaced()).length) refuse(`main doesn't use it`);
       // A whole program's lists held (array or tree): alone, as the
@@ -1118,7 +1118,15 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
 // map read again after a change is still right; one holder is what makes
 // each change constant.
 function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representation, tabled: ReadonlySet<Id> = new Set(), dataKeys = false): boolean {
-  for (const d of defs) for (const t of typesIn(code, info, d)) if (t.t === "con" && t.id === row.of && !hashable(t.args[0])) return false;
+  for (const d of defs) {
+    // The definition's own type variables, fixed where it is used; any
+    // other left in a key is one nothing fixes, which the compiled code
+    // holds as a Float64, no hash key (C366: fuzz seed 5's keys of
+    // zipped(zipped(take(keys of(empty map), n), texts), …)).
+    const own = freeVars(info.subst.zonk(info.typeOf.get(d) ?? { t: "con", id: "", args: [] }), info.subst).vars;
+    const part = (z: Type) => (z.t === "var" ? own.has(z.v) : hashable(z));
+    for (const t of typesIn(code, info, d)) if (t.t === "con" && t.id === row.of && !hashable(t.args[0], new Set(), part)) return false;
+  }
   return true;
   // Int, Text, or a tuple of them (C63f, std.ts `spelling`), or a record
   // of the program's own (a type with one case) whose fields are (C63g):
@@ -1126,15 +1134,15 @@ function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representati
   // With `dataKeys` (C243), data of any cases whose fields are, a type
   // inside itself too (a list), but not this row's type or one already a
   // hash table, which have no one spelling.
-  function hashable(k: Type, within: ReadonlySet<Id> = new Set()): boolean {
+  function hashable(k: Type, within: ReadonlySet<Id> = new Set(), part: (z: Type) => boolean = () => true): boolean {
     if (k.t === "var") return true;
     if (k.t !== "con") return false;
-    const inner = (a: Type) => { const z = info.subst.zonk(a); return z.t === "var" ? dataKeys : hashable(z, within); };
+    const inner = (a: Type) => { const z = info.subst.zonk(a); return z.t === "var" ? dataKeys && part(z) : hashable(z, within, part); };
     if (k.id === INT || k.id === STRING) return true;
     // A tuple's part generic as its own key is (rota's `offs of`, a Set
     // of (Text, a) for any Number): fixed where it is used, and checked
     // there.
-    if (/^std\.tuple\d+$/.test(k.id)) return k.args.every((a) => info.subst.zonk(a).t === "var" || inner(a));
+    if (/^std\.tuple\d+$/.test(k.id)) return k.args.every((a) => { const z = info.subst.zonk(a); return z.t === "var" ? part(z) : inner(a); });
     const d = code.nodes[k.id], td = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
     if (td?.kind !== "typedef" || td.effect || td.interface) return false;
     if (dataKeys && (k.id === row.of || tabled.has(k.id))) return false;
@@ -1152,7 +1160,7 @@ function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representati
     const fields = td.variants.flatMap((v) => (code.nodes[v] as NodeOf<"variant">).fields.map((f) => typeOf((code.nodes[f] as NodeOf<"field">).type)));
     const deeper = new Set([...within, k.id]);
     // A type variable is fixed where the definition is used, and checked there.
-    return (fields.length > 0 || dataKeys) && fields.every((f) => { if (!f) return false; const z = info.subst.zonk(f); return z.t === "var" ? dataKeys : hashable(z, deeper); });
+    return (fields.length > 0 || dataKeys) && fields.every((f) => { if (!f) return false; const z = info.subst.zonk(f); return z.t === "var" ? dataKeys && part(z) : hashable(z, deeper, part); });
   }
 }
 
