@@ -4823,6 +4823,20 @@ them all; it is now dropped (pool-shapes.ts). Native 1.15 → 0.90 s on one
 thread and 0.73 → 0.65 s on four (median of 9 on a busier machine than
 the table's), compiled JS 3.34 → 3.21 s.
 
+G25b: with threads the native greenhouse's memory grew with every tick,
+about 100 KB (270 MB at a night): the moths are made on the pool's
+threads and freed on the main thread, whose free lists grew while the
+threads cut new blocks. Long free lists are now handed back for the
+threads to cut again: 17 MB at a night, 4 threads 3.5% slower (587 → 608
+ms), the price of reusing cells another core freed.
+
+G25c, what is left on the main thread at four threads (600 ticks, 626 ms):
+sharing the captures 19 ms, sharing the items 13 ms, walking the answers
+21 ms, the first items alone 11 ms and gathering 9 ms, each 2 to 3%; filing
+the grid about 10%, half of it finding each moth's cell, which only a fold
+split into a map and the filing would put on the threads. None reaches 10%
+alone: closed measured.
+
 ## Round 20: strings, the instrument app's signal code (2026-11-22, C262)
 
 `compiler/gaps/strings` is the bigger-program round on the instrument app

@@ -56,6 +56,23 @@ test("greenhouse native: the pool's update, its map calling the function its cal
   for (const u of updates) assert.match(u, /lab_par_map_\d+\(/, u.split("\n")[0]);
 });
 
+// Cells made on the pool's threads and freed on the main one are given
+// back for the threads to cut again (G25b): the blocks cut barely grow with
+// the ticks (39 at 150 ticks, 42 at 600), where they grew with every tick
+// (66 to 240: 270 MB at a night).
+test("greenhouse native: the memory the threads cut stops growing with the ticks (G25b)", () => {
+  if (skip) return;
+  const out = join(dir, "blocks");
+  ran(process.execPath, [lab, "native", folder, "-o", out]);
+  const blocks = (ticks: string) => {
+    const r = spawnSync(out, [ticks, "2000"], { encoding: "utf8", env: { ...process.env, TERS_WORKERS: "3", TERS_BRANCHES: "say" } });
+    assert.equal(r.status, 0, r.stderr);
+    return Number(/blocks cut: (\d+)/.exec(r.stderr)![1]);
+  };
+  const early = blocks("150"), late = blocks("600");
+  assert.ok(late < 1.5 * early, `${early} blocks at 150 ticks, ${late} at 600`);
+});
+
 test("greenhouse JS: a moth read by number at its parts is checked in place, no try, its stand-in made only past the end (C268)", () => {
   const code = ran("cat", [js]);
   const body = code.split(/\n(?= {2}function f\d+\()/).find((f) => /^ {2}function f\d+\((?:l\d+, )*l\d+\) \{\n {4}let [^\n]*\n(?: {4}const [^\n]*\n)* {4}for \(; ; \) \{/.test(f) && f.includes('"met"'));
