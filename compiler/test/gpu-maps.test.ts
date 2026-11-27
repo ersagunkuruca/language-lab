@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Session } from "../../ters/mcp/session.ts";
@@ -142,16 +142,28 @@ test("the page's second press runs the keep on the GPU: the CPU's answer, and ou
 // and gives each drop as words, and its arithmetic is the CPU's: every
 // product by a power of two, an Int made a number given back past 2²⁴.
 // The page here ticks on a press and says a sum of where the drops are.
-function rainPage(): string {
-  const program = join(dir, "rain");
+function rainPage(close?: "offered" | "held"): string {
+  const program = join(dir, close ? `rain-${close}` : "rain");
   cpSync(join(import.meta.dirname, "../../ters/examples/rain-page"), program, { recursive: true });
   const s = new Session(program);
+  // A wobble not a power of two: a product the GPU may fuse with a sum.
+  if (close) s.replace("wobble", "0.001", "0.0009765625");
   s.remove("main");
   s.define("main", "function", []);
   s.step("main", "now", "cell(touched(start pane, 320.0, 240.0))");
   const hole = /□#(\w+)/.exec(s.view("main"))![1];
   s.replace(hole, 'tag("main", [button("Tick", (event) => write(now, ticked(read(now)))), p([text(() => show(sum(map(read(now).drops, (d) => as float64(d.x) + 2.0 * as float64(d.y) + 4.0 * as float64(d.speed) + as float64(d.seed)))))])])');
   s.save();
+  if (close) {
+    // The compiler offers the GPU only close, and never puts it there.
+    const d = spawnSync(process.execPath, [lab, "decisions", program], { encoding: "utf8" });
+    assert.equal(d.status, 0, d.stderr);
+    const file = `${program}.decisions`, lines = readFileSync(file, "utf8").split("\n");
+    const at = lines.findIndex((l) => / place: ticked's map: /.test(l));
+    assert.ok(at >= 0, lines.join("\n"));
+    assert.match(lines[at], /: workers when slow; among main thread, workers, GPU close; in 32 runs; target JavaScript page$/);
+    if (close === "held") { lines[at] = `held ${lines[at].replace(/: workers when slow;/, ": GPU close;")}`; writeFileSync(file, lines.join("\n")); }
+  }
   const out = join(program, "page.html");
   const r = spawnSync(process.execPath, [lab, "build-web", program, "-o", out], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
@@ -166,6 +178,16 @@ test("rain-page's map of drops gets a WebGPU kernel of words: its drops as recor
   assert.match(html, /lab_out\[i \* 5u \+ 4u\] = bitcast<u32>\(/);
   // An Int made a number gives up past 2²⁴.
   assert.match(html, /if \(x > 16777216i \|\| x < -16777216i\) \{ lab_fuel = -1\.0; \}/);
+});
+
+// A map whose arithmetic is only close gets a kernel only where the
+// program's decisions hold it on the GPU so (G12): its answers may differ
+// from the CPU's in the last bits, a person's choice, never the compiler's.
+test("a map whose arithmetic is only close goes to the GPU only where its decisions hold it there (G12)", () => {
+  assert.doesNotMatch(readFileSync(rainPage("offered"), "utf8"), /pageGpu\(\{/);
+  const held = readFileSync(rainPage("held"), "utf8");
+  assert.match(held, /pageGpu\(\{0:\{how:"map",result:"words",/);
+  assert.match(held, /close:"[^"]+"/);
 });
 
 test("rain-page's drops slid on the GPU are the CPU's, bit for bit (G12)", { skip: !exe && "no Chromium" }, async () => {

@@ -39,7 +39,10 @@ export function choicesFor(code: Code, names: Names, main: Id, holds: readonly [
   let places: string[] = [];
   try {
     const ir = lowerCore(p.code, p.info, p.names, [main]);
-    places = placeLines(ir, new Set(Object.keys(ir.awayMaps ? gpuMaps(ir) : {}).map(Number)), p.names, undefined, main);
+    // Each site with a kernel, and those whose kernel is only close (G12).
+    const kernels = Object.entries(ir.awayMaps ? gpuMaps(ir, "all") : {});
+    const sites = (close: boolean) => new Set(kernels.filter(([, k]) => !!k.close === close).map(([s]) => Number(s)));
+    places = placeLines(ir, sites(false), p.names, undefined, main, sites(true));
   } catch { /* main doesn't lower: it runs in the evaluator, on the main thread */ }
   const of = new Map(held), idOf = (l: string) => l.slice(0, l.indexOf(" "));
   // A held placement's entry is the compiler's with the held row in it;
