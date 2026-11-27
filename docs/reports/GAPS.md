@@ -4792,6 +4792,14 @@ once, taking the slots out as it goes. And `items = pool items(w.things)`
 was still walked whole after both of its uses were told their shapes; a
 let's pool items no longer read is now nil.
 
+The tables also lost the flight's threads natively (C266): the function
+given to `updated in pool` reached the slots' map through a walk of the
+tables that passes it on to itself, which the check of what callers give
+took for unknown. Passed on as it was, it now counts as what the other
+callers give: `ters native` with its threads 0.87 → 0.69 s (four cores),
+one thread as before. Running the plants' system beside the moths' (G5)
+would save at most the plants' 1% of a tick.
+
 ## Round 20: strings, the instrument app's signal code (2026-11-22, C262)
 
 `compiler/gaps/strings` is the bigger-program round on the instrument app

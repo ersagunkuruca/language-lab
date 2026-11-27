@@ -48,9 +48,12 @@ test("greenhouse native: the pool's update, its map calling the function its cal
   const out = join(dir, "threads");
   ran(process.execPath, [lab, "native", folder, "-o", out]);
   const c = ran("cat", [`${out}.c`]);
-  // Its pool in slots (L280f): the slots' update.
-  const update = /static Pool_slots lab_pool_slots_updated\([^)]*\) \{[^]*?\n}\n/.exec(c)![0];
-  assert.match(update, /lab_par_map_\d+\(/);
+  // Its pool in tables of slots (G4): each slots' update, the copy made
+  // for each system too, whose function comes in through the tables' walk
+  // passing it on to itself.
+  const updates = [...c.matchAll(/static Pool_slots lab_pool_slots_updated\w*\([^)]*\) \{[^]*?\n}\n/g)].map((m) => m[0]);
+  assert.ok(updates.length > 1, "the systems' updates");
+  for (const u of updates) assert.match(u, /lab_par_map_\d+\(/, u.split("\n")[0]);
 });
 
 test("greenhouse JS: a moth read by number at its parts is checked in place, no try, its stand-in made only past the end (C268)", () => {
