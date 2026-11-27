@@ -153,6 +153,9 @@ const tag = <F extends Fn>(f: F, meta: { lambda: Id; readonly env: Map<Id, Value
 let machineTicks = 0;
 // The direct search's calls, counted for the same (I310).
 let searchTicks = 0;
+// The direct run's calls, counted for the same; apart from the machine's,
+// which a caller weighs as work (bake.ts's limits are in machine steps).
+let directTicks = 0;
 // How many it has taken so far: work, for a caller weighing a run (C255).
 export const evaluatorTicks = (): number => machineTicks;
 // The variables in scope, as a linked list: binding one more shares the
@@ -789,7 +792,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         // ends (no steps to count) still asks it every so many calls, as
         // the machine does (a view of length(reverse(range(20000000)))
         // ran on the editor's thread until the tab ran out of memory).
-        if ((++machineTicks & 4095) === 0 && pageOver()) throw new OutOfSteps();
+        if ((++directTicks & 4095) === 0 && pageOver()) throw new OutOfSteps();
         const l = lamOf(c);
         l.n++;
         rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
