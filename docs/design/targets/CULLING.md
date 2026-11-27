@@ -95,7 +95,13 @@ what is left is every corner's vertex run, the work G14b skips.
   (gpu-cull.test).
 - **G14b2** (done): the decisions entry, so a person may hold a draw
   unculled (gpu-draws.ts `cullable` and `holdUnculled`, choices.ts).
-- **G14c**: CPU culling, if G14a's numbers say it pays.
+- **G14c** (closed, 11-27): CPU culling doesn't pay on rain-page. Its
+  drops are kept on the GPU (G13b), so the CPU has no drops to test, and
+  the GPU pass already skips 15 of 16 at 4×. Held on the CPU, a drop
+  packs 3 words, and testing it would run the vertex function on its 4
+  corners in JavaScript, more work than the packing it saves (reasoned
+  from the costs, not timed on the page). Reopen for a page whose
+  instances are large records packed every frame.
 - **G14d**: occlusion, waiting for a page with depth.
 
 ## What stays out
