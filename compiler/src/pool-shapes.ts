@@ -25,6 +25,12 @@
 // Only functions and tests that surely finish and do nothing else, so not
 // calling one changes nothing but the time. Taken in the program's own
 // definitions, before the representations are chosen (ters/cli/represented.ts).
+//
+// Prior art: archetype storage, a system visiting only the tables whose
+// components it asks for, as in Unity DOTS (Unity Technologies), flecs
+// (Sander Mertens) and Bevy (docs/language/CREDITS.md). What is Ters's own
+// is that no system names its components: the shapes are worked out from
+// its function.
 
 import { freshId, isCall, subtree, copyNodes, dropNode, mapIds, type Code, type Id, type Node, type NodeOf } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
