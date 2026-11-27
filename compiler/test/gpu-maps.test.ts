@@ -346,7 +346,11 @@ test("rain-page's drops stay on the GPU between ticks, slid by the kernel and dr
     // nothing of the drops is sent, neither by the frames nor for their
     // steps (G13c): only the first tick's drops, once.
     assert.deepEqual(kept.reads.slice(1).filter((n) => n !== steps), [], kept.reads.join(" "));
-    const since = kept.log.slice(kept.log.indexOf(-steps));
+    const first = kept.log.indexOf(-steps), since = kept.log.slice(first);
+    // Before it, the frames drew ordinary lists of drops, sending only the
+    // 3 leaves a drop's vertex reads, not all 5 (G13c); the kernel was
+    // sent all 5.
+    assert.deepEqual([...new Set(kept.log.slice(0, first).filter((n) => n >= steps))].sort(), [drops * 3 * 4, all], kept.log.join(" "));
     assert.deepEqual(since.filter((n) => n >= steps), [], kept.log.join(" "));
     // Held on the CPU: each run brings the drops back, and frames send them.
     assert.ok(onCpu.reads.every((n) => n === all + steps), onCpu.reads.join(" "));

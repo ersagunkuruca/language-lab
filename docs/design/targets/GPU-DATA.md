@@ -90,17 +90,19 @@ ordinary one, sent up again by the next kernel or draw that takes it. The
   branches-rt.ts, gpu-frame.ts): one device for a page's kernels and
   frames; `GpuItems` from a resident map's kernel, taken by the next
   tick's kernel and bound by the draw as its instances. The draw is
-  compiled with every leaf of an instance, in the kernel's order, so the
-  kernel's buffer is its instances as it is (a draw whose instance isn't
+  told the layout of every leaf of an instance, in the kernel's order, so
+  the kernel's buffer is its instances as it is (a draw whose instance isn't
   the kernel's answer leaf for leaf keeps the list on the CPU). Lists stay
   only while the frames draw with WebGPU. The program's decisions say so
   as a placement entry (`Pane's drops: GPU between ticks; among CPU, GPU
   between ticks`), and a person can hold one on the CPU.
-- **G13c**: what a kept list costs where it isn't kept: a tick whose map
-  stays on the CPU still sends every leaf of each drop to the draw (5
-  words, not the 3 the vertex reads). A draw reading the leaves it needs by
-  their place in the item takes both layouts. And the 4-byte count of
-  given-back items, in place of the steps, where the map surely ends.
+- **G13c** (G13c1, G13c2 done): what a kept list costs where it isn't
+  kept. G13c1: the kernel's steps aren't filled before a run; every item's
+  run writes its own. G13c2: the draw reads the leaves it needs by their
+  place (pipeline constants, gpu-draws.ts `kept`), so an ordinary list of
+  drops sends the 3 words the vertex reads and a kept one is bound as its
+  5. Left: the 4-byte count of given-back items, in place of the steps,
+  where the map surely ends.
 - **G13d**: rain-page measured: CPU time a tick and bytes moved, against a
   hand-written WebGPU rain.
 

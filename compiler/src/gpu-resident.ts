@@ -190,6 +190,6 @@ export function keptOnGpu(ir: CoreIR, kernels: Record<number, GpuMap>, held: Rea
   if (!resident.fields.length) return { resident: none, draws: ir.drawSites ? gpuDraws(ir).sites : {} };
   const draws = gpuDraws(ir, new Set(resident.draws)).sites;
   const same = (a: { path: number[]; kind: string }[], b: { path: number[]; kind: string }[]) => a.length === b.length && a.every((x, j) => x.kind === b[j].kind && x.path.join() === b[j].path.join());
-  const ok = resident.sites.every((s) => kernels[s]?.words && resident.draws.every((d) => draws[d] && same(draws[d].instance, kernels[s].words!.out) && same(kernels[s].words!.item, kernels[s].words!.out)));
+  const ok = resident.sites.every((s) => kernels[s]?.words && resident.draws.every((d) => draws[d] && draws[d].kept && same(draws[d].kept!.leaves, kernels[s].words!.out) && same(kernels[s].words!.item, kernels[s].words!.out)));
   return ok ? { resident, draws } : { resident: none, draws: ir.drawSites ? gpuDraws(ir).sites : {} };
 }
