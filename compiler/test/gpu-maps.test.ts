@@ -276,8 +276,8 @@ test("rain-page as written asks for one WebGPU device, for its kernel and its fr
 
 // rain-page's drops kept on the GPU between ticks (G13b): after the slide
 // first runs there, each tick's kernel takes the last one's buffer and the
-// frame draws that buffer, so a tick brings back only each drop's steps
-// (4 bytes a drop) and the frames send no drops. The canvas is a texture
+// frame draws that buffer, so a tick brings back only the steps' sum
+// (12 bytes, G13c3) and the frames send no drops. The canvas is a texture
 // of the page's device (headless SwiftShader loses the device once a
 // canvas presents), read back to see the rain drawn.
 test("rain-page's drops stay on the GPU between ticks, slid by the kernel and drawn from its buffer (G13b)", { skip: !exe && "no Chromium" }, async () => {
@@ -342,11 +342,11 @@ test("rain-page's drops stay on the GPU between ticks, slid by the kernel and dr
     const kept = await run(false), onCpu = await run(true);
     if (!kept || !onCpu) return;
     const drops = 20000, steps = drops * 4, all = drops * 5 * 4;
-    // Kept: after the first run's answers, only the steps come back, and
+    // Kept: every run brings back only the sum of its steps (G13c3), and
     // nothing of the drops is sent, neither by the frames nor for their
     // steps (G13c): only the first tick's drops, once.
-    assert.deepEqual(kept.reads.slice(1).filter((n) => n !== steps), [], kept.reads.join(" "));
-    const first = kept.log.indexOf(-steps), since = kept.log.slice(first);
+    assert.deepEqual(kept.reads.filter((n) => n !== 12), [], kept.reads.join(" "));
+    const first = kept.log.indexOf(-12), since = kept.log.slice(first);
     // Before it, the frames drew ordinary lists of drops, sending only the
     // 3 leaves a drop's vertex reads, not all 5 (G13c); the kernel was
     // sent all 5.
