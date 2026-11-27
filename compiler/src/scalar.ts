@@ -6314,9 +6314,24 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const under = isCall(rounded) && code.nodes[rounded.fn]?.kind === "ref" && (code.nodes[rounded.fn] as NodeOf<"ref">).target === S.float32 && rounded.args.length === 1;
     const amount = under ? code.nodes[(rounded as Call).args[0]] : rounded, body = thunk(inner.args[1]);
     if (!body) throw new Refused(`uses with fuel, which ${who} takes ${shape}`);
-    if (amount?.kind !== "lit" || typeof amount.value !== "number") throw new Refused(`has a budget that isn't a number written down (${opts.data ? "this profile's" : "a shader's"} bound is fixed when it's built)`);
-    const v = under ? Math.fround(amount.value) : amount.value;
-    if (!(v >= 0 && v <= MAX_FUEL && Math.fround(v) === v)) throw new Refused(`has a budget of ${v} (${opts.data ? "this profile's" : "a shader's"} is a number from 0 to ${MAX_FUEL})`);
+    const written = amount?.kind === "lit" && typeof amount.value === "number";
+    if (!written && !opts.data) throw new Refused(`has a budget that isn't a number written down (a shader's bound is fixed when it's built)`);
+    const v = !written ? 0 : under ? Math.fround(amount.value as number) : amount.value as number;
+    if (written && !(v >= 0 && v <= MAX_FUEL && Math.fround(v) === v)) throw new Refused(`has a budget of ${v} (${opts.data ? "this profile's" : "a shader's"} is a number from 0 to ${MAX_FUEL})`);
+    // A budget worked out as the program runs (C367): worked out first, on
+    // the fuel outside, then the budget starts at 0 and its body sets the
+    // fuel to it. One below 0 starts at 0, which runs out at the first step
+    // as the evaluator's does.
+    let given: { i: number; value: SExpr } | null = null;
+    if (!written) {
+      const at = inner.args[0], st = stype(zonk(at));
+      if (st !== "f64" && st !== "int") throw new Refused(`has a budget whose number is ${OTHER}`);
+      const raw = expr(at, env, f, false), x: SExpr = st === "int" ? { k: "op", op: "itof", args: [raw] } : raw;
+      const i = f.locals.push("f64") - 1, y = f.locals.push("f64") - 1, l: SExpr = { k: "local", i: y };
+      given = { i, value: { k: "let", i: y, value: x, body: { k: "if", cond: { k: "op", op: "less", args: [l, { k: "num", v: 0 }] }, then: { k: "num", v: 0 }, else: l, t: "f64" } } };
+    }
+    const sets = (b: SExpr): SExpr => given ? { k: "let", i: f.locals.push("f64") - 1, value: { k: "rt", fn: "fuel.swap", args: [{ k: "local", i: given.i }] }, body: b } : b;
+    const around = (b: SExpr): SExpr => given ? { k: "let", i: given.i, value: given.value, body: b } : b;
     const t = stype(zonk(id));
     if (!t) throw new Refused(`has a budget whose value is ${OTHER}`);
     const save = f.locals.push("f64") - 1, res = f.locals.push(t) - 1;
@@ -6324,7 +6339,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     underBudget = true;
     let inside: SExpr;
     try { inside = expr(body, env, f, false); } finally { underBudget = outer; }
-    if (alone || !opts.data) return { k: "budget", n: v, body: inside, otherwise: alone ? { k: "fail" } : expr(otherwise!, env, f, false), t, save, res };
+    if (alone || !opts.data) return around({ k: "budget", n: v, body: sets(inside), otherwise: alone ? { k: "fail" } : expr(otherwise!, env, f, false), t, save, res });
     // With `data`: the body's first answer, if it has one, is optional's,
     // so a body with no answer gives `otherwise` as running out does (as in
     // the evaluator, where first sees no answer either way), and a body with
@@ -6334,9 +6349,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (!ot || !isData(ot)) throw new Refused(`has a budget whose value is ${OTHER}`);
     const some = ot.cases.findIndex((c) => c.variant === SOME), none = ot.cases.findIndex((c) => c.variant === NONE);
     const found: SExpr = { k: "search", kind: "optional", body: inside, res: f.locals.push(t) - 1, t: ot, bt: t };
-    const ran: SExpr = { k: "budget", n: v, body: found, otherwise: { k: "new", t: ot, c: none, args: [] }, t: ot, save, res: f.locals.push(ot) - 1 };
+    const ran: SExpr = { k: "budget", n: v, body: sets(found), otherwise: { k: "new", t: ot, c: none, args: [] }, t: ot, save, res: f.locals.push(ot) - 1 };
     const s = f.locals.push(ot) - 1;
-    return { k: "case", scrut: ran, s, t: ot, result: t, arms: ot.cases.map((_, ci): SExpr => (ci === some ? { k: "field", rec: { k: "local", i: s }, t: ot, c: ci, i: 0 } : expr(otherwise!, env, f, false))) };
+    return around({ k: "case", scrut: ran, s, t: ot, result: t, arms: ot.cases.map((_, ci): SExpr => (ci === some ? { k: "field", rec: { k: "local", i: s }, t: ot, c: ci, i: 0 } : expr(otherwise!, env, f, false))) });
   }
 
   // A root that may not finish is refused as a place to start, even when
