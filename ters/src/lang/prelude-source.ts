@@ -936,14 +936,19 @@ export function buildPrelude(): Module {
   // neighbours compares, so a grid built over the places finds the same
   // items. A light's place and reach are its own fields, read by the two
   // functions given; nothing here says light.
+  // Whether an item reaches here: its place within its own reach of it.
+  // A helper of within reach, which a fold over its items is made a fold
+  // over the list with (compiler/src/fuse-steps.ts). Not offered.
+  const reaches = k.def("reaches");
+  k.define(reaches, k.fn(["item", "place", "reach", "here"], (x, place, reach, here) =>
+    k.let("apart", k.call(S.zipParts, B.sub, k.call(place, x), here), (d) =>
+      k.let("reach", k.call(reach, x), (r) =>
+        k.call(S.not, k.call(S.less, k.call(B.mul, r, r), k.call(S.total, k.call(S.zipParts, B.mul, d, d))))))));
   const withinReach = k.def("within reach");
   k.define(withinReach, k.fn(["items", "place", "reach", "here"], (xs, place, reach, here) => k.match(xs, [
     { variant: NIL, names: [], body: () => NIL },
     { variant: CONS, names: ["item", "rest"], body: ([x, rest]) =>
-      k.let("apart", k.call(S.zipParts, B.sub, k.call(place, x), here), (d) =>
-        k.let("reach", k.call(reach, x), (r) =>
-          k.if(k.call(S.less, k.call(B.mul, r, r), k.call(S.total, k.call(S.zipParts, B.mul, d, d))),
-            k.call(withinReach, rest, place, reach, here), k.call(CONS, x, k.call(withinReach, rest, place, reach, here))))) },
+      k.if(k.call(reaches, x, place, reach, here), k.call(CONS, x, k.call(withinReach, rest, place, reach, here)), k.call(withinReach, rest, place, reach, here)) },
   ])));
   const copies = k.def("copies");
   // Made onto the empty list a copy at a time, one list built (C270: a
@@ -2781,6 +2786,7 @@ export function buildPrelude(): Module {
     [addRun]: "A helper of sort: a sorted run added to the slots of runs, like adding 1 to a binary number. Not offered.",
     ...Object.fromEntries(gridHelpers.map((d) => [d, "A helper of neighbours on a grid (C292). Not offered."])),
     [onGrid]: "neighbours as C and WebAssembly find them (C292): the places on a grid of cells a little wider than reach, each compared with those in the cells around its own, so the lists are neighbours' own. Not offered: the compiler calls it for neighbours.",
+    [reaches]: "Whether an item reaches here: its place within its own reach of it. A helper of within reach, not offered in the palette.",
     [withinReach]: "The items that reach here: those whose place is within their own reach of it, in the list's order. Places are points (any record of Float64s). Every item is compared as written; the compiler may find them by a grid over the places instead, which gives the same list.",
     [neighbours]: "Each item's neighbours: the positions of the other items whose places are within reach of its own, smallest first. Places are points (any record of Float64s). Every pair is compared as written; the compiler may find them by a grid or a tree instead, which give the same lists.",
     [near]: "Whether two Float64s agree to the precision floats carry: within 1e-9 of each other, relative to their size. equal is exact, so √2 · √2 isn't equal to 2, but it is near it.",

@@ -2,7 +2,7 @@ import { nodesOfKindIn, children, type Code, type Id, type Node, nodeValues } fr
 
 // The prelude definitions the passes and the solver find by name
 // (arith.ts preludeDef): fractions' and grammars' pieces, `inverse`,
-// `together`, `map` and `flat map` (fuse-walks.ts; the trees module's for arrays too, C42), `keep` and `any pass`, and the checks a printer's arms make (descent.ts). A table,
+// `together`, `map` and `flat map` (fuse-walks.ts; the trees module's for arrays too, C42), `keep` and `any pass`, `within reach` and `reaches` (fuse-steps.ts), and the checks a printer's arms make (descent.ts). A table,
 // so that a compiled program that solves doesn't carry the library (library/prelude.json, 4 MB) to look them up
 // (C137d2); test/prelude-ids.test.ts checks it against the prelude.
 export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
@@ -18,6 +18,8 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "map": "@9902gjnadddgv3jrh6ir29nf4q",
  "flat map": "@h7nla8kekh6mepta8fskumeb6k",
  "array map": "@dom7ap03ujn65jk9krb3tv2v60",
+ "within reach": "@g2dkdj8j0fuvjgit9bjek588ph",
+ "reaches": "@eljkn8ookbj22jg4gqb4efj9r3",
  "keep": "@17uq2ffqdsbb6kikljtkeco9v1",
  "any pass": "@7nfnenoqt4fflsckoqd4d37ei9",
  "all pass": "@ku5ojesmoico158dp65r5o0q8f",

@@ -121,8 +121,10 @@ Ersagun measures on a real GPU later, as with G13d.
   lamps waits for G15b, where the fireflies light the drops.
 - **G15b1**: `within reach` in std (done: written as its own walk, not a
   `keep`, so the functions it is given carry no Choice; reference.ts,
-  LIBRARY.md, within-reach.test); rain-page's fireflies, lit forward,
-  measured.
+  LIBRARY.md, within-reach.test). A fold over it is one fold over the
+  list, each item tested by `reaches` where it is (done: fuse-steps.ts),
+  so a shader loops over the lights it captured and makes no list of
+  those that reach. rain-page's fireflies, lit forward, measured.
 - **G15b2**: the grid, a compute pass, and its `way` entry in the
   decisions, built only if G15b1's numbers say it pays.
 - **G15c**: shadow maps, waiting for a page with depth.
