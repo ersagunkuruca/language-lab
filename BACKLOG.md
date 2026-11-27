@@ -200,7 +200,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L295 | **Bug (speed).** Under `with fuel`, a recursive call made from a match arm costs more at each step: `spin2(x) = if x = −1 then true else match first where([1], (i) => i = −1)` with `none → spin2(x + 1)`, run as `first(with fuel(n, () => spin2(0)), else false)`, takes 1.1 s at n = 1,000 and 6.5 s at 4,000 (the same loop with `if` alone 0.6 and 1.4 s). chomsky's `accepts within` (a Turing machine under fuel): 1,000 steps 5 s, 2,000 steps 19 s | [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) "Findings" (L293f) | P2 | M |  |
 | L296 | A parameter's type in text, or a count the checker reads at a generic number: a count down with nothing Int-only in its body stays generic, so the counting check (L46, Int only) leaves it `Diverge`; chomsky's driver writes `quotient(rounds, 1) < 0` and deletes it, four times. The same cause makes `m.start` pick another record type's `start` field. Which way is Ersagun's call | [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) "Findings" (L293f) | P2 | M |  |
 | L297 | Text reading: a two-word type in a field's type needs brackets (`List (Push move)`), and steps inside a fold's or match's arm weren't found to read, so chomsky used helpers | [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) "Findings" (L293f) | P3 | S |  |
 
