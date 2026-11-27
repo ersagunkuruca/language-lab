@@ -154,6 +154,32 @@ jobs:
       - name: Each past fix put back is caught
         run: node ters/test/injections.ts
 
+  # Today's evaluator against yesterday's (T18f, compiler/test/fuzz-reference.ts):
+  # seed 1 and the night's generated programs, each answer the same. The
+  # day-old main, not the good tag: good has stood at 11-14 while the browser
+  # job was red (I367), and over 13 days meanings changed on purpose (I293's
+  # step counting changed seed 12's g17). A red here is a meaning that changed
+  # since yesterday: if no DONE.md row of the day says so, it's a bug. It
+  # doesn't hold the good tag.
+  reference:
+    needs: changed
+    if: needs.changed.outputs.run == 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ters/package-lock.json
+      - run: npm ci
+        working-directory: ters
+      - name: The evaluator answers as yesterday's
+        run: node compiler/test/fuzz-reference.ts --ref "$(git rev-list -1 --before='24 hours ago' HEAD)"
+
   good:
     needs: [tests, browser]
     runs-on: ubuntu-latest

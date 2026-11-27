@@ -502,3 +502,7 @@ files only) and `meta.json` (`bug`, `what`, `tests`).
 T18e: each generated program also runs under `FUZZ_HOLDS` (default 2) random holds of Map, Set and
 List, as a `.decisions` file may write them; every engine must print what the evaluator prints, and
 an engine refusing a hold the chooser took is a difference too.
+T18f: `node compiler/test/fuzz-reference.ts [--ref good] [seed…]` runs the generated programs on today's
+evaluator and on an older commit's (a git worktree, each on its own library) and lists the answers that
+differ; the Nightly's `reference` job compares with the day-old main. A difference is a meaning that
+changed: a bug unless a DONE.md row says it was meant.
