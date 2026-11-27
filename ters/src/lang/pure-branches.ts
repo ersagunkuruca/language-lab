@@ -12,7 +12,7 @@
 // thread hop runs in place, C41); this only marks the calls it may.
 
 import { originalOf, SPLIT_COPIED_FROM } from "./prelude-ids.ts";
-import { nodesOfKind, subtree, type Code, type Id, type NodeOf, isCall } from "../model.ts";
+import { dependenciesOfAll, nodesOfKind, subtree, type Code, type Id, type NodeOf, isCall } from "../model.ts";
 import { preludeDef } from "./arith.ts";
 import type { Info } from "./infer.ts";
 import { ABORT, S, SIGS, writtenItems } from "./std.ts";
@@ -120,6 +120,13 @@ export type ListJob = "map" | "keep" | "all" | "any" | "first";
 // every caller gives for it.
 export function parallelLists(code: Code, info: Info, callers = false): Map<Id, ListJob> {
   const given = callers ? givenEffects(code, info) : undefined;
+  // Not where the item reaches an effect some operation of which a handler
+  // may answer later (its case given the rest): the rest can outlive the
+  // item and be run by the caller, and on C a handler's fiber is the
+  // thread's (crew's `start crew`, each worker made into steps of Work on
+  // the pool's threads and stepped by the main one, crashed).
+  const later = (d: Id) => { const td = code.nodes[(code.nodes[d] as NodeOf<"def"> | undefined)?.body ?? ""]; return td?.kind === "typedef" && !!td.effect && td.variants.some((v) => (code.nodes[v] as NodeOf<"variant"> | undefined)?.later); };
+  const handlesLater = (lambda: Id) => [...dependenciesOfAll(code, [lambda])].some(later);
   // List's map, and the array's that a split puts in its place (C196).
   const kinds = new Map<Id | undefined, ListJob>([[preludeDef("map"), "map"], [preludeDef("array map"), "map"], [preludeDef("keep"), "keep"], [preludeDef("all pass"), "all"], [preludeDef("any pass"), "any"], [preludeDef("first where"), "first"]]), out = new Map<Id, ListJob>();
   for (const n of nodesOfKind(code, "call")) {
@@ -133,6 +140,7 @@ export function parallelLists(code: Code, info: Info, callers = false): Map<Id, 
     if (!kind || l?.kind !== "lambda" || l.params.length !== 1) continue;
     const own = ownEffects(code, info, l.body, given);
     const stops = kind === "all" || kind === "any" || kind === "first";
+    if (handlesLater(l.id)) continue;
     if (own && [...own].every((e) => ALONE.has(e)) && !(own.has(DIVERGE) && (stops || own.has(ABORT)))) out.set(n.id, kind);
   }
   return out;
