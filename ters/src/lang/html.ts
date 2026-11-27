@@ -188,6 +188,8 @@ const drawn = new WeakMap<Mount, WeakMap<object, Node_>>();
 // new, not the kept rows it moved (a reorder draws nothing).
 const moved = new WeakSet<Node_>();
 const holding = new WeakMap<Node_, Node_[]>();
+// What each element's children were drawn from, by value (redrawn).
+const drewFrom = new WeakMap<Node_, Value[]>();
 const fresh = (n: Node_): Node_[] => moved.has(n) ? [] : holding.get(n)?.flatMap(fresh) ?? [n];
 
 // Held waits (C61 c′) not yet over, and the events that came meanwhile.
@@ -206,10 +208,21 @@ function redrawn(e: El, was: Value | null, v: Value, m: Mount, svg: boolean): bo
   const old = kidsOf.get(e);
   if (!old) return false;
   const inSvg = svg || b.fields[0] === "svg";
-  const kids = fromList(b.fields[2]).map((c) => mountHtml(c, m, inSvg));
+  // The kept rows it drew before, the same values in the same places at
+  // either end (C354: a card added at the end of 2000), are the same nodes,
+  // as mountHtml would find them: only the ones between are mounted.
+  const xs = fromList(b.fields[2]), drew = drewFrom.get(e);
+  const same = (i: number, j: number) => { const x = xs[j]; if (!drew || x !== drew[i] || typeof x !== "object" || x === null) return false; const o = KEPT.get(x); return !!o && !o.disposed; };
   let k = 0;
-  while (k < old.length && k < kids.length && old[k] === kids[k]) k++;
+  while (k < old.length && k < xs.length && same(k, k)) k++;
   let end = 0;
+  while (end < old.length - k && end < xs.length - k && same(old.length - 1 - end, xs.length - 1 - end)) end++;
+  const kids = new Array<Node_>(xs.length);
+  for (let i = 0; i < k; i++) { kids[i] = old[i]; moved.add(old[i]); }
+  for (let i = k; i < xs.length - end; i++) kids[i] = mountHtml(xs[i], m, inSvg);
+  for (let i = 0; i < end; i++) { const x = old[old.length - 1 - i]; kids[xs.length - 1 - i] = x; moved.add(x); }
+  drewFrom.set(e, xs);
+  while (k < old.length && k < kids.length && old[k] === kids[k]) k++;
   while (end < old.length - k && end < kids.length - k && old[old.length - 1 - end] === kids[kids.length - 1 - end]) end++;
   const before = end ? kids[kids.length - end] : null;
   for (let i = k; i < old.length - end; i++) if (placed.get(old[i])?.parent === e) e.removeChild(old[i]);
@@ -278,7 +291,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
         if (!(e instanceof Pending)) throw e;
         return;
       }
-      if (!first) for (const x of made()) m.ran?.(x, node);
+      if (!first && m.ran) for (const x of made()) m.ran(x, node);
       first = false;
     }, label);
   };
@@ -441,9 +454,10 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           else console.warn("this page can't play sound here: build it with ters build-web");
         } else throw new Error(`not an attribute: ${a.tag}`);
       }
-      const kids = fromList(d.fields[2]).map((c) => mountHtml(c, m, inSvg));
+      const xs = fromList(d.fields[2]), kids = xs.map((c) => mountHtml(c, m, inSvg));
       e.append(...kids);
       place(e, kids);
+      drewFrom.set(e, xs);
       // A browser focuses an autofocus field only as the page loads; one a
       // click opens later gets it here, once it's on the page.
       if (focus) queueMicrotask(() => (e as El & { focus?: () => void }).focus?.());
