@@ -66,6 +66,7 @@ const { keptItems } = compiles ? await import("../../compiler/src/kept-items.ts"
 const { deepLoops } = compiles ? await import("../../compiler/src/deep-loops.ts") : ({} as typeof import("../../compiler/src/deep-loops.ts"));
 const { ownedTables } = compiles ? await import("../../compiler/src/owned-tables.ts") : ({} as typeof import("../../compiler/src/owned-tables.ts"));
 const { itemReads } = compiles ? await import("../../compiler/src/item-reads.ts") : ({} as typeof import("../../compiler/src/item-reads.ts"));
+const { intArgs } = compiles ? await import("../../compiler/src/int-args.ts") : ({} as typeof import("../../compiler/src/int-args.ts"));
 const { columns } = compiles ? await import("../../compiler/src/columns.ts") : ({} as typeof import("../../compiler/src/columns.ts"));
 const { ownPushes, ownedPerValue, sharedHolders } = compiles ? await import("../../compiler/src/holders.ts") : ({} as typeof import("../../compiler/src/holders.ts"));
 const { chosenParts } = compiles ? await import("../../compiler/src/chosen-parts.ts") : ({} as typeof import("../../compiler/src/chosen-parts.ts"));
@@ -410,6 +411,9 @@ function nativeLoweredNow(main: Id, wasm: boolean, page: boolean, from: Program)
     // `item at` put in place, its stand-in made only past the end, as
     // natively (C268, item-reads.ts).
     if (!process.env.NO_ITEM_READS) itemReads(lowered);
+    // An Int operation's inputs as locals, so its i31 case is inlined
+    // (int-args.ts, C361).
+    if (!process.env.NO_INT_ARGS) intArgs(lowered);
   }
   return { lowered, root };
 }

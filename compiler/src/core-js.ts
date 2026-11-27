@@ -61,6 +61,7 @@ import { gpuDraws, packsOf } from "./gpu-draws.ts";
 import { rangeArrays, rangeChoices } from "./range-choices.ts";
 import { originalOf, PRELUDE_DEFS, typedOriginalOf } from "../../ters/src/lang/prelude-ids.ts";
 import { earlyAnd } from "./early-and.ts";
+import { intArgs } from "./int-args.ts";
 import { ARRAY_RT, emptyArray, isArray, isDual, isTable, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, poolHeld, type AType, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import type { Type } from "../../ters/src/lang/types.ts";
 import { runtime } from "./wasm-rt.ts";
@@ -1012,6 +1013,9 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   });
   // Ints known small worked out as numbers (int-ranges.ts, C267).
   if (!envSet("NO_INT_RANGES")) intRanges(ir, new Set(ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))));
+  // An Int operation's inputs as locals, so its small case is written out
+  // (int-args.ts, C361).
+  if (!envSet("NO_INT_ARGS")) intArgs(ir);
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;
