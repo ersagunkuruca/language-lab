@@ -4798,7 +4798,24 @@ tables that passes it on to itself, which the check of what callers give
 took for unknown. Passed on as it was, it now counts as what the other
 callers give: `ters native` with its threads 0.87 → 0.69 s (four cores),
 one thread as before. Running the plants' system beside the moths' (G5)
-would save at most the plants' 1% of a tick.
+would save at most the plants' 1% of a tick: closed measured.
+
+The flight itself over the threads (G25, 2026-11-27, four cores):
+
+| 600 ticks, 2,000 moths | one thread | four |
+|---|---|---|
+| C by hand (OpenMP) | 0.38 s | 0.17 s |
+| `ters native` | 0.97 s | 0.60 s |
+| `ters compile` | 2.96 s | 2.92 s |
+
+Natively the flight is on the pool already and scales as OpenMP's loop
+does here; about a fifth of a tick's instructions stay on the main
+thread (the captures shared each tick, the grid filed, the moths' items
+kept). Compiled JavaScript never sends the flight to its workers: what a
+function given by the caller does is known only on C (C266). Known on JS
+too, with the pool's columns and items by shape made to cross, each tick
+copies the 2,000 moths to every worker and their answers back, 7 ms
+against the flight's 3.4 ms in turn.
 
 ## Round 20: strings, the instrument app's signal code (2026-11-22, C262)
 
