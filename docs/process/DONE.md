@@ -2665,6 +2665,14 @@ The second Language lane, from the 10-hour run of 2026-11-05/06: the sharing cha
 | L110 | Publishing keeps the draft id as the lineage id (SHARING.md §1). `lab publish <program> <name…> [-o module.json]` (modules.ts `publishVersion`) publishes the named definitions and the drafts they use as their next versions in a module file: a module's `lineages` list each lineage's versions oldest first, the old ones stay in it (published code is never deleted), only the newest is offered, and publishing what didn't change adds nothing. `replaces`, which nothing wrote, is gone: what replaces what is read from the lineages (`replacing`). A program's ref is the exact version, its `@` id, and its lineage is found from the module (`lineageOf`). Example: modules.test.ts's "publishing a draft again after an edit adds a version to its lineage", and examples/sort's `sort` published, its `insert` edited and published again (version 2 of both, version 1 kept) | #1994 |
 | L109 | std published with lineages and versions, and hashes that carry their recipe (SHARING.md §3). std's ids are its lineage ids; library/std-versions.json (kept by library/build.ts, modules.ts `addVersions`) lists every version each std definition has had, oldest first, so a change to a declaration adds one and keeps the old. Each module records the version of every std definition its code refers to (`std`, modules.ts `baseVersions`), and verify says "html was published against another version of std's std.attribute: publish it again" instead of that its code changed. An id says its recipe (hash.ts `recipeOf`): today's is the unlettered one, a later one a letter w to z after the `@`, and verify refuses an id of a recipe it doesn't know as that. Also: build.ts now records the cases module's moved definitions in moved.json, and cases.json was stale on main (rebuilt). Example: modules.test.ts's "a change to a std declaration adds a version and keeps the old" | #1992 |
 
+## Chomsky thread
+
+The thread "Explore grammars and machines across the Chomsky hierarchy" (L293, Ersagun 2026-11-27).
+
+| id | item | PR |
+|---|---|---|
+| L293a | Grammars as data, `examples/chomsky` (the one new example allowed for L293): `Symbol`, `Rule`, `Grammar`, `Level` and `Answer`; `level of` gives the narrowest level the rules fit; a derivation step is a Choice (any rule, any place); `words up to` searches breadth first over forms no longer than the word, counted by how many there are, so it has no Diverge; the unrestricted search (`searched`) is Diverge and `found within` runs it under `with fuel`. Four grammars: a⁺b*, aⁿbⁿ, aⁿbⁿcⁿ, a^(2^n). Example: chomsky.test.ts (the words, the types, decided and searched answers) | this PR |
+
 ## Demos
 
 | id | item | PR |
