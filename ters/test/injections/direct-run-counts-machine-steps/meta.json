@@ -1,0 +1,5 @@
+{
+  "bug": "#3515",
+  "what": "the evaluator's direct run counts its calls as the machine's steps, which bake.ts weighs as work, so module-decisions' baked values change",
+  "tests": ["ters/test/module-decisions.test.ts"]
+}

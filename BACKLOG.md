@@ -32,7 +32,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | L Language and library | "Speed up the interpreter on real programs" | no open row (round 2 stopped 2026-11-23, Ersagun: fix the failed compile instead, E320) |
 | G Game | "Build a game to test Ters against engines" | stage 1: done (C265, C267 done, C283 and C284 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
-| T Testing | "Learn from Ephyra for our bug finding" | T18d, then T18e, T18f (lessons from Ephyra, Ersagun 2026-11-27) |
+| T Testing | "Learn from Ephyra for our bug finding" | T18e, then T18f, T18g, T18d1 (lessons from Ephyra, Ersagun 2026-11-27) |
 
 ## Inbox
 
@@ -50,7 +50,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| T18d | Fix injections: past fixes reversed as patches (first the 11-27 main-red breakers); the Nightly checks each makes some test fail, and that `affected.ts` on the injected tree picks that test (a selection hole otherwise) | [EPHYRA-LESSONS-2026-11-27](docs/reports/EPHYRA-LESSONS-2026-11-27.md) | P2 | M |  |
+| T18d1 | #3492's bug put back is caught by no test: int-args numbering its new locals after the locals' end (`next = f.locals.length` for `next = top + 1` in compiler/src/int-args.ts) leaves edits.test, carried-reps.test and stable-ids.test green on 11-27. Find whether the passes before still leave unused locals (then a test for the printed names after a second check is missing) or no longer do (then the entry's trigger is gone and the row closes measured); add it to ters/test/injections/ once a test catches it | T18d (#PR) | P3 | S | |
 | T18e | Decision toggles in C101: each generated program also run under random allowed `.decisions` entries and chooser alternatives, every engine printing what the evaluator prints (sum order excluded unless decided, 11-26) | [EPHYRA-LESSONS-2026-11-27](docs/reports/EPHYRA-LESSONS-2026-11-27.md) | P2 | M |  |
 | T18f | The last good evaluator as a reference: generated programs on today's evaluator and on the `good` tag's, nightly; a difference is triaged against DONE.md (a meaning change may be meant) | [EPHYRA-LESSONS-2026-11-27](docs/reports/EPHYRA-LESSONS-2026-11-27.md) | P3 | M |  |
 | T18g | Edit sequences through the MCP tools, shrunk as sequences: after each step a check over the last equals a check from scratch, the saved form reads back the same, undo gives the code back; merge laws over the same sequences | [EPHYRA-LESSONS-2026-11-27](docs/reports/EPHYRA-LESSONS-2026-11-27.md) | P3 | L |  |

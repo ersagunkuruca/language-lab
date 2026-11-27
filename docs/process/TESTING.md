@@ -494,3 +494,7 @@ T18b: the Nightly's `seed` job runs the generated programs at the night's seed; 
 finds a difference goes into `compiler/test/fuzz-seeds.json`, replayed by every run.
 T18c: a run that finds a difference prints its first one cut down (compiler/test/fuzz-shrink.ts,
 `SHRINK=0` skips it).
+T18d: `node ters/test/injections.ts` puts each past fix in `ters/test/injections/` back and checks
+a test catches it and `affected.ts` picks that test (the Nightly's `injections` job). A bug fix
+whose test would catch it again gets an entry: its fix reversed as `injection.patch` (implementation
+files only) and `meta.json` (`bug`, `what`, `tests`).

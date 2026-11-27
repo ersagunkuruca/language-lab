@@ -1,0 +1,5 @@
+{
+  "bug": "#3494",
+  "what": "int-args adds Int locals to a function copied from another without its own copy of the locals list, so the other's are overwritten (mnist's row max)",
+  "tests": ["compiler/test/mnist.test.ts"]
+}
