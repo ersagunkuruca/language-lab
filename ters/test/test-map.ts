@@ -1,4 +1,4 @@
-// The test map (T16, TESTING.md §9): for each test file, the lines of code
+// The test map (T16, TESTING.md §8): for each test file, the lines of code
 // it ran and the data files it read, recorded on one commit. A change then
 // reaches the tests that ran a line it changed or read a file it changed,
 // instead of every test that imports a changed file: 270 of 372 test files
@@ -18,10 +18,10 @@
 // commit it was recorded at, so entries recorded on different nights can
 // sit together.
 
-import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export interface Entry {
@@ -181,6 +181,19 @@ export function recordOne(top: string, test: string, at: string, env: NodeJS.Pro
 
 export function readMap(path: string): TestMap {
   try { return JSON.parse(readFileSync(path, "utf8")) as TestMap; } catch { return { tests: {} }; }
+}
+
+// The map Check main and the Nightly record on the branch test-map, fetched
+// each time and kept in .lab/ for when there is no network.
+export function fetchMap(top: string): TestMap {
+  const kept = join(top, ".lab", "test-map.json");
+  try {
+    execFileSync("git", ["fetch", "-q", "--depth=1", "origin", "+refs/heads/test-map:refs/remotes/origin/test-map"], { cwd: top, stdio: "ignore", timeout: 60_000 });
+    const text = execFileSync("git", ["show", "refs/remotes/origin/test-map:map.json"], { cwd: top, encoding: "utf8", maxBuffer: 1 << 30 });
+    mkdirSync(dirname(kept), { recursive: true });
+    writeFileSync(kept, text);
+  } catch {}
+  return readMap(kept);
 }
 
 // Two maps as one: for each test, the entry that ran last.

@@ -482,3 +482,11 @@ What we give up: a break that only a test the cover left out would see is
 caught after the merge, and one in a test due in a week, within a week,
 with its culprit named. Ersagun accepted that ("we don't have to catch
 everything right when they break").
+
+## 9. 2026-11-27: lessons from Ephyra (T18)
+
+[EPHYRA-LESSONS-2026-11-27](../reports/EPHYRA-LESSONS-2026-11-27.md) compares our
+generated tests with [Ephyra](https://github.com/datadog-labs/ephyra)'s. Rows T18a to
+T18g. T18a: `node ters/test/reach.ts [test]` prints, from the test map, how much of
+`compiler/src` and `ters/src/lang` a test runs next to all tests, by file, and the
+files it never enters (default: the generated programs, 65% and 45% on 11-27).

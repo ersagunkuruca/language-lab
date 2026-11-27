@@ -42,6 +42,11 @@ The recurring quality practices (QA pass, critical review, bigger program;
 see the project instructions) don't take a lane: QA and review write reports
 only, and their findings come in as backlog items. The bigger-program round
 is lane C's item when it's due.
+Each bigger-program round also reports how far the generated programs reach
+(`node ters/test/reach.ts`, T18a): the share of `compiler/src` and
+`ters/src/lang` that `compiler/test/fuzz.test.ts` runs, and the files it never
+enters. A round that adds a part of the language to the generator says which
+file it aimed at and the reach before and after (EPHYRA-LESSONS-2026-11-27).
 
 **Keyboard and screen reader, every QA pass** (E231, BLIND-SPOTS-2026-11-03
 §10). Besides the mouse, each QA pass does one task with the keyboard only
