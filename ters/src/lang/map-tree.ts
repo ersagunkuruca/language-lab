@@ -439,6 +439,18 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
   const slotsOfEntries = def("pool slots of entries", ["entries", "next"], (m, next) => slotsOf(k.call(putEntries, k.call(prelude("entries of"), m), k.x(emptySlots)),
     (items, nums, free, size, slots, _nx, os, stale) => S8(items, nums, free, size, slots, next, os, stale)));
   const matchSlots = def("match pool slots", ["pool", "pool of"], (p, f) => k.match(k.call(slotsMeaning, p), [{ variant: POOL_V, names: ["entries", "next"], body: ([es, next]) => k.call(f, es, next) }]));
+  // The jobs told which shapes they touch (prelude `updated in pool
+  // shaped` and the rest, G4): slots hold every shape together, so each
+  // walks them all and asks each item's shape.
+  // A shape is a prelude `Pool shape`: a record holding the function.
+  const nodeAt = (id: Id) => k.code.nodes[id] ?? (k as unknown as { known: Code }).known.nodes[id];
+  const PSd = prelude("Pool shape"), PSv = (nodeAt((nodeAt(PSd) as { body: Id }).body) as { variants: Id[] }).variants[0];
+  const shapeOfItem = (ps: Id, x: Id) => k.match(ps, [{ variant: PSv, names: ["of"], body: ([f]) => k.call(f, x) }]);
+  const inShapes = (shapes: Id, shape: Id, x: Id) => k.call(prelude("contains"), shapes, shapeOfItem(shape, x));
+  const itemsShapedS = def("pool slots items shaped", ["pool", "shape", "shapes"], (p, shape, shapes) => k.call(prelude("keep"), k.call(itemsS, p), k.fn(["item"], (x) => inShapes(shapes, shape, x))));
+  const updatedShapedS = def("pool slots updated shaped", ["pool", "shape", "shapes", "f"], (p, shape, shapes, f) => k.call(updatedS, p, k.fn(["item"], (x) => k.if(inShapes(shapes, shape, x), k.call(f, x), x))));
+  const keptShapedS = def("pool slots kept shaped", ["pool", "shape", "shapes", "test"], (p, shape, shapes, test) => k.call(keptS, p, k.fn(["item"], (x) => k.if(inShapes(shapes, shape, x), k.call(test, x), k.x(TRUE)))));
+  const emptyShapedS = def("empty pool slots shaped", ["shape"], () => k.x(emptySlots));
   const slotsImpl: Record<Id, Id> = {
     [POOL_V]: slotsOfEntries,
     match: matchSlots,
@@ -454,6 +466,11 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     [prelude("pool items")]: itemsS,
     [prelude("updated in pool")]: updatedS,
     [prelude("kept in pool")]: keptS,
+    [prelude("empty pool shaped")]: emptyShapedS,
+    [prelude("pool items shaped")]: itemsShapedS,
+    [prelude("updated in pool shaped")]: updatedShapedS,
+    [prelude("updated in pool keeping shapes")]: updatedShapedS,
+    [prelude("kept in pool shaped")]: keptShapedS,
   };
   const slotsBy = (f: (a: Id, b: Id) => Id, name: string) => def(name, ["a", "b"], (a, b) => f(k.call(slotsMeaning, a), k.call(slotsMeaning, b)));
   const slotsByType = {
@@ -474,6 +491,226 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     compare: keyBy((a, b) => k.call(COMPARE, a, b), "slotted key compare"),
     show: def("slotted key show", ["key"], (key) => k.call(SHOW_ANY, k.call(keyMeaning, key))),
   };
+
+  // ---- Pool as a table per shape (G4, ENTITIES.md "Archetype tables";
+  // Unity DOTS, flecs, Bevy): the items grouped by their shape (which of
+  // their Optional parts they have, as the pool's `shape` gives it), each
+  // group in slots of its own, so a job told which shapes it touches
+  // (`updated in pool shaped`) walks those tables and leaves the others
+  // as they are. Numbers are given out across the tables, so a key is
+  // still its number and a slot, the slot in whichever table holds it
+  // (each is asked in turn; numbers are never given twice, so only one
+  // can hold it). With no `shape` (a pool made without one, or after an
+  // update that may have changed its items' type) the grouping is
+  // anything; a job given a shape groups such a pool by it first. An
+  // item whose shape an update changes moves to its own table afterwards,
+  // kept in number order there.
+  // Its keys are the slots' (number, slot), a type of their own so the
+  // two rows differ (chosen with the pool by name, together.ts).
+  const K2 = k.type("Table key", [], [["table key", [["number", () => k.tref(INT)], ["slot", () => k.tref(INT)]]]], "pool table key");
+  defs.push(K2.def);
+  const TK = (n: Id, slot: Id) => k.call(K2.v["table key"], n, slot);
+  const tkOf = (key: Id, f: (n: Id, slot: Id) => Id) => k.match(key, [{ variant: K2.v["table key"], names: ["number", "slot"], body: ([n, slot]) => f(n, slot) }]);
+  const slotted = (key: Id) => tkOf(key, (n, slot) => SK(n, slot));
+  const TB = k.type("Pool table", ["a"], [["table", [["shape", () => k.tref(INT)], ["slots", (_, [a]) => k.tref(P.def, k.tref(a))]]]]);
+  defs.push(TB.def);
+  const PT = k.type("Pool tables", ["a"], [["tables", [
+    ["shape", (_, [a]) => k.tref(OPTIONAL, k.tref(PSd, k.tref(a)))], ["tables", (_, [a]) => k.tref(LIST, k.tref(TB.def, k.tref(a)))],
+    ["next", () => k.tref(INT)], ["size", () => k.tref(INT)],
+  ]]]);
+  defs.push(PT.def);
+  const TS = (shape: Id, ts: Id, next: Id, size: Id) => k.call(PT.v.tables, shape, ts, next, size);
+  const tablesOf = (p: Id, f: (shape: Id, ts: Id, next: Id, size: Id) => Id) => k.match(p, [{ variant: PT.v.tables, names: ["shape", "tables", "next", "size"], body: ([a, b, c, d]) => f(a, b, c, d) }]);
+  const poolTableOf = (t: Id, f: (s: Id, sl: Id) => Id) => k.match(t, [{ variant: TB.v.table, names: ["shape", "slots"], body: ([s, sl]) => f(s, sl) }]);
+  const TBL = (s: Id, sl: Id) => k.call(TB.v.table, s, sl);
+  const each = (name: string, params: string[], onTable: (s: Id, sl: Id, rest: Id, again: (rest: Id) => Id, ps: Id[]) => Id, atEnd: (ps: Id[]) => Id) => {
+    const d = rec(name);
+    k.define(d, k.fn(["tables", ...params], (ts, ...ps) => k.match(ts, [
+      { variant: NIL, names: [], body: () => atEnd(ps) },
+      { variant: CONS, names: ["table", "rest"], body: ([t, rest]) => poolTableOf(t, (s, sl) => onTable(s, sl, rest, (r) => k.call(d, r, ...ps), ps)) },
+    ])));
+    return d;
+  };
+  const shapeIn = (shape: Id, x: Id) => some(shape, (ps) => shapeOfItem(ps, x), () => k.int(0));
+  // The slots of the table of shape s, empty when there is none.
+  const slotsAt = each("pool tables slots at", ["shape"], (s, sl, _r, again, [want]) => k.if(k.equal(s, want), sl, again(_r)), () => k.x(emptySlots));
+  // The tables with the table of shape s changed by `change` (made from
+  // empty slots when there is none), in the one walk, so the slots are
+  // taken out of the table they were in and changed in place.
+  const changedAt = (name: string, params: string[], change: (sl: Id, ps: Id[]) => Id) => each(name, ["shape", ...params], (s, sl, rest, again, [want, ...ps]) =>
+    k.if(k.equal(s, want), k.call(CONS, TBL(s, change(sl, ps)), rest), k.call(CONS, TBL(s, sl), again(rest))), ([want, ...ps]) => k.call(CONS, TBL(want, change(k.x(emptySlots), ps)), k.x(NIL)));
+  // The shape of the table whose slot holds number n (the key's slot asked
+  // of each table first, then each table's order), or -1.
+  const hinted = each("pool tables hinted", ["number", "slot"], (s, sl, rest, again, [n, slot]) => k.if(k.call(holds, sl, slot, n), s, again(rest)), () => k.int(-1));
+  const along2 = each("pool tables along", ["key"], (s, sl, rest, again, [key]) => k.if(i.less(k.call(slotOf, sl, key), k.int(0)), again(rest), s), () => k.int(-1));
+  const holding = def("pool tables holding", ["tables", "key"], (ts, key) => skOf(key, (n, slot) => k.let("hinted", k.call(hinted, ts, n, slot), (h) => k.if(i.less(h, k.int(0)), k.call(along2, ts, key), h))));
+  const sizes = each("pool tables sizes", [], (_s, sl, rest, again) => i.add(k.call(sizeS, sl), again(rest)), () => k.int(0));
+  // Two lists of (key, item) in number order, merged in number order.
+  const numberOfKey = (key: Id) => skOf(key, (n) => n);
+  const merged = rec("pool tables merged");
+  k.define(merged, k.fn(["a", "b"], (a, b) => k.match(a, [
+    { variant: NIL, names: [], body: () => b },
+    { variant: CONS, names: ["x", "xs"], body: ([x, xs]) => k.match(b, [
+      { variant: NIL, names: [], body: () => a },
+      { variant: CONS, names: ["y", "ys"], body: ([y, ys]) => pair(x, (kx) => pair(y, (ky) => k.if(i.less(numberOfKey(kx), numberOfKey(ky)), k.call(CONS, x, k.call(merged, xs, b)), k.call(CONS, y, k.call(merged, a, ys))), ["key2", "item2"]), ["key1", "item1"]) },
+    ]) },
+  ])));
+  // Every table's (key, item)s in number order; only shapes in `shapes`
+  // with `only`.
+  const keyedAll = each("pool tables keyed", [], (_s, sl, rest, again) => k.call(merged, k.call(keyedS, sl), again(rest)), () => k.x(NIL));
+  const keyedOnly = each("pool tables keyed only", ["shapes"], (s, sl, rest, again, [shapes]) => k.if(k.call(prelude("contains"), shapes, s), k.call(merged, k.call(keyedS, sl), again(rest)), again(rest)), () => k.x(NIL));
+  // The tables of these shapes.
+  const onlyTables = each("pool tables only", ["shapes"], (s, sl, rest, again, [shapes]) => k.if(k.call(prelude("contains"), shapes, s), k.call(CONS, TBL(s, sl), again(rest)), again(rest)), () => k.x(NIL));
+  const itemsOnly = def("pool tables items only", ["tables", "shapes"], (ts, shapes) => k.match(k.call(onlyTables, ts, shapes), [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["table", "rest"], body: ([t, rest]) => k.match(rest, [
+      // One table (the common case) is its own items, no merge.
+      { variant: NIL, names: [], body: () => poolTableOf(t, (_s, sl) => k.call(itemsS, sl)) },
+      { variant: CONS, names: ["next table", "others"], body: () => k.call(prelude("map"), k.call(keyedOnly, ts, shapes), k.fn(["keyed"], (e) => pair(e, (_kk, x) => x, ["k", "x"]))) },
+    ]) },
+  ]));
+  const seconds = (xs: Id) => k.call(prelude("map"), xs, k.fn(["keyed"], (e) => pair(e, (_kk, x) => x, ["k", "x"])));
+  const firsts = (xs: Id) => k.call(prelude("map"), xs, k.fn(["keyed"], (e) => pair(e, (kk) => kk, ["k", "x"])));
+  // An item put in slots under number n where newer numbers are already
+  // there: its key goes into the order after them, so the order stays
+  // newest first.
+  const intoOrder = rec("pool tables into order");
+  k.define(intoOrder, k.fn(["order", "key"], (os, key) => k.match(os, [
+    { variant: NIL, names: [], body: () => k.call(CONS, key, k.x(NIL)) },
+    { variant: CONS, names: ["first", "rest"], body: ([o, rest]) => k.if(i.less(numberOfKey(key), numberOfKey(o)), k.call(CONS, o, k.call(intoOrder, rest, key)), k.call(CONS, key, os)) },
+  ])));
+  const putOrdered = def("pool tables put ordered", ["pool", "number", "item"], (sl, n, x) => slotsOf(k.call(putS, sl, n, x), (items, nums, free, size, slots, next, os, stale) =>
+    k.match(os, [
+      { variant: NIL, names: [], body: () => S8(items, nums, free, size, slots, next, os, stale) },
+      { variant: CONS, names: ["newest", "older"], body: ([o, older]) => S8(items, nums, free, size, slots, next, k.call(intoOrder, older, o), stale) },
+    ])));
+  const putIn = changedAt("pool tables put in", ["number", "item"], (sl, [n, x]) => k.call(putS, sl, n, x));
+  const putOrderedIn = changedAt("pool tables put ordered in", ["number", "item"], (sl, [n, x]) => k.call(putOrdered, sl, n, x));
+  const removedIn = changedAt("pool tables removed in", ["key"], (sl, [key]) => k.call(removedS, sl, key));
+  const replacedIn = changedAt("pool tables replaced in", ["key", "item"], (sl, [key, x]) => k.call(replacedS, sl, key, x));
+  // (key, item)s put into the tables by their shape, each in number order.
+  const filedIn = rec("pool tables filed");
+  k.define(filedIn, k.fn(["keyed", "shape", "tables"], (es, shape, ts) => k.match(es, [
+    { variant: NIL, names: [], body: () => ts },
+    { variant: CONS, names: ["keyed", "rest"], body: ([e, rest]) => pair(e, (key, x) => k.let("shape of", shapeIn(shape, x), (s) =>
+      k.call(filedIn, rest, shape, k.call(putOrderedIn, ts, s, numberOfKey(key), x))), ["key", "item"]) },
+  ])));
+  // The pool grouped by this shape, as a job given it needs: kept as it
+  // is when it has a shape already (the compiler gives a type one).
+  const grouped = def("pool tables grouped", ["pool", "shape"], (p, f) => tablesOf(p, (shape, ts, next, size) => some(shape, () => p,
+    () => TS(k.call(SOME, f), k.call(filedIn, k.call(keyedAll, ts), k.call(SOME, f), k.x(NIL)), next, size))));
+  const emptyT = k.def("empty pool tables");
+  k.define(emptyT, TS(k.x(NONE), k.x(NIL), k.int(0), k.int(0)));
+  defs.push(emptyT);
+  const emptyShapedT = def("empty pool tables shaped", ["shape"], (f) => TS(k.call(SOME, f), k.x(NIL), k.int(0), k.int(0)));
+  const nextKeyT = def("pool tables next key", ["pool"], (p) => tablesOf(p, (_s, _t, next) => TK(next, k.int(-1))));
+  const addedT = def("pool tables added", ["pool", "item"], (p, x) => tablesOf(p, (shape, ts, next, size) => k.let("shape of", shapeIn(shape, x), (s) =>
+    TS(shape, k.call(putIn, ts, s, next, x), add1(next), add1(size)))));
+  const itemT = def("pool tables item", ["pool", "table key"], (p, key0) => k.let("key", slotted(key0), (key) => tablesOf(p, (_shape, ts) => k.let("held in", k.call(holding, ts, key), (h) =>
+    k.if(i.less(h, k.int(0)), k.call(S.fail), k.call(itemS, k.call(slotsAt, ts, h), key))))));
+  const removedT = def("pool tables removed", ["pool", "table key"], (p, key0) => k.let("key", slotted(key0), (key) => tablesOf(p, (shape, ts, next, size) => k.let("held in", k.call(holding, ts, key), (h) =>
+    k.if(i.less(h, k.int(0)), p, TS(shape, k.call(removedIn, ts, h, key), next, sub1(size)))))));
+  const replacedT = def("pool tables replaced", ["pool", "table key", "item"], (p, key0, x) => k.let("key", slotted(key0), (key) => tablesOf(p, (shape, ts, next, size) => k.let("held in", k.call(holding, ts, key), (h) =>
+    k.if(i.less(h, k.int(0)), p, k.let("shape of", shapeIn(shape, x), (s) => k.if(k.equal(s, h),
+      TS(shape, k.call(replacedIn, ts, h, key, x), next, size),
+      TS(shape, k.call(putOrderedIn, k.call(removedIn, ts, h, key), s, numberOfKey(key), x), next, size))))))));
+  const sizeT = def("pool tables size", ["pool"], (p) => tablesOf(p, (_s, _t, _n, size) => size));
+  const keysT = def("pool tables keys", ["pool"], (p) => tablesOf(p, (_s, ts) => k.call(prelude("map"), firsts(k.call(keyedAll, ts)), k.fn(["key"], (kk) => skOf(kk, (n, slot) => TK(n, slot))))));
+  const itemsT = def("pool tables items", ["pool"], (p) => tablesOf(p, (_s, ts) => k.match(ts, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["table", "rest"], body: ([t, rest]) => k.match(rest, [
+      { variant: NIL, names: [], body: () => poolTableOf(t, (_s2, sl) => k.call(itemsS, sl)) },
+      { variant: CONS, names: ["next table", "others"], body: () => seconds(k.call(keyedAll, ts)) },
+    ]) },
+  ])));
+  // f may give another type, so the result has no shape: its grouping is
+  // the old one, which a job given a shape groups again.
+  const updatedEach = each("pool tables updated each", ["f"], (s, sl, rest, again, [f]) => k.call(CONS, TBL(s, k.call(updatedS, sl, f)), again(rest)), () => k.x(NIL));
+  const updatedT = def("pool tables updated", ["pool", "f"], (p, f) => tablesOf(p, (_shape, ts, next, size) => TS(k.x(NONE), k.call(updatedEach, ts, f), next, size)));
+  const keptEach = each("pool tables kept each", ["test", "shapes"], (s, sl, rest, again, [test, shapes]) =>
+    k.call(CONS, TBL(s, k.if(k.call(prelude("contains"), shapes, s), k.call(keptS, sl, test), sl)), again(rest)), () => k.x(NIL));
+  const keptAll = each("pool tables kept all", ["test"], (s, sl, rest, again, [test]) => k.call(CONS, TBL(s, k.call(keptS, sl, test)), again(rest)), () => k.x(NIL));
+  const keptT = def("pool tables kept", ["pool", "test"], (p, test) => tablesOf(p, (shape, ts, next) => k.let("kept tables", k.call(keptAll, ts, test), (kt) =>
+    TS(shape, kt, next, k.call(sizes, kt)))));
+  // The items of these shapes changed by f. An item f gives another shape
+  // is moved to its table after (`strays`: whether a table has any).
+  const strays = rec("pool tables strays");
+  k.define(strays, k.fn(["items", "shape", "of shape"], (xs, f, s) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.x(FALSE) },
+    { variant: CONS, names: ["slot", "rest"], body: ([o, rest]) => some(o, (x) => k.if(k.equal(shapeIn(f, x), s), k.call(strays, rest, f, s), k.x(TRUE)), () => k.call(strays, rest, f, s)) },
+  ])));
+  const strayed = rec("pool tables strayed");
+  // The (key, item)s of a table not of its shape, and the slots without them.
+  k.define(strayed, k.fn(["keyed", "shape", "of shape", "slots", "out"], (es, f, s, sl, out) => k.match(es, [
+    { variant: NIL, names: [], body: () => k.call(PAIR_V, sl, out) },
+    { variant: CONS, names: ["keyed", "rest"], body: ([e, rest]) => pair(e, (key, x) => k.if(k.equal(shapeIn(f, x), s), k.call(strayed, rest, f, s, sl, out),
+      k.call(strayed, rest, f, s, k.call(removedS, sl, key), k.call(CONS, e, out))), ["key", "item"]) },
+  ])));
+  const updatedOnly = each("pool tables updated only", ["shapes", "f"], (s, sl, rest, again, [shapes, f]) =>
+    k.call(CONS, TBL(s, k.if(k.call(prelude("contains"), shapes, s), k.call(updatedS, sl, f), sl)), again(rest)), () => k.x(NIL));
+  // The touched tables without the items not of their shape, and those
+  // items, (key, item) each.
+  const unstrayed = rec("pool tables unstrayed");
+  k.define(unstrayed, k.fn(["tables", "shape", "shapes", "done", "moved"], (ts, shape, shapes, done, moved) => k.match(ts, [
+    { variant: NIL, names: [], body: () => k.call(PAIR_V, done, moved) },
+    { variant: CONS, names: ["table", "rest"], body: ([t, rest]) => poolTableOf(t, (s, sl) => {
+      const as = () => k.call(unstrayed, rest, shape, shapes, k.call(CONS, TBL(s, sl), done), moved);
+      return k.if(k.call(prelude("contains"), shapes, s), k.if(slotsOf(sl, (items) => k.call(strays, items, shape, s)),
+        pair(k.call(strayed, k.call(keyedS, sl), shape, s, sl, moved), (kept, out) => k.call(unstrayed, rest, shape, shapes, k.call(CONS, TBL(s, kept), done), out), ["kept", "moved"]),
+        as()), as());
+    }) },
+  ])));
+  const updatedShapedT = def("pool tables updated shaped", ["pool", "shape", "shapes", "f"], (p0, f0, shapes, f) => tablesOf(k.call(grouped, p0, f0), (shape, ts, next, size) =>
+    pair(k.call(unstrayed, k.call(updatedOnly, ts, shapes, f), shape, shapes, k.x(NIL), k.x(NIL)), (ts2, moved) => TS(shape, k.call(filedIn, moved, shape, ts2), next, size), ["tables", "moved"])));
+  const updatedAlikeT = def("pool tables updated keeping shapes", ["pool", "shape", "shapes", "f"], (p0, f0, shapes, f) => tablesOf(k.call(grouped, p0, f0), (shape, ts, next, size) =>
+    TS(shape, k.call(updatedOnly, ts, shapes, f), next, size)));
+  const keptShapedT = def("pool tables kept shaped", ["pool", "shape", "shapes", "test"], (p0, f0, shapes, test) => tablesOf(k.call(grouped, p0, f0), (shape, ts, next) =>
+    k.let("kept tables", k.call(keptEach, ts, test, shapes), (kt) => TS(shape, kt, next, k.call(sizes, kt)))));
+  const itemsShapedT = def("pool tables items shaped", ["pool", "shape", "shapes"], (p0, f0, shapes) => tablesOf(k.call(grouped, p0, f0), (_shape, ts) => k.call(itemsOnly, ts, shapes)));
+  const tablesMeaning = def("pool tables meaning", ["pool"], (p) => tablesOf(p, (_s, ts, next) => k.call(POOL_V, k.call(prelude("as map"),
+    k.call(prelude("map"), k.call(keyedAll, ts), k.fn(["keyed"], (e) => pair(e, (kk, x) => k.call(PAIR_V, numberOfKey(kk), x), ["k", "x"])))), next)));
+  const tablesOfEntries = def("pool tables of entries", ["entries", "next"], (m, next) => TS(k.x(NONE), k.call(CONS, TBL(k.int(0), k.call(slotsOfEntries, m, next)), k.x(NIL)), next, k.call(prelude("map size"), m)));
+  const matchTables = def("match pool tables", ["pool", "pool of"], (p, f) => k.match(k.call(tablesMeaning, p), [{ variant: POOL_V, names: ["entries", "next"], body: ([es, next]) => k.call(f, es, next) }]));
+  const tablesImpl: Record<Id, Id> = {
+    [POOL_V]: tablesOfEntries,
+    match: matchTables,
+    fold: matchTables,
+    [prelude("empty pool")]: emptyT,
+    [prelude("next key")]: nextKeyT,
+    [prelude("added to pool")]: addedT,
+    [prelude("pool item")]: itemT,
+    [prelude("replaced in pool")]: replacedT,
+    [prelude("removed from pool")]: removedT,
+    [prelude("pool size")]: sizeT,
+    [prelude("pool keys")]: keysT,
+    [prelude("pool items")]: itemsT,
+    [prelude("updated in pool")]: updatedT,
+    [prelude("kept in pool")]: keptT,
+    [prelude("empty pool shaped")]: emptyShapedT,
+    [prelude("pool items shaped")]: itemsShapedT,
+    [prelude("updated in pool shaped")]: updatedShapedT,
+    [prelude("updated in pool keeping shapes")]: updatedAlikeT,
+    [prelude("kept in pool shaped")]: keptShapedT,
+  };
+  const tablesBy = (f: (a: Id, b: Id) => Id, name: string) => def(name, ["a", "b"], (a, b) => f(k.call(tablesMeaning, a), k.call(tablesMeaning, b)));
+  const tablesByType = {
+    equal: tablesBy((a, b) => k.call(S.equal, a, b), "pool tables equal"),
+    compare: tablesBy((a, b) => k.call(COMPARE, a, b), "pool tables compare"),
+    show: def("pool tables show", ["pool"], (p) => k.call(SHOW_ANY, k.call(tablesMeaning, p))),
+  };
+  const key2Meaning = def("table key meaning", ["key"], (key) => tkOf(key, (n) => k.call(POOL_KEY_V, n)));
+  const key2By = (f: (a: Id, b: Id) => Id, name: string) => def(name, ["a", "b"], (a, b) => f(k.call(key2Meaning, a), k.call(key2Meaning, b)));
+  const key2Impl: Record<Id, Id> = {
+    [POOL_KEY_V]: def("table key of number", ["number"], (n) => TK(n, k.int(-1))),
+    match: def("match table key", ["key", "pool key of"], (key, f) => tkOf(key, (n) => k.call(f, n))),
+  };
+  key2Impl.fold = key2Impl.match;
+  const key2ByType = {
+    equal: key2By((a, b) => k.call(S.equal, a, b), "table key equal"),
+    compare: key2By((a, b) => k.call(COMPARE, a, b), "table key compare"),
+    show: def("table key show", ["key"], (key) => k.call(SHOW_ANY, k.call(key2Meaning, key))),
+  };
+  const shapedJobs = ["pool items shaped", "updated in pool shaped", "updated in pool keeping shapes", "kept in pool shaped"];
   const poolJobs = ["next key", "added to pool", "pool item", "replaced in pool", "removed from pool", "pool size", "pool keys", "pool items", "updated in pool", "kept in pool"];
   const job = (n: string) => (n === "match" || n === "fold" ? n : prelude(n));
   const at = (ns: string[], cost: string) => Object.fromEntries(ns.map((n) => [job(n), cost]));
@@ -501,11 +738,19 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     // its meaning (a map and a counter) and in slots, and its key as a
     // number and as a number and a slot, chosen with the pool's slots.
     { name: "map and counter", of: POOL, type: POOL, meaning: null, canonical: true, impl: {},
-      cost: { ...at(["next key", "pool size"], "1"), ...at(["added to pool", "pool item", "replaced in pool", "removed from pool"], "log n"), ...at(["pool keys", "pool items", "updated in pool", "kept in pool", "match", "fold"], "n log n"), ...at(["empty pool"], "1"), [POOL_V]: "1", space: "n" } },
+      cost: { ...at(["next key", "pool size"], "1"), ...at(["added to pool", "pool item", "replaced in pool", "removed from pool"], "log n"), ...at(["pool keys", "pool items", "updated in pool", "kept in pool", "match", "fold", ...shapedJobs], "n log n"), ...at(["empty pool", "empty pool shaped"], "1"), [POOL_V]: "1", space: "n" } },
     { name: "slots", of: POOL, type: P.def, meaning: slotsMeaning, canonical: false, impl: slotsImpl, byType: slotsByType,
-      cost: { ...at(poolJobs, "1"), ...at(["pool keys", "pool items", "updated in pool", "kept in pool"], "n"), ...at(["match", "fold"], "n log n"), ...at(["empty pool"], "1"), [POOL_V]: "n", space: "n" } },
+      cost: { ...at(poolJobs, "1"), ...at(["pool keys", "pool items", "updated in pool", "kept in pool", ...shapedJobs], "n"), ...at(["match", "fold"], "n log n"), ...at(["empty pool", "empty pool shaped"], "1"), [POOL_V]: "n", space: "n" } },
     { name: "number", of: POOL_KEY, type: POOL_KEY, meaning: null, canonical: true, impl: {}, cost: { [POOL_KEY_V]: "1", match: "1", fold: "1", space: "1" } },
     { name: "slots", of: POOL_KEY, type: K.def, meaning: keyMeaning, canonical: false, impl: keyImpl, byType: keyByType, cost: { [POOL_KEY_V]: "1", match: "1", fold: "1", space: "1" } },
+    // After those, so their rows keep their places (G4): the pool as a
+    // table per shape, its keys the slots' own. Its costs are the slots'
+    // (the tables are few: one per shape a type has); what it buys, a
+    // shaped job walking only its shapes' tables, is a part of n the
+    // ladder can't write, so the chooser takes it where shaped jobs are.
+    { name: "tables", of: POOL, type: PT.def, meaning: tablesMeaning, canonical: false, impl: tablesImpl, byType: tablesByType,
+      cost: { ...at(poolJobs, "1"), ...at(["pool keys", "pool items", "updated in pool", "kept in pool", ...shapedJobs], "n"), ...at(["match", "fold"], "n log n"), ...at(["empty pool", "empty pool shaped"], "1"), [POOL_V]: "n", space: "n" } },
+    { name: "tables", of: POOL_KEY, type: K2.def, meaning: key2Meaning, canonical: false, impl: key2Impl, byType: key2ByType, cost: { [POOL_KEY_V]: "1", match: "1", fold: "1", space: "1" } },
   ];
   return { representations: rows.map(written), defs };
 

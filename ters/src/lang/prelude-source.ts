@@ -9,6 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
+import { INT } from "./types.ts";
 import { ARRAY_OPS, LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, SHOW_ANY, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, POOL_V, POOL_KEY_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
@@ -1469,6 +1470,29 @@ export function buildPrelude(): Module {
   ])));
   const keptInPool = def("kept in pool", ["pool", "test"], (p, test) => poolOf(p, (es, next) => PL(k.call(keptFrom, k.call(entries, es), test, es), next)));
   const poolItems = def("pool items", ["pool"], (p) => poolOf(p, (es) => k.call(values, es)));
+  // The same three told which items they may touch (G4, ENTITIES.md,
+  // compiler/src/pool-shapes.ts): `shape` gives an item's shape (which of
+  // its Optional parts it has), and only items whose shape is in `shapes`
+  // are given to f or the test, or listed. The compiler writes these where
+  // it has worked out that f gives every other item back as it was, the
+  // test passes every other item, or the list's own test fails every
+  // other, so each means the word it was written as. A pool stored as a
+  // table per shape (map-tree.ts) walks only those tables. `empty pool
+  // shaped` is an empty pool that knows its items' shape.
+  // A shape is a function in a record of its own, so its type says it
+  // only computes, whichever job is given it.
+  const PS = k.type("Pool shape", ["a"], [["pool shape", [["of", (_, [a]) => k.tfun([k.tref(a)], k.tref(INT))]]]]);
+  const inShapes = (shapes: Id, shape: Id, x: Id) => k.call(contains, shapes, k.match(shape, [{ variant: PS.v["pool shape"], names: ["of"], body: ([f]) => k.call(f, x) }]));
+  const updatedShaped = def("updated in pool shaped", ["pool", "shape", "shapes", "f"], (p, shape, shapes, f) =>
+    k.call(updatedInPool, p, k.fn(["item"], (x) => k.if(inShapes(shapes, shape, x), k.call(f, x), x))));
+  const poolShaped = [PS.def, def("empty pool shaped", ["shape"], (shape) => k.call(updatedInPool, k.x(emptyPool), k.fn(["item"], (x) => k.if(inShapes(k.x(NIL), shape, x), x, x)))),
+  def("pool items shaped", ["pool", "shape", "shapes"], (p, shape, shapes) => k.call(keep, k.call(poolItems, p), k.fn(["item"], (x) => inShapes(shapes, shape, x)))),
+  updatedShaped,
+  // One that gives each item it changes its own shape back: so a pool's
+  // tables needn't look for items to move.
+  def("updated in pool keeping shapes", ["pool", "shape", "shapes", "f"], (p, shape, shapes, f) => k.call(updatedShaped, p, shape, shapes, f)),
+  def("kept in pool shaped", ["pool", "shape", "shapes", "test"], (p, shape, shapes, test) =>
+    k.call(keptInPool, p, k.fn(["item"], (x) => k.if(inShapes(shapes, shape, x), k.call(test, x), k.x(TRUE)))))];
   const iLess = (a: Id, b: Id) => k.call(INT_OPS.less, a, b);
   const iSame = (a: Id, b: Id) => k.equal(a, b);
   const iMul = (a: Id, b: Id) => k.call(INT_OPS.mul, a, b);
@@ -2782,9 +2806,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, addedAtEnd, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, leastKeyed, firstByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, addedAtEnd, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, leastKeyed, firstByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...poolShaped, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addedAtEnd, ...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, leastKeyed, firstByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addedAtEnd, ...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, leastKeyed, firstByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...poolShaped, ...laws].map(at));
 }
