@@ -124,6 +124,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [PATTERNS.md](design/relations-and-effects/PATTERNS.md) | Nested patterns as a view over nested matches | built |
 | [GRAMMARS-2026-11-02.md](design/relations-and-effects/GRAMMARS-2026-11-02.md) | Grammars written once, as printers, and parsed by running them backwards | built (L70, C110) |
 | [GRAMMAR-DESCENT-2026-11-05.md](design/relations-and-effects/GRAMMAR-DESCENT-2026-11-05.md) | Which printers read backwards as recursive descent, and binding strength as precedence climbing; calc's hand parser gone | built (C110) |
+| [CHOMSKY-2026-11-27.md](design/relations-and-effects/CHOMSKY-2026-11-27.md) | Grammars and their machines across the Chomsky hierarchy as ordinary data, nondeterminism as Choice, the level in the effects | exploring (L293) |
 | [ANSWERED-LATER.md](design/relations-and-effects/ANSWERED-LATER.md) | Operations answered later, at most once; `together`, `race`, `within` | built (L54, L56, L71, C40) |
 | [PORTS-2026-11-01.md](design/relations-and-effects/PORTS-2026-11-01.md) | One shape for inputs, results and relations: ports, tuples, directions, variable inputs | design (L128, L130 to L132, E165 to E168, C68, C69) |
 | [RESOURCES-2026-11-03.md](design/relations-and-effects/RESOURCES-2026-11-03.md) | Resources as handlers, never values: a release on every exit, handler names that can't escape | built (L192, L213, on every target) |
