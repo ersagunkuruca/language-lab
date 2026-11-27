@@ -57,7 +57,7 @@ import { emptyArray, fails, isFloat32, listSteps, isArray, isTable, isData, isFn
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
 // columns.ts's ops on an array kept as columns (C60 w2).
-const COL_FN = /^array\.c(new|length|get(\d+)|set([\d_]+))\.a(\d+)$/;
+const COL_FN = /^array\.c(new|length|in|get(\d+)|set([\d_]+))\.a(\d+)$/;
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
 // A comparison of Ints that are i64s boxed (untagged-ints.ts's counts,
 // an array's length read as an i64): compared as i64s, with no Int made
@@ -366,6 +366,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       "local.get $n", "call $int.clamped", "local.tee $m", "i64.const 0", "local.get $m", "i64.const 0", "i64.gt_s", "select", "i32.wrap_i64", "local.set $c",
       "ref.null $items", "i32.const 0", "local.get $c", "i32.const 0", ...ts.map((_, f) => `local.get $c\narray.new_default $col${f}`), "struct.new $buf", "i32.const 0", "local.get $c", "struct.new $arr"].join("\n") };
     if (m[1] === "length") return { ...base, params: [["a", "array"]], result: "int", locals: [], uses: ["int.of"], body: "local.get $a\nstruct.get $arr 2\ni64.extend_i32_s\ncall $int.of" };
+    // A position inside the array (`item at`'s check, columns' whole items).
+    if (m[1] === "in") return { ...base, params: [["a", "array"], ["k", "int"]], result: "i32", locals: [["j", "i64"]], uses: ["int.clamped"], body: "local.get $k\ncall $int.clamped\nlocal.tee $j\ni64.const 0\ni64.ge_s\nlocal.get $j\nlocal.get $a\nstruct.get $arr 2\ni64.extend_i32_s\ni64.lt_s\ni32.and" };
     const narrow = colNarrow.get(i)!;
     if (m[2] !== undefined) { const f = Number(m[2]); return { ...base, params: [["a", "array"], ["k", "int"]], result: ts[f] as VT, locals: [["j", "i32"]], uses: ["int.clamped"], body: `${index}\n${at(f)}\narray.get $col${f}${narrow[f] ? "\nf64.promote_f32" : ""}` }; }
     const ks = m[3]!.split("_").map(Number);

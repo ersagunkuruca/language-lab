@@ -387,7 +387,9 @@ function nativeLoweredNow(main: Id, wasm: boolean, page: boolean, from: Program)
     // per value (holders.ts, C327f), as on JavaScript.
     if (!process.env.NO_HOLDERS) ownedPerValue(lowered, roots, shared);
     ownedRecords(lowered, q.code, q.info, q.names, root, shared);
-    columns(lowered, roots, { plain: true });
+    // An item leaving whole made from its columns where it's read, as on
+    // JavaScript (whole, C362): the moths' `item at` in their flock.
+    columns(lowered, roots, { plain: true, whole: !process.env.NO_WHOLE_COLUMNS });
     ownPushes(lowered);
     // A record read only by its parts, as its parts, as on JavaScript
     // (chosen-parts.ts; C327g): a zipped fold's pair, no struct made.
