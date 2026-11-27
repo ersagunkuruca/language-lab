@@ -249,7 +249,7 @@ in it (G11a).
   frame they change. Keeping them on the GPU and updating them with
   compute kernels is stage 3 (G12 to G14). This stage's upload-only-what-
   changed is what stage 3 builds on.
-- **No culling.** Every instance is drawn. Culling follows compute (G14).
+- **No culling.** Every instance is drawn. Culling follows compute (G14, [CULLING.md](CULLING.md)).
 
 ## Steps
 
