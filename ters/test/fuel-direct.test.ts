@@ -1,10 +1,11 @@
 // Under `with fuel`, a call that only computes runs directly too, and so
 // does an `all` or `count` of a search (run.ts underFuel, L281c): each call
 // into a definition that may not end spends from the fuel as on the
-// machine, and running out stops the direct run, so the machine runs the
-// call again from the fuel there was and runs out where it does. Before,
-// nothing under fuel ran directly: countdown's page was 14 s, all of it
-// step by step.
+// machine, and running out there is running out of the whole `with fuel`:
+// the machine would run out at the same step, so it doesn't run the call
+// again (L295: running it again from the fuel there was, at every call the
+// machine made, cost a step each time). Before L281c, nothing under fuel
+// ran directly: countdown's page was 14 s, all of it step by step.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -42,7 +43,7 @@ test("with fuel: calls run directly, and calls and all-searches run out where th
     assert.equal(got, want, names[d]);
     seen.push([direct, calls]);
   }
-  // A walk with fuel enough runs directly; one that runs out runs again on
-  // the machine from the fuel there was, and runs out where it does.
-  assert.deepEqual(seen.slice(0, 2), [[41, 41], [40, 80]]);
+  // A walk with fuel enough runs directly; one that runs out runs out
+  // there, where the machine would, and isn't run again.
+  assert.deepEqual(seen.slice(0, 2), [[41, 41], [40, 40]]);
 });

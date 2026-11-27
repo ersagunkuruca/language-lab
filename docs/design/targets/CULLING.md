@@ -58,9 +58,12 @@ the instance's fragments, and on the CPU path the words sent.
   and things hidden behind other things.
 
 Which of none, GPU or CPU a draw uses is the compiler's choice, written in
-the program's decisions as a draw entry, the way placements are (SAVED
-CHOICES, `<program>.decisions`): `draw 12 cull: GPU; among none, GPU`. A
-person may hold it.
+the program's decisions as a placement entry by the draw's call (SAVED
+CHOICES, `<program>.decisions`):
+`… place: frame of's draw culling: GPU; among none, GPU; target JavaScript page`.
+A person may hold it to `none`: the draw then has no cull pass and draws
+every instance. GPU means a draw of 256 instances or more is culled; a
+smaller one is drawn whole.
 
 ## Example and measure
 
@@ -90,8 +93,15 @@ what is left is every corner's vertex run, the work G14b skips.
   250 ms a frame before, 37 ms after (SwiftShader); at 1×, 480 and 405
   ms. The picture is the one without culling, pixel for pixel
   (gpu-cull.test).
-- **G14b2**: the decisions entry, so a person may hold a draw unculled.
-- **G14c**: CPU culling, if G14a's numbers say it pays.
+- **G14b2** (done): the decisions entry, so a person may hold a draw
+  unculled (gpu-draws.ts `cullable` and `holdUnculled`, choices.ts).
+- **G14c** (closed, 11-27): CPU culling doesn't pay on rain-page. Its
+  drops are kept on the GPU (G13b), so the CPU has no drops to test, and
+  the GPU pass already skips 15 of 16 at 4×. Held on the CPU, a drop
+  packs 3 words, and testing it would run the vertex function on its 4
+  corners in JavaScript, more work than the packing it saves (reasoned
+  from the costs, not timed on the page). Reopen for a page whose
+  instances are large records packed every frame.
 - **G14d**: occlusion, waiting for a page with depth.
 
 ## What stays out

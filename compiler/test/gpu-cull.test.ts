@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Session } from "../../ters/mcp/session.ts";
@@ -25,8 +25,8 @@ const exe = chromiumPath();
 
 // rain-page's first glass at a zoom, drawn once: no ticks, so both
 // pages draw the same drops.
-function still(zoom: number): string {
-  const program = join(dir, `rain-${zoom}`), out = join(dir, `rain-${zoom}.html`);
+function still(zoom: number, held?: (lines: string[]) => void): string {
+  const program = join(dir, `rain-${zoom}${held ? "-held" : ""}`), out = `${program}.html`;
   cpSync(join(import.meta.dirname, "../../ters/examples/rain-page"), program, { recursive: true });
   const s = new Session(program);
   s.remove("main");
@@ -34,6 +34,12 @@ function still(zoom: number): string {
   const hole = /□#(\w+)/.exec(s.view("main"))![1];
   s.replace(hole, `with([attribute("width", "640"), attribute("height", "480"), render(() => frame of(start pane, ${zoom.toFixed(1)}))], tag("canvas", nil))`);
   s.save();
+  if (held) {
+    assert.equal(spawnSync(process.execPath, [lab, "decisions", program], { encoding: "utf8" }).status, 0);
+    const lines = readFileSync(`${program}.decisions`, "utf8").split("\n");
+    held(lines);
+    writeFileSync(`${program}.decisions`, lines.join("\n"));
+  }
   const r = spawnSync(process.execPath, [lab, "build-web", program, "-o", out], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   return out;
@@ -43,6 +49,22 @@ test("rain-page's drop draw has a cull pass, its glass of one instance none (G14
   const html = readFileSync(still(4), "utf8");
   assert.equal((html.match(/fn lab_cull_main\(/g) ?? []).length, 1);
   assert.match(html, /let lab_it = lab_ii; \/\/ drawn/);
+});
+
+// The cull is the compiler's choice, written in the program's decisions
+// (G14b2): a person may hold the draw unculled, every instance drawn.
+test("rain-page's drop draw's culling is a decisions entry, held to none it draws every drop (G14b2)", () => {
+  let entry = "";
+  const html = readFileSync(still(4, (lines) => {
+    const at = lines.findIndex((l) => / place: frame of's draw culling: /.test(l));
+    assert.ok(at >= 0, lines.join("\n"));
+    assert.match(lines[at], /^\S+ place: frame of's draw culling: GPU; among none, GPU; target JavaScript page$/);
+    assert.equal(lines.filter((l) => /draw culling/.test(l)).length, 1);
+    lines[at] = entry = `held ${lines[at].replace(": GPU;", ": none;")}`;
+  }), "utf8");
+  assert.doesNotMatch(html, /fn lab_cull_main\(/);
+  const said = spawnSync(process.execPath, [lab, "check", join(dir, "rain-4-held")], { encoding: "utf8" }).stdout.split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
+  assert.deepEqual(said, [`held   ${entry.split(" ")[1]} (JavaScript page): every instance drawn, where the compiler would cull it on the GPU`]);
 });
 
 test("rain-page four times closer: culled, it draws only the drops in the picture, and the same picture (G14b)", { skip: !exe && "no Chromium" }, async () => {
