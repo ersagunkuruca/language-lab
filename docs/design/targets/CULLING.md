@@ -65,16 +65,23 @@ person may hold it.
 ## Example and measure
 
 rain-page shows the whole glass, so every drop is on screen and culling
-buys nothing. G14a gives it a closer look: the wheel (or a pinch) zooms on
-the glass around the pointer, so at 4× most drops are outside the picture.
+buys nothing. G14a gives it a closer look: a Closer button zooms on the
+glass's middle, 2× then 4×, so at 4× most drops are outside the picture.
 That is one change to the example (allowed for G12 to G19,
 new-example-g12-g19), not a new one. Measured on SwiftShader here (GPU time
 per frame and bytes sent), and on a real GPU by Ersagun (as G13d).
 
+Measured before culling (G14a, 11-27, headless Chromium on SwiftShader,
+the drops kept on the GPU so no frame sends any; median of 30 frames, the
+frame and its GPU work): 480 ms a frame at 1×, 250 ms at 4×. SwiftShader
+runs on the CPU, so these say where the work is, not a real GPU's times:
+at 4× clipping already drops most triangles before their fragments, and
+what is left is every corner's vertex run, the work G14b skips.
+
 ## Steps
 
-- **G14a**: rain-page's closer look (zoom by wheel and pinch). Measure
-  frame time at 1× and 4× before culling.
+- **G14a** (done): rain-page's closer look, a Closer button (Ters pages
+  have no wheel or pinch events yet). Measured above.
 - **G14b**: GPU culling: the cull pass from the vertex function, indices
   in order, `drawIndexedIndirect`; on ordinary and kept lists; the
   decisions entry. Tested pixel for pixel against the draw without it.

@@ -150,7 +150,7 @@ function rainPage(close?: "offered" | "held"): string {
   if (close) s.replace("wobble", "0.001", "0.0009765625");
   s.remove("main");
   s.define("main", "function", []);
-  s.step("main", "now", "cell(touched(start pane, 320.0, 240.0))");
+  s.step("main", "now", "cell(touched(start pane, 320.0, 240.0, 1.0))");
   const hole = /□#(\w+)/.exec(s.view("main"))![1];
   s.replace(hole, 'tag("main", [button("Tick", (event) => write(now, ticked(read(now)))), p([text(() => show(sum(map(read(now).drops, (d) => as float64(d.x) + 2.0 * as float64(d.y) + 4.0 * as float64(d.speed) + as float64(d.seed)))))])])');
   s.save();
