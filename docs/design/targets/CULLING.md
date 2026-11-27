@@ -58,9 +58,12 @@ the instance's fragments, and on the CPU path the words sent.
   and things hidden behind other things.
 
 Which of none, GPU or CPU a draw uses is the compiler's choice, written in
-the program's decisions as a draw entry, the way placements are (SAVED
-CHOICES, `<program>.decisions`): `draw 12 cull: GPU; among none, GPU`. A
-person may hold it.
+the program's decisions as a placement entry by the draw's call (SAVED
+CHOICES, `<program>.decisions`):
+`… place: frame of's draw culling: GPU; among none, GPU; target JavaScript page`.
+A person may hold it to `none`: the draw then has no cull pass and draws
+every instance. GPU means a draw of 256 instances or more is culled; a
+smaller one is drawn whole.
 
 ## Example and measure
 
@@ -90,7 +93,8 @@ what is left is every corner's vertex run, the work G14b skips.
   250 ms a frame before, 37 ms after (SwiftShader); at 1×, 480 and 405
   ms. The picture is the one without culling, pixel for pixel
   (gpu-cull.test).
-- **G14b2**: the decisions entry, so a person may hold a draw unculled.
+- **G14b2** (done): the decisions entry, so a person may hold a draw
+  unculled (gpu-draws.ts `cullable` and `holdUnculled`, choices.ts).
 - **G14c**: CPU culling, if G14a's numbers say it pays.
 - **G14d**: occlusion, waiting for a page with depth.
 

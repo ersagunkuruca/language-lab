@@ -708,7 +708,7 @@ const writtenChoices = withModulesHeld(readFrom ? readChoices(readFileSync(readF
 const heldHere = (() => { try { return heldOf(writtenChoices); } catch (e) { fail((e as Error).message); } })();
 // And the placements held on the main thread (L280h), for every lowering.
 const placesHeld = heldPlaces(writtenChoices), holdsPlaces = Object.values(placesHeld).some((xs) => xs.length);
-const onMainThread = async (h: HeldPlaces) => { const s = await import("../../compiler/src/scalar.ts"); s.keepOnMainThread(h.js, h.c); s.shareAlways(h.workers, h.threads, h.page, h.runs, h.cRuns, h.pool); s.holdNeighbours(h.near); (await import("../../compiler/src/gpu-maps.ts")).allowClose(h.close); (await import("../../compiler/src/gpu-resident.ts")).holdOnCpu(h.cpu); };
+const onMainThread = async (h: HeldPlaces) => { const s = await import("../../compiler/src/scalar.ts"); s.keepOnMainThread(h.js, h.c); s.shareAlways(h.workers, h.threads, h.page, h.runs, h.cRuns, h.pool); s.holdNeighbours(h.near); (await import("../../compiler/src/gpu-maps.ts")).allowClose(h.close); (await import("../../compiler/src/gpu-resident.ts")).holdOnCpu(h.cpu); (await import("../../compiler/src/gpu-draws.ts")).holdUnculled(h.unculled); };
 if (holdsPlaces) await onMainThread(placesHeld);
 const answered = answeredHere(load(path)), measuredHere = (() => { try { return measuredOf(answered, writtenChoices); } catch (e) { fail((e as Error).message); } })();
 const loaded = { ...answered, ...(heldHere.size ? { held: heldHere } : {}), ...(measuredHere.size ? { measured: measuredHere } : {}) };
@@ -746,7 +746,7 @@ async function pageFile(): Promise<string> {
 // Where a page's handler's maps may run (L280a's placement entries):
 // from the program lowered as it is compiled.
 async function places(q: { code: Code; info: Info; names: Names }, root: Id): Promise<string[]> {
-  const { lowerCore: lower } = await import("../../compiler/src/core-js.ts"), { gpuMaps } = await import("../../compiler/src/gpu-maps.ts"), { keptOnGpu } = await import("../../compiler/src/gpu-resident.ts");
+  const { lowerCore: lower } = await import("../../compiler/src/core-js.ts"), { gpuMaps } = await import("../../compiler/src/gpu-maps.ts"), { keptOnGpu } = await import("../../compiler/src/gpu-resident.ts"), { cullable } = await import("../../compiler/src/gpu-draws.ts");
   let ir: ReturnType<typeof lower>;
   try { ir = lower(q.code, q.info, q.names, [root]); } catch { return []; }
   // Each site with a kernel, and those whose kernel is only close (G12).
@@ -755,7 +755,8 @@ async function places(q: { code: Code; info: Info; names: Names }, root: Id): Pr
   // And the lists that may stay on the GPU between ticks (G13b), found
   // with nothing held on the CPU: an entry held so is still written.
   const resident = ir.awayMaps ? keptOnGpu(ir, gpuMaps(ir), new Set()).resident.fields : [];
-  return [...placeLines(ir, sites(false), q.names, undefined, root, sites(true), resident), ...nearLines(ir, q.names)];
+  // And the draws the page may cull (G14b2), found with none held whole.
+  return [...placeLines(ir, sites(false), q.names, undefined, root, sites(true), resident, cullable(ir)), ...nearLines(ir, q.names)];
 }
 // And where a command-line program's work runs in C (`ters native`): on
 // its threads, the program stored as C stores it.
