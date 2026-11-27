@@ -34,8 +34,10 @@ test("depot: the sample town's day", () => {
 // The stations are read by position (`station at`) on every event; the
 // World holding them is changed with `set` on every event, which kept
 // every list linked (C227, GAPS round 17 D1): 640 stations took 63 s.
-test("depot: the lists are arrays, beside the map's tree", () => {
-  assert.deepEqual(program().chosen, ["Map as weight-balanced tree", "List as array of List"]);
+// Its maps by Text and Int as hash tables, the lists they hold arrays too
+// (C363), and by pairs a tree.
+test("depot: the lists are arrays, beside the maps' hash table and tree", () => {
+  assert.deepEqual(program().chosen, ["Map as hash table for Text, Int keys", "Map as weight-balanced tree for Tuple2 keys", "List as array of List"]);
 });
 
 test("depot: other hours and seeds", () => {
