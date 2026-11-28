@@ -13,7 +13,7 @@ import { loadProgram } from "../src/lang/load.ts";
 import { infer } from "../src/lang/infer.ts";
 import { representationsIn } from "../src/lang/represent.ts";
 import { represented, type Program } from "../cli/represented.ts";
-import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldPlaces, heldWarnings, placeLines, readChoices, RUNS, C_RUNS, C_CHUNK, POOL, scheduleLines, staleChoices } from "../cli/choices.ts";
+import { bakeLines, choiceLines, choicesPath, choicesText, heldAndPicked, heldBakes, heldOf, heldPlaces, heldWarnings, placeLines, readChoices, RUNS, C_RUNS, C_CHUNK, POOL, scheduleLines, staleChoices } from "../cli/choices.ts";
 import { lowerCore } from "../../compiler/src/core-js.ts";
 import { gpuMaps } from "../../compiler/src/gpu-maps.ts";
 import { shareAlways } from "../../compiler/src/scalar.ts";
@@ -122,7 +122,7 @@ test("backwards' solves have their mode plans: equations or relational, with the
   assert.match(of("missing addend"), /solve of add for input 2 from input 1, answer: equations; exactly one answer; target JavaScript$/);
   assert.match(of("who was greeted"), /solve of greet for name from answer: relational, goals "hello, ", join text\(…\); at most one answer, ends; target JavaScript$/);
   assert.deepEqual(choices("backwards").filter((l) => / mode plan: /.test(l)), lines);
-  assert.throws(() => heldOf([`held ${of("missing addend")}`]), /only a type's representation, a placement or a way of neighbours can be held yet/);
+  assert.throws(() => heldOf([`held ${of("missing addend")}`]), /only a type's representation, a placement, a way of neighbours or a bake can be held yet/);
 });
 
 // Placements (L280a): where each map a page's handler sends away may run,
@@ -479,4 +479,17 @@ test("a call of neighbours is a way entry, held to every pair, a k-d tree or a g
   // Held, it is written again as held, and not stale.
   assert.deepEqual(heldAndPicked([held("every pair")], [way]), [held("every pair")]);
   assert.deepEqual(staleChoices([held("every pair")], [way]), []);
+});
+
+test("a page's bake is a way: written from the weighing, held as written, never stale (G16d)", () => {
+  const [baked, computed] = bakeLines([{ def: "d1", name: "start pane", baked: true }, { def: "d2", name: "glow", baked: false }]);
+  assert.equal(baked, "d1 way: start pane's answer: baked to a file; among at start, baked to a file; target JavaScript page");
+  assert.equal(computed, "d2 way: glow's answer: at start; among at start, baked to a file; target JavaScript page");
+  // Held, either way; a held bake is read, and stands for the one made now.
+  const held = [`held ${computed.replace("at start;", "baked to a file;")}`, `held ${baked.replace("baked to a file;", "at start;")}`];
+  assert.deepEqual([...heldBakes(held)], [["d2", "baked to a file"], ["d1", "at start"]]);
+  assert.equal(heldOf(held).size, 0);
+  assert.deepEqual(heldAndPicked(held, [baked, computed]), [held[1], held[0]]);
+  // Timed, so a check never calls one stale or new.
+  assert.deepEqual(staleChoices([baked], [computed]), []);
 });

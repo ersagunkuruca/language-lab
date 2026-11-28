@@ -264,6 +264,18 @@ export function withinLines(code: Code, calls: readonly Id[], names: Names): str
   const { defOf, nameOf } = definitionOf({ code } as Lowered, names);
   return calls.map((at) => `${at} way: ${nameOf(defOf(at))}'s items within reach: grid; among every item, grid; target JavaScript page`);
 }
+// Each value definition a page's main reaches whose answer could be read
+// back from a file (G16d, BAKING.md), by the definition: baked where
+// the weighing (bake-file.ts bakedPage) found reading it back pays, else
+// computed at start. Timed, so a check never calls it stale.
+const BAKE = /^(\S+) way: .*'s answer: (at start|baked to a file); among at start, baked to a file; target JavaScript page$/;
+export function bakeLines(weighed: readonly { def: Id; name: string; baked: boolean }[]): string[] {
+  return weighed.map((w) => `${w.def} way: ${w.name}'s answer: ${w.baked ? "baked to a file" : "at start"}; among at start, baked to a file; target JavaScript page`);
+}
+// The ways held, by the definition.
+export function heldBakes(lines: readonly string[]): Map<Id, "at start" | "baked to a file"> {
+  return new Map(lines.flatMap((l) => { const m = l.startsWith(HELD) ? BAKE.exec(l.slice(HELD.length)) : null; return m ? [[m[1], m[2] as "at start" | "baked to a file"] as const] : []; }));
+}
 // The ways held, by the call: every pair, or a grid of cells this wide.
 const nearHeld = (l: string): [Id, "every pair" | "k-d tree" | number] | null => {
   const m = l.startsWith(HELD) ? NEAR.exec(l.slice(HELD.length)) : null;
@@ -417,12 +429,13 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
       continue;
     }
     if (!m && WITHIN.test(l.slice(HELD.length))) continue;
+    if (!m && BAKE.test(l.slice(HELD.length))) continue;
     const near = NEAR.exec(l.slice(HELD.length));
     if (!m && near) {
       if (near[3] !== undefined && near[3] !== "reach" && !(Number(near[3]) > 0 && Number.isFinite(Number(near[3])))) throw new Error(`a grid's cells are some positive number of the reach's units on a side: ${l}`);
       continue;
     }
-    if (!m && /^\S+ (way|mode plan|schedule): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation, a placement or a way of neighbours can be held yet: ${l}`);
+    if (!m && /^\S+ (way|mode plan|schedule): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation, a placement, a way of neighbours or a bake can be held yet: ${l}`);
     if (!m) throw new Error(`a held decision isn't read: ${l}`);
     out.set(m[1], m[2]);
   }
@@ -440,8 +453,8 @@ export function heldAndPicked(written: readonly string[], now: readonly string[]
 function heldIn(written: readonly string[]): (l: string) => boolean {
   const of = new Set(heldOf(written).keys());
   const places = new Set(written.flatMap((l) => { const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null; return p ? [`${p[1]} ${p[5]}`] : []; }));
-  const near = new Set(written.flatMap((l) => { const m = l.startsWith(HELD) ? (NEAR.exec(l.slice(HELD.length)) ?? WITHIN.exec(l.slice(HELD.length))) : null; return m ? [m[1]] : []; }));
-  return (l) => { const p = PLACE.exec(l); return of.has(ENTRY.exec(l)?.[1] ?? "") || (!!p && places.has(`${p[1]} ${p[5]}`)) || near.has((NEAR.exec(l) ?? WITHIN.exec(l))?.[1] ?? ""); };
+  const near = new Set(written.flatMap((l) => { const m = l.startsWith(HELD) ? (NEAR.exec(l.slice(HELD.length)) ?? WITHIN.exec(l.slice(HELD.length)) ?? BAKE.exec(l.slice(HELD.length))) : null; return m ? [m[1]] : []; }));
+  return (l) => { const p = PLACE.exec(l); return of.has(ENTRY.exec(l)?.[1] ?? "") || (!!p && places.has(`${p[1]} ${p[5]}`)) || near.has((NEAR.exec(l) ?? WITHIN.exec(l) ?? BAKE.exec(l))?.[1] ?? ""); };
 }
 const key = (l: string) => (l.startsWith(HELD) ? l.slice(HELD.length) : l);
 // What a check says of the held entries: where the compiler, choosing
@@ -470,7 +483,9 @@ export const readChoices = (text: string): string[] => text.split("\n").filter((
 export function staleChoices(written: readonly string[], now: readonly string[]): string[] {
   const isHeld = heldIn(written);
   // A measured entry is what a run found, not a pick: never stale.
-  written = written.filter((l) => !l.startsWith(HELD) && !MEASURED.test(l));
+  // Nor is a bake's way, the weighing timed (G16d).
+  written = written.filter((l) => !l.startsWith(HELD) && !MEASURED.test(l) && !BAKE.test(l));
+  now = now.filter((l) => !BAKE.test(l));
   now = now.filter((l) => !isHeld(l));
   const was = new Set(written.map(meaningOf)), is = new Set(now.map(meaningOf));
   return [...written.filter((l) => !is.has(meaningOf(l))).map((l) => `stale  ${l}`), ...now.filter((l) => !was.has(meaningOf(l))).map((l) => `new    ${l}`)];

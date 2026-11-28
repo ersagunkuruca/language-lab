@@ -115,4 +115,13 @@ test("a page bakes an answer where reading it back pays (G16b3c3)", () => {
   const world = { readBytes: (p: string) => { const b = page.files[p]; if (!b) throw new Error("no file"); return b; } };
   const shown = (compiledDefs(page.code, page.info, names, ["shown"], { print: () => {}, world } as never) as unknown as Record<string, () => unknown>).shown();
   assert.equal(shown, asWritten);
+  // Held (G16d): heavy spots at start, computed as written; light spots
+  // baked to a file though it doesn't pay. Neither is timed.
+  const held = bakedPage(code, info, names, main, checkOptions, new Map([[heavy, "at start"], [light, "baked to a file"]]));
+  const was = Object.fromEntries(held.weighed.map((w) => [w.name, w]));
+  assert.deepEqual([was["heavy spots"]?.baked, was["heavy spots"]?.held, was["light spots"]?.baked, was["light spots"]?.held], [false, "at start", true, "baked to a file"]);
+  assert.equal(was["light spots"]?.computeMs, 0);
+  assert.equal(Object.keys(held.files).length, 1);
+  const heldWorld = { readBytes: (p: string) => { const b = held.files[p]; if (!b) throw new Error("no file"); return b; } };
+  assert.equal((compiledDefs(held.code, held.info, names, ["shown"], { print: () => {}, world: heldWorld } as never) as unknown as Record<string, () => unknown>).shown(), asWritten);
 });

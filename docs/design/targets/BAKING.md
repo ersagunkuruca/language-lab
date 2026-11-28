@@ -52,6 +52,11 @@ the file and the cost of carrying the file (G16b3c3).
 Held `at start`, the program computes the answer as written. Held `baked
 to a file`, the answer is baked even when it is small.
 
+`ters decisions` writes the entry from the weighing, and `ters build-web`
+and `ters build-app` weigh again unless it is held (G16d1). The weighing
+is timed, so `ters check` doesn't weigh and never calls a bake entry
+stale; G16d2 keeps the weighing in the bake store with the bytes.
+
 ## How it is made
 
 The bake runs the definition compiled, not evaluated. A lightmap traced
@@ -185,7 +190,8 @@ Each target finds the bytes its own way:
 - **G16c**: native and WebAssembly. Run the bake as C where there is a
   C compiler, with the file beside the executable or preopened.
 - **G16d**: the decisions entry, and build-web baking what the weighing
-  keeps, with the bytes kept in the store so a rebuild runs nothing.
+  keeps (G16d1, done), with the bytes and the weighing kept in the store
+  so a rebuild runs nothing (G16d2).
 - **G16e**: lists, records of arrays, and Bytes, beyond an Array of
   records.
 

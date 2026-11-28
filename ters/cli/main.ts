@@ -36,7 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
-import { HELD, choiceLines, choicesPath, oldChoicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, measuredIn, measuredOf, measuring, nearLines, placeLines, scheduleLines, withinLines, threadLines } from "./choices.ts";
+import { HELD, choiceLines, choicesPath, oldChoicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, measuredIn, measuredOf, measuring, nearLines, bakeLines, heldBakes, placeLines, scheduleLines, withinLines, threadLines } from "./choices.ts";
 import { keepOutput, keepRun, keptOutput, keptRun, outputKey, runKey, type KeptOutput } from "./run-store.ts";
 import { keepDecisionsIn, storedRows, type DecidedStore } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -740,7 +740,19 @@ const pageHost = hostFile && existsSync(hostFile) ? resolve(hostFile) : undefine
 async function pageFile(): Promise<string> {
   // The files beside its tables, carried (G11a).
   const files = existsSync(path) && statSync(path).isDirectory() ? folderFiles(path, p.code) : undefined;
-  try { return await webCorePage(p.title, p.code, p.info, p.names, main, pageHost, undefined, files); } catch (e) { fail((e as Error).message.replace(/^(ters|lab): /, "")); }
+  try {
+    // And the answers it reads back baked (G16d), each file carried.
+    const b = await bakedHere(p, main), { keptBytes } = await import("../src/lang/browser.ts");
+    const baked = Object.entries(b.files).map(([f, x]) => [f, keptBytes(x)] as const);
+    return await webCorePage(p.title, b.code, b.info, p.names, main, pageHost, undefined, baked.length ? { ...files, ...Object.fromEntries(baked) } : files);
+  } catch (e) { fail((e as Error).message.replace(/^(ters|lab): /, "")); }
+}
+// A page's bakes (G16d, BAKING.md): each answer main reaches that a file
+// could hold, baked where reading it back pays, or as held.
+const bakesHeld = heldBakes(writtenChoices);
+async function bakedHere(q: { code: Code; info: Info; names: Names }, root: Id) {
+  const { bakedPage } = await import("../../compiler/src/bake-file.ts");
+  return bakedPage(q.code, q.info, q.names, root, q.info.options, bakesHeld);
 }
 
 // Where a page's handler's maps may run (L280a's placement entries):
@@ -1086,7 +1098,7 @@ switch (command) {
       try { runProgram(loaded.code, loaded.info, main, args, { print: () => {}, names: loaded.names, world: world(), hosts, measure: counting.measure }); } catch (e) { fail(`the run to measure stopped: ${(e as Error).message}`); }
       measured = counting.lines(args);
     }
-    writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, [...choiceLines(loaded, main, p.picks ?? []), ...scheduleLines(p, main), ...await places(p, main), ...cPlaces(main), ...measured].sort())));
+    writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, [...choiceLines(loaded, main, p.picks ?? []), ...scheduleLines(p, main), ...await places(p, main), ...cPlaces(main), ...(staticPage ? bakeLines((await bakedHere(p, main)).weighed) : []), ...measured].sort())));
     // What was just measured picked from: the picks above read the
     // measurements written before, so they are made again from these.
     const was = measuredIn(writtenChoices);

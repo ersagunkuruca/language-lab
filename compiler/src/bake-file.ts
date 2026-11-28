@@ -203,8 +203,11 @@ export function withDecoder(code: Code, info: Info, b: Baked): Code {
 // Node. rain-page's `start pane` doesn't pay: 20,000 records read back
 // cost what making them from their seeds does (BAKING.md).
 export const CARRY_MS_PER_KB = 0.036;
-export interface Weighed { name: string; computeMs: number; decodeMs: number; carryMs: number; bytes: number; baked: boolean }
-export function bakedPage(code: Code, info: Info, names: Record<Id, string>, main: Id, options?: Parameters<typeof infer>[3]): { code: Code; info: Info; files: Record<string, Uint8Array>; weighed: Weighed[] } {
+// A definition's way held in the decisions file (G16d): computed as
+// written, or baked however small its work.
+export type BakeWay = "at start" | "baked to a file";
+export interface Weighed { def: Id; name: string; computeMs: number; decodeMs: number; carryMs: number; bytes: number; baked: boolean; held?: BakeWay }
+export function bakedPage(code: Code, info: Info, names: Record<Id, string>, main: Id, options?: Parameters<typeof infer>[3], held: ReadonlyMap<Id, BakeWay> = new Map()): { code: Code; info: Info; files: Record<string, Uint8Array>; weighed: Weighed[] } {
   const holdsList = (l: Layout): boolean => l.k === "list" || (l.k === "record" && l.fields.some(holdsList));
   const candidates = [...dependenciesOfAll(code, [main])].filter((d) => {
     const n = code.nodes[d];
@@ -224,16 +227,20 @@ export function bakedPage(code: Code, info: Info, names: Record<Id, string>, mai
   let out = code;
   const files: Record<string, Uint8Array> = {}, weighed: Weighed[] = [];
   for (const d of candidates) {
+    const way = held.get(d);
+    if (way === "at start") { weighed.push({ def: d, name: names[d], computeMs: 0, decodeMs: 0, carryMs: 0, bytes: 0, baked: false, held: way }); continue; }
     const b = bake(code, info, names, d);
     if (typeof b === "string") continue;
     const one = withDecoder(code, info, b), oneInfo = infer(one, names, undefined, options);
     if (oneInfo.errors.length) continue;
     const file = `baked/${b.key}.bin`;
     const world = { readBytes: (p: string) => { if (p !== file) throw new Error("no file"); return b.file; } };
-    const computeMs = timed(code, info, names[d], undefined), decodeMs = timed(one, oneInfo, names[d], world);
     const carryMs = (b.file.length * 4) / 3 / 1024 * CARRY_MS_PER_KB;
-    const pays = decodeMs + carryMs < 0.9 * computeMs;
-    weighed.push({ name: names[d], computeMs, decodeMs, carryMs, bytes: b.file.length, baked: pays });
+    // One the page can't run compiled, here, stays as written.
+    let computeMs = 0, decodeMs = 0;
+    try { if (!way) { computeMs = timed(code, info, names[d], undefined); decodeMs = timed(one, oneInfo, names[d], world); } } catch { continue; }
+    const pays = way === "baked to a file" || decodeMs + carryMs < 0.9 * computeMs;
+    weighed.push({ def: d, name: names[d], computeMs, decodeMs, carryMs, bytes: b.file.length, baked: pays, ...(way ? { held: way } : {}) });
     if (!pays) continue;
     out = withDecoder(out, info, b);
     files[file] = b.file;
