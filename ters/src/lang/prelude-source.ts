@@ -2071,6 +2071,30 @@ export function buildPrelude(): Module {
   // by side (bytes-array.ts, L189b), which is what a binary format's
   // header is read with.
   const byteAt = def("byte at", ["bytes", "position", "otherwise"], (b, i, o) => bytesIn(b, (xs) => k.call(itemAt, xs, i, o)));
+  // A baked answer's words (G16, docs/design/targets/BAKING.md): the
+  // decoder a bake writes reads its answer's leaves from the baked bytes,
+  // each a little-endian word of 4 bytes. Outside the bytes, 0. Not
+  // offered: only the compiler writes them.
+  const word32At = def("baked word at", ["bytes", "position"], (b, p) =>
+    [0, 1, 2, 3].map((j) => k.call(INT_OPS.mul, k.call(byteAt, b, iAdd(p, k.int(j)), k.int(0)), k.int(256 ** j))).reduce((x, y) => iAdd(x, y)));
+  const int32At = def("baked int32 at", ["bytes", "position"], (b, p) => k.let("word", k.call(word32At, b, p), (w) =>
+    k.if(iLess(w, k.int(2 ** 31)), w, k.call(INT_OPS.sub, w, k.int(2 ** 32)))));
+  // 2^(j − 150) for j from 0 to 299, made by doubling from 2^−150, so
+  // each is exact: every power a Float32 needs.
+  const doublings = k.def("baked doublings");
+  k.define(doublings, k.fn(["power", "left"], (pw, left) => k.if(iLess(left, k.int(1)), k.list(), k.call(CONS, pw, k.call(doublings, k.call(B.mul, pw, k.lit(2)), k.call(INT_OPS.sub, left, k.int(1)))))));
+  const f32Powers = def("baked float32 powers", [], () => k.call(ARRAY_OPS.of, k.call(doublings, k.lit(2 ** -150), k.int(300))));
+  // A Float32's 32 bits (IEEE 754 binary32) as the number they are,
+  // exactly: the fraction's 23 bits and its hidden 1, times a power of two.
+  // Infinities and NaN, which a finite Float64 never is, read as 0.
+  const float32At = def("baked float32 at", ["bytes", "position"], (b, p) => k.let("word", k.call(word32At, b, p), (w) =>
+    k.let("exponent", k.call(INT_OPS.bitAnd, k.call(INT_OPS.shiftDown, w, k.int(23)), k.int(255)), (e) =>
+      k.let("fraction", k.call(INT_OPS.bitAnd, w, k.int(0x7fffff)), (m) =>
+        k.let("size", k.if(k.equal(e, k.int(255)), k.lit(0),
+          k.call(B.mul, k.call(INT_OPS.toNumber, k.if(k.equal(e, k.int(0)), m, iAdd(m, k.int(2 ** 23)))),
+            k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.at, k.call(f32Powers), k.if(k.equal(e, k.int(0)), k.int(1), e))), k.thunk(() => k.lit(1))))), (v) =>
+          k.if(iLess(w, k.int(2 ** 31)), v, k.call(B.mul, k.lit(-1), v)))))));
+  const bakeHelpers = [word32At, int32At, doublings, f32Powers, float32At];
   // Shifts and masks, which have one answer where quotient has none for 0.
   const q = (a: Id, n: number) => k.call(INT_OPS.shiftDown, a, k.int(Math.log2(n))), r64 = (a: Id) => k.call(INT_OPS.bitAnd, a, k.int(63));
   const cont = (a: Id) => iAdd(k.int(128), r64(a));
@@ -2753,6 +2777,11 @@ export function buildPrelude(): Module {
     [bytesOf]: "The bytes with these items, each a whole number from 0 to 255: bytes of([104, 105]) is the bytes of \"hi\". Stops when an item isn't a byte.",
     [byteItems]: "The bytes as their list of Ints, each 0 to 255.",
     [byteCount]: "How many bytes there are.",
+    [word32At]: "The little-endian 4-byte word at a position of baked bytes, 0 outside them. A helper of a bake's decoder (G16), not offered.",
+    [int32At]: "The signed 32-bit Int at a position of baked bytes. A helper of a bake's decoder (G16), not offered.",
+    [doublings]: "So many powers of two, each twice the one before. A helper of baked float32 at, not offered.",
+    [f32Powers]: "2^(j − 150) for j from 0 to 299, every power a Float32 needs. A helper of baked float32 at, not offered.",
+    [float32At]: "The Float32 whose 32 bits are at a position of baked bytes, exactly; infinities and NaN read as 0. A helper of a bake's decoder (G16), not offered.",
     [byteAt]: "The byte at a position counted from 0, or otherwise where there is none: byte at(utf8 of(\"hi\"), 1, 0) is 105.",
     [utf8Of]: "The text's UTF-8 bytes (RFC 3629): each character's code point in one to four bytes. utf8 of(\"é\") is [195, 169].",
     [textOfUtf8]: "The text UTF-8 bytes spell, the other way from utf8 of. Stops on bytes that aren't UTF-8: a following byte where a character starts, or the bytes ending inside a character.",
@@ -2827,9 +2856,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, addedAtEnd, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, leastKeyed, firstByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...poolShaped, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, addedAtEnd, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, leastKeyed, firstByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...poolShaped, ...laws, ...bakeHelpers], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addedAtEnd, ...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, leastKeyed, firstByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...poolShaped, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addedAtEnd, ...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, leastKeyed, firstByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, contractedSlopesOfFirst, contractedSlopesOfSecond, pipeOf, onGrid, ...gridHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...poolShaped, ...laws, ...bakeHelpers].map(at));
 }

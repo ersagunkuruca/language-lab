@@ -103,9 +103,12 @@ builtins carry it, none of them offered:
 - `baked bytes(key) : Option Bytes`. It is pure: the bytes are a
   function of the key, and `none` (no file, or a header that doesn't
   match) gives the body as written.
-- `float32 at`, `float64 at` and `int32 at` of (Bytes, Int): a
-  little-endian word. On JavaScript this is a DataView, on C a memcpy,
-  on WebAssembly a load (Bytes are native since C350).
+- `baked float32 at`, `baked float64 at` and `baked int32 at` of
+  (Bytes, Int): a little-endian word. They are written in the prelude
+  (G16a), so every target has them. A target may later read the word
+  directly, with a DataView on JavaScript, a memcpy on C, or a load on
+  WebAssembly (Bytes are native since C350), if the measurement says it
+  pays.
 
 The bake's layout is the answer's leaves in order: an item after
 another, each leaf a 4-byte or 8-byte word, as the type's Float32,
@@ -131,11 +134,15 @@ Each target finds the bytes its own way:
 
 ## Steps
 
-- **G16a**: measure first (done: `start pane` is about 48 ms of a
-  compiled JavaScript run, against 36 to 42 ms for the rest). Then the
-  builtins `baked bytes`, `float32 at`, `float64 at` and `int32 at`,
-  evaluated and compiled for JavaScript, tested with bytes written by
-  hand.
+- **G16a** (done): measure first: `start pane` is about 48 ms of a
+  compiled JavaScript run, against 36 to 42 ms for the rest. Then the
+  decoder's word readers, written in the prelude and not offered:
+  `baked int32 at` and `baked float32 at` (a Float32's bits times a power
+  of two from a table, exact), with `baked word at` under them. They are
+  tested with bytes a DataView wrote, evaluated and compiled the same
+  (ters/test/baked-words.test.ts). Being in the language, every target
+  has them. `baked float64 at` waits for an answer of Float64s (G16e),
+  and `baked bytes` for the bake step (G16b).
 - **G16b**: the bake step for pages. Compile the definition alone to
   JavaScript, run it in Node, write the bytes, keep them in the store,
   and carry them with the page. rain-page's `start pane` comes from the
