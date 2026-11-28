@@ -141,9 +141,12 @@ Each target finds the bytes its own way:
   of two from a table, exact), with `baked word at` under them. They are
   tested with bytes a DataView wrote, evaluated and compiled the same
   (ters/test/baked-words.test.ts). Being in the language, every target
-  has them. `baked float64 at` waits for an answer of Float64s (G16e),
-  and `baked bytes` for the bake step (G16b).
-- **G16b**: the bake step for pages. Compile the definition alone to
+  has them.
+- **G16b1** (done): `baked float64 at` (the low word first, exact, by a
+  table of 2,046 powers), and `baked bytes(key)`, which as written gives
+  none, so a decoder gives its definition's body as written. All of them
+  are in prelude-ids.ts for the compiler to find.
+- **G16b2, G16b3**: the bake step for pages. Compile the definition alone to
   JavaScript, run it in Node, write the bytes, keep them in the store,
   and carry them with the page. rain-page's `start pane` comes from the
   file.
