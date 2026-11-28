@@ -24,7 +24,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { LIBRARY, FLOAT32_TYPE } from "../../ters/src/lang/library.ts";
 import { BOOL, INT_OPS, IO, LIST, NONE, SOME } from "../../ters/src/lang/std-ids.ts";
 import { INT, NUMBER, type Type } from "../../ters/src/lang/types.ts";
-import { compiledMain } from "./core-js.ts";
+import { compiledDefs, compiledMain } from "./core-js.ts";
 
 import { BAKE_VERSION, bakeFile } from "./bake-header.ts";
 
@@ -193,4 +193,50 @@ export function withDecoder(code: Code, info: Info, b: Baked): Code {
     { variant: NONE, names: [], body: () => d.body! },
   ]);
   return { nodes: withNodes(code.nodes, k.code.nodes, { [b.def]: { ...d, body } }), defs: code.defs };
+}
+
+// A page's bakes (G16b3c3): each value definition main reaches whose
+// answer holds a list in a layout, baked where reading it back pays: its
+// decoder, compiled and reading the file, and carrying the file in the
+// page (base64, about 0.036 ms a KB to parse, measured on rain-page) take
+// under 90% of computing it compiled. Both are timed here, once each, in
+// Node. rain-page's `start pane` doesn't pay: 20,000 records read back
+// cost what making them from their seeds does (BAKING.md).
+export const CARRY_MS_PER_KB = 0.036;
+export interface Weighed { name: string; computeMs: number; decodeMs: number; carryMs: number; bytes: number; baked: boolean }
+export function bakedPage(code: Code, info: Info, names: Record<Id, string>, main: Id, options?: Parameters<typeof infer>[3]): { code: Code; info: Info; files: Record<string, Uint8Array>; weighed: Weighed[] } {
+  const holdsList = (l: Layout): boolean => l.k === "list" || (l.k === "record" && l.fields.some(holdsList));
+  const candidates = [...dependenciesOfAll(code, [main])].filter((d) => {
+    const n = code.nodes[d];
+    if (n?.kind !== "def" || !n.body || !code.defs.includes(d) || !names[d]) return false;
+    const body = code.nodes[n.body];
+    if (!body || body.kind === "lambda" || body.kind === "typedef" || body.kind === "lit") return false;
+    const t = info.schemes.get(d)?.type;
+    const l = t && layoutOf(code, info, info.subst.zonk(t));
+    return !!l && holdsList(l);
+  });
+  const timed = (c: Code, i: Info, name: string, world: object | undefined): number => {
+    const f = (compiledDefs(c, i, names, [name], { print: () => {}, world } as never) as Record<string, unknown>)[name];
+    const t0 = performance.now();
+    if (typeof f === "function") (f as () => unknown)();
+    return performance.now() - t0;
+  };
+  let out = code;
+  const files: Record<string, Uint8Array> = {}, weighed: Weighed[] = [];
+  for (const d of candidates) {
+    const b = bake(code, info, names, d);
+    if (typeof b === "string") continue;
+    const one = withDecoder(code, info, b), oneInfo = infer(one, names, undefined, options);
+    if (oneInfo.errors.length) continue;
+    const file = `baked/${b.key}.bin`;
+    const world = { readBytes: (p: string) => { if (p !== file) throw new Error("no file"); return b.file; } };
+    const computeMs = timed(code, info, names[d], undefined), decodeMs = timed(one, oneInfo, names[d], world);
+    const carryMs = (b.file.length * 4) / 3 / 1024 * CARRY_MS_PER_KB;
+    const pays = decodeMs + carryMs < 0.9 * computeMs;
+    weighed.push({ name: names[d], computeMs, decodeMs, carryMs, bytes: b.file.length, baked: pays });
+    if (!pays) continue;
+    out = withDecoder(out, info, b);
+    files[file] = b.file;
+  }
+  return Object.keys(files).length ? { code: out, info: infer(out, names, undefined, options), files, weighed } : { code, info, files, weighed };
 }
