@@ -1,12 +1,10 @@
-// Signatures as pins (REVIEW.md §4.6). A pin freezes the type the checker
-// inferred for a definition, or one written in the MCP's text (L296), so it
-// becomes an interface:
+// Signatures as pins (REVIEW.md §4.6). Types are never written by hand; a
+// pin freezes the type the checker inferred for a definition, so it becomes
+// an interface:
 //
 //   - edits inside the definition must keep it (the checker says so at the
 //     definition, not at some caller far away);
 //   - callers are checked against the pin, not against the body;
-//   - its body is typed with its inputs at the pin's types (infer.ts), so a
-//     count pinned at Int is counted and a field is read of the record;
 //   - so checking can stop at a pin: a change inside a pinned definition
 //     never needs its callers rechecked (check-cache.ts keys a caller's
 //     check by its callees' schemes, which a pin keeps).

@@ -2704,7 +2704,6 @@ The thread "Explore grammars and machines across the Chomsky hierarchy" (L293, E
 
 | id | item | PR |
 |---|---|---|
-| L296 | **A pin written in text** (Ersagun 2026-11-28: write the type): the MCP's `pin` takes a `type`, `(Int) -> Int`, a small letter a type variable; a pinned function's inputs take the pin's types before its body is typed (infer.ts), so a count down pinned at Int is counted (L46) and ends, and `m.start` reads the pinned record's field where two types have one. LANGUAGE.md "Signatures are pins". Test: mcp.test.ts Relanded after #3585 was reverted (#3592) for ters/test/modules.test.ts, whose pin message now reads the input as Float64 | #3585, this PR |
 | L293e | Conversions up the hierarchy (PDA to grammar, Turing machine to grammar): declined by Ersagun 2026-11-28 | none |
 | L298 | chomsky's main comment says seven grammars, and its output says "most ways through one word: 1" in place of "at most 1 way(s)" (QA-2026-11-27 L3) | #3574 |
 | L293f | Chomsky findings: the thesis holds (only the two searches with no bound are Diverge, each under with fuel, so main is total); gaps as rows L295 (with fuel slows step by step in a match arm), L296 (a parameter's type in text; a generic count is Diverge), L297 (text reading); L293e held. CHOMSKY-2026-11-27.md "Findings" | #3550 |
