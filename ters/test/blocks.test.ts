@@ -196,12 +196,13 @@ test("an operand with steps is bracketed, its steps inside", () => {
 
 // E322: an else if chain reads flat, each else at its first if's indent,
 // one row per test, in the text and in the pane (machine's simplified was a
-// staircase, one indent deeper per test).
+// staircase, one indent deeper per test; it is rows of patterns since L294,
+// so scan's escaped, ten tests of a character, shows it).
 test("an else if chain reads flat, each else at the first if's indent", () => {
-  const p = loadProgram(join(root, "../compiler/gaps/machine"));
-  const lines = renderBlocks(p.code, p.pres, infer(p.code, p.pres.names), p.named("simplified")).split("\n");
+  const p = loadProgram(join(root, "../compiler/gaps/scan"));
+  const lines = renderBlocks(p.code, p.pres, infer(p.code, p.pres.names), p.named("escaped")).split("\n");
   const indent = (l: string) => l.length - l.trimStart().length;
-  const at = lines.findIndex((l) => l.trim().startsWith("if ‹both numbers›(a, b)") && lines[lines.indexOf(l) + 2]?.includes("else if"));
+  const at = lines.findIndex((l) => l.trim().startsWith("if c = 100") && lines[lines.indexOf(l) + 2]?.includes("else if"));
   assert.ok(at > 0, lines.join("\n"));
   const elses = [];
   for (let i = at + 1; i < lines.length && indent(lines[i]) >= indent(lines[at]); i++) if (/^else\b/.test(lines[i].trim())) elses.push(i);

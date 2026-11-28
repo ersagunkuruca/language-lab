@@ -752,3 +752,46 @@ test("a value or a case inside a pattern is written as nested matches and read b
   assert.equal(text("eval", { text: '(sign(["-"]), sign(["x"]), sign([]), arrow(["-", ">"]), arrow(["-", "x"]), arrow([]))' }), "= (1, 2, 0, 1, 2, 3) : (a, b, c, d, e, f) where a, b, c, d, e, f are Numbers");
   assert.match(text("eval", { text: "(deep([0, 7]), deep([4]), deep([0]), deep([4, 5]))" }), /^= \(7, 40, 0, -1\)/);
 });
+
+// As-patterns (L294): `[x, ..more] as all` takes a field apart and names it
+// whole too, so rows over several fields read flat where a body reads the
+// whole field; the view prints them back so.
+test("a pattern named whole with as is written as nested matches and read back as its rows", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "firsts", kind: "function", params: ["xs"] });
+  const shown = text("replace", { at: "firsts", find: "□", text: 'match xs\n  cons(0, [y, ..more] as ys) → y + length(ys)\n  cons(x, ys) → x\n  otherwise → -1' });
+  assert.match(shown, /cons\(0, cons\(y#\w+, more#\w+\) as ys#\w+\) → y \+ length\(ys\)/);
+  assert.doesNotMatch(shown, /match ys/);
+  assert.match(text("eval", { text: "(firsts([0, 5, 6, 7]), firsts([0]), firsts([3, 1]), firsts([]))" }), /^= \(8, 0, 3, -1\)/);
+  text("define", { name: "whole", kind: "function", params: ["xs"] });
+  text("replace", { at: "whole", find: "□", text: 'match xs\n  cons(1, rest) as all → length(all)\n  otherwise → 0' });
+  assert.match(text("eval", { text: "(whole([1, 2]), whole([2]), whole([]))" }), /^= \(2, 0, 0\)/);
+});
+
+// Rows over several fields where a later row reads a field whole that an
+// earlier one takes apart (L294): machine's simplified is kept as the
+// match compiler's tree, the field's other cases copies of what reads it,
+// and the view prints the rows as they were written, one level deep.
+test("machine's simplified reads back as the flat rows it was written as", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "machine");
+  cpSync("../compiler/gaps/machine", dir, { recursive: true });
+  text("open", { path: dir });
+  const shown = text("view", { at: "simplified", depth: 99 }).replace(/#\w+/g, "");
+  assert.doesNotMatch(shown, /^\s*\w*\s*match (?!instruction)/m);
+  for (const row of ["add(into, number(x), number(y)) → set(into, number(x + y))", "add(into, number(0), b) → simplified(set(into, b))", "add(into, a, number(0)) → simplified(set(into, a))", "mul(into, a, number(1)) → simplified(set(into, a))", "otherwise → instruction"]) assert.ok(shown.includes(row), row);
+  // A row made of copies, edited, is edited in every copy: it still reads
+  // as one row.
+  const row = /^(\w{4})\s+add\(into#\w+, a#\w+, number\(0\)\)/m.exec(text("view", { at: "simplified", depth: 99 }))![1];
+  text("replace", { at: row, text: "set(into, a)" });
+  const after = text("view", { at: "simplified", depth: 99 }).replace(/#\w+/g, "");
+  assert.ok(after.includes("add(into, a, number(0)) → set(into, a)"));
+  assert.doesNotMatch(after, /^\s*\w*\s*match (?!instruction)/m);
+});

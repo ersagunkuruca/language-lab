@@ -1389,7 +1389,8 @@ function listMatch(on: string, k: number, alive: ListCase[], fallback: string): 
 
 // A pattern as written: a name, _, a value, or a case with its fields'
 // patterns; a list pattern is the conses and nil it stands for.
-type P = { k: "var"; name: string } | { k: "any" } | { k: "lit"; text: string } | { k: "con"; name: string; args: P[] };
+// `as`: a pattern that also names the whole value, `number(x) as a`.
+type P = { k: "var"; name: string } | { k: "any" } | { k: "lit"; text: string } | { k: "con"; name: string; args: P[] } | { k: "as"; name: string; p: P };
 const VALUE = /^("(?:[^"\\]|\\.)*"|[−-]?\d[\d.]*(?:e[+-]?\d+)?)$/i;
 
 // Where a case's → is, outside brackets and quotes, or -1.
@@ -1409,6 +1410,12 @@ function arrowAt(t: string): number {
 function readPattern(t: string, isCase: (n: string) => boolean): P | string {
   t = t.trim();
   if (t === "_") return { k: "any" };
+  // `number(x) as a`: a case, list or value, and a name for all of it.
+  const named = /^([\s\S]*[)\]"\p{N}])\s+as\s+([\p{L}_][\p{L}\p{N}_' ]*)$/u.exec(t);
+  if (named) {
+    const p = readPattern(named[1], isCase);
+    return typeof p === "string" ? p : { k: "as", name: norm(named[2]), p };
+  }
   if (VALUE.test(t)) return { k: "lit", text: t.replace(/^−/, "-") };
   if (t.startsWith("[") && t.endsWith("]")) {
     const items = t.slice(1, -1).trim() ? topLevel(t.slice(1, -1), ",") : [];
@@ -1447,6 +1454,8 @@ type PRow = { pats: P[]; lets: [string, string][]; body: string };
 function patternMatch(on: string[], rows: PRow[], fallback: string, fresh: (base: string) => string): string {
   if (!rows.length) return fallback;
   const block = (t: string) => t.split("\n").map((l) => "    " + l).join("\n");
+  // A name for all of a value is a step naming it, and its pattern tested.
+  rows = rows.map((r) => r.pats.some((p) => p.k === "as") ? { ...r, pats: r.pats.map((p) => p.k === "as" ? p.p : p), lets: [...r.lets, ...r.pats.flatMap((p, i): [string, string][] => (p.k === "as" && p.name !== on[i] ? [[p.name, on[i]]] : []))] } : r);
   const [r0] = rows;
   const col = r0.pats.findIndex((p) => p.k === "lit" || p.k === "con");
   if (col < 0) {
@@ -1478,8 +1487,9 @@ function patternMatch(on: string[], rows: PRow[], fallback: string, fresh: (base
     // named so; else a fresh name, each row naming it with a step.
     const fields = Array.from({ length: n }, (_, i) => {
       const said = mine.map((r) => r.pats[col]).filter((p): p is Extract<P, { k: "con" }> => p.k === "con").map((p) => p.args[i]);
-      const name = said.find((p) => p.k === "var")?.name;
-      return name && !on.includes(name) && said.every((p) => p.k !== "var" || p.name === name) ? name : fresh(h === "cons" ? (i ? "rest" : "item") : "field");
+      const named = (p: P) => (p.k === "var" || p.k === "as" ? p.name : undefined);
+      const name = said.map(named).find(Boolean);
+      return name && !on.includes(name) && said.every((p) => named(p) === undefined || named(p) === name) ? name : fresh(h === "cons" ? (i ? "rest" : "item") : "field");
     });
     const sub = mine.map((r) => { const p = r.pats[col]; return p.k === "con" ? { ...r, pats: without(r.pats, p.args) } : taking(r, fields.map((): P => ({ k: "any" }))); });
     lines.push(`  ${h}${n ? `(${fields.join(", ")})` : ""} →`, block(patternMatch(without(on, fields), sub, fallback, fresh)));
@@ -1501,7 +1511,7 @@ function nestedPatterns(on: string, cases: string[]): string | { ok: false; reas
     if (head === "otherwise") { fallback = body; continue; }
     const p = readPattern(head, (n) => n === "nil");
     if (typeof p === "string") return null;
-    if (p.k === "con" && p.args.some((a) => a.k === "lit" || a.k === "con") && !(head.startsWith("[") && listOnly(p))) deep = true;
+    if (p.k === "as" || (p.k === "con" && p.args.some((a) => a.k === "lit" || a.k === "con" || a.k === "as") && !(head.startsWith("[") && listOnly(p)))) deep = true;
     rows.push({ pats: [p], lets: [], body });
   }
   if (!deep) return null;
