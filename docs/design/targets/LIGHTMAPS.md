@@ -91,3 +91,19 @@ file; target JavaScript page`. Nothing in the program says bake.
   be baked; shadow maps are G15c.
 - **A lightmap format.** The bake writes its own layout (BAKING.md), not
   KTX or PNG.
+
+## Credits
+
+G17a credits these where they are used: in the code, rain-page's README,
+docs/language/CREDITS.md and the page's credits line.
+
+- Soft shadows by sampling points on an area light: distributed ray
+  tracing (Robert L. Cook, Thomas Porter and Loren Carpenter,
+  "Distributed ray tracing", SIGGRAPH 1984).
+- The points spread by the R2 sequence (Martin Roberts, "The unreasonable
+  effectiveness of quasirandom sequences", 2018), as the fireflies are.
+- Ambient occlusion as the share of directions open within a reach
+  (Sergei Zhukov, Andrei Iones and Grigorij Kronin, "An ambient light
+  illumination model", Eurographics Rendering Workshop 1998).
+- Lightmaps baked for a level and read back at run time: id Software's
+  Quake (1996).
