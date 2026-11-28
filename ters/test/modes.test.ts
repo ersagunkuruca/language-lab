@@ -257,7 +257,8 @@ test("forward, a definition ends exactly when the checker finds no Diverge of it
   for (const e of readdirSync(join(root, "examples")).filter((e) => existsSync(join(root, "examples", e, "code.json")))) {
     const p = load(e);
     const info = infer(p.code, p.pres.names);
-    const a = analyzer(p.code, p.pres.names);
+    // The modes read Int inputs by the checker's types, as it does (L46).
+    const a = analyzer(p.code, p.pres.names, { typeOf: info.typeOf });
     const reaches = new Map<Id, boolean>();
     const viaInverse = (d: Id): boolean => {
       if (!reaches.has(d)) {
