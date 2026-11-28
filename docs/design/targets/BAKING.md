@@ -45,9 +45,9 @@ same rule as every other way (SAVED-CHOICES, the decisions file):
 <def> way: start pane's answer: baked to a file; among at start, baked to a file; target JavaScript page
 ```
 
-The compiler bakes when the work is large next to the bytes. It counts
-the work the way bake.ts does, but by running the definition compiled,
-not in the evaluator. The threshold is set by measurement in G16d.
+The compiler bakes when the work is large next to the bytes. It times
+the definition compiled, not in the evaluator, against its decoder reading
+the file and the cost of carrying the file (G16b3c3).
 
 Held `at start`, the program computes the answer as written. Held `baked
 to a file`, the answer is baked even when it is small.
@@ -168,13 +168,24 @@ Each target finds the bytes its own way:
   is read back through the numbers module's `as float32`, since its case
   is private. Compiled JavaScript checks the header. Test:
   compiler/test/bake-file.test.ts.
-- **G16b3c3**: the bake step on `ters build-web`: bake, keep the bytes in
-  the store, and carry them with the page. rain-page's `start pane` comes
-  from the file.
+- **G16b3c3** (done): bakes are weighed (bake-file.ts `bakedPage`). The
+  decoder is timed compiled, reading the file, against computing the
+  answer compiled, and carrying the file costs about 0.036 ms a KB of
+  base64. A bake is kept only where decoding and carrying take under 90%
+  of computing.
+
+  rain-page's `start pane` doesn't pay. Measured in Chromium, the page
+  loads in 53 ms as written, 72 ms carrying the 537 KB file without
+  reading it, and 95 ms reading it. In Node, decoding the 20,000 drops
+  takes 22 to 29 ms, and computing them takes 20 to 31 ms. Each drop is
+  cheap to compute from its seed, so making the list and its records is
+  most of the work, and a bake doesn't save that (as "How it is loaded"
+  says). What pays is an answer that is costly for each item, like G17's
+  lightmaps.
 - **G16c**: native and WebAssembly. Run the bake as C where there is a
   C compiler, with the file beside the executable or preopened.
-- **G16d**: the decisions entry, and the weighing that sets when the
-  compiler bakes.
+- **G16d**: the decisions entry, and build-web baking what the weighing
+  keeps, with the bytes kept in the store so a rebuild runs nothing.
 - **G16e**: lists, records of arrays, and Bytes, beyond an Array of
   records.
 
