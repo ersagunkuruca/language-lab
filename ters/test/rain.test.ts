@@ -68,6 +68,9 @@ test("rain: looked at closer, the canvas shows the glass's middle and the hand w
   assert.ok(pale > 64 * 48 * 0.05, `${pale} pale of ${64 * 48}`);
 });
 
+// The hand off the glass, as the hail keeps it before it is ever put on.
+const handOff = () => (r.value(named("no hail")) as Rec).fields[3];
+
 test("rain: hail strikes the glass, falls and comes to rest on the sill (G19a)", () => {
   // The stones as the hail keeps them: (id, x, y, angle, vx, vy, spin,
   // radius, chip); the discs' geometry checked here, the chips' with G19b.
@@ -75,10 +78,10 @@ test("rain: hail strikes the glass, falls and comes to rest on the sill (G19a)",
   const stones = (h: Value) => items((h as Rec).fields[0]).map((s) => [...s.fields.slice(0, 8).map(num), chip(s.fields[8]) ? 1 : 0]);
   let h = r.value(named("no hail"));
   // It hails from tick 120, a stone every fifth tick: thirty of them.
-  for (let tick = 120; tick < 270; tick++) h = call("hail ticked", h, tick);
+  for (let tick = 120; tick < 270; tick++) h = call("hail ticked", h, tick, handOff());
   assert.equal(stones(h).length, 30);
   // Then it stops (tick 1000 is between showers), and the pile settles.
-  for (let tick = 1000; tick < 1250; tick++) h = call("hail ticked", h, tick);
+  for (let tick = 1000; tick < 1250; tick++) h = call("hail ticked", h, tick, handOff());
   const pile = stones(h);
   // They melt as they lie: the smallest are gone by now.
   assert.ok(pile.length > 20 && pile.length < 30, `${pile.length} stones left`);
@@ -112,8 +115,8 @@ test("rain: five chips of ice stacked on the sill stand, and the hail tumbles ch
   // Five chips 0.04 long and 0.02 thick, each laid on the one below, a
   // little to one side and the other.
   const chip = (k: number) => ({ tag: stone.tag, fields: [k + 1, 0.6 + 0.002 * (k % 2), 0.05 + 0.0101 + 0.0201 * k, 0, 0, 0, 0, 0.02, truth(true)] });
-  let h: Value = { tag: none.tag, fields: [list([0, 1, 2, 3, 4].map(chip)), none.fields[1], 1] };
-  for (let tick = 1000; tick < 1240; tick++) h = call("hail ticked", h, tick);
+  let h: Value = { tag: none.tag, fields: [list([0, 1, 2, 3, 4].map(chip)), none.fields[1], 1, none.fields[3]] };
+  for (let tick = 1000; tick < 1240; tick++) h = call("hail ticked", h, tick, handOff());
   const stack = stones(h);
   assert.equal(stack.length, 5);
   stack.forEach((s, k) => {
@@ -125,8 +128,8 @@ test("rain: five chips of ice stacked on the sill stand, and the hail tumbles ch
   });
   // The hail: a stone every fifth tick, four in ten of them chips.
   h = r.value(named("no hail"));
-  for (let tick = 120; tick < 270; tick++) h = call("hail ticked", h, tick);
-  for (let tick = 1000; tick < 1250; tick++) h = call("hail ticked", h, tick);
+  for (let tick = 120; tick < 270; tick++) h = call("hail ticked", h, tick, handOff());
+  for (let tick = 1000; tick < 1250; tick++) h = call("hail ticked", h, tick, handOff());
   const pile = stones(h);
   assert.ok(pile.some((s) => s.chip) && pile.some((s) => !s.chip));
   for (const s of pile) {
@@ -135,4 +138,34 @@ test("rain: five chips of ice stacked on the sill stand, and the hail tumbles ch
     assert.ok(lowest > 0.046, `a stone ${0.05 - lowest} into the sill`);
     assert.ok(s.v < 0.03, `a stone still moves ${s.v}`);
   }
+});
+
+test("rain: the hand pushes the hail along the sill and sweeps it off the end (G19c)", () => {
+  type Data = { tag: string; fields: Value[] };
+  const off = handOff() as Data, width = 640 / 480;
+  // The hand on the glass at x, y in glass heights (a wipe keeps x as a share of the width).
+  const f32 = (n: number): Value => ({ tag: (off.fields[1] as Data).tag, fields: [Math.fround(n)] });
+  const hand = (x: number, y: number): Value => ({ tag: off.tag, fields: [{ tag: "std.bool.true", fields: [] }, f32(x / width), f32(y)] });
+  const stones = (h: Value) => items((h as Rec).fields[0]).map((s) => ({ id: num(s.fields[0]), x: num(s.fields[1]), y: num(s.fields[2]), v: Math.hypot(num(s.fields[4]), num(s.fields[5])), r: num(s.fields[7]) }));
+  let h = r.value(named("no hail"));
+  for (let tick = 120; tick < 270; tick++) h = call("hail ticked", h, tick, off);
+  for (let tick = 1000; tick < 1250; tick++) h = call("hail ticked", h, tick, off);
+  const before = stones(h);
+  const right = before.filter((s) => s.x > 0.75), left = before.filter((s) => s.x + s.r < 0.45);
+  assert.ok(right.length >= 3 && left.length >= 3, `${right.length} stones to the right, ${left.length} to the left`);
+  // The hand put down on the sill at 0.6 and drawn right off the glass's
+  // edge, 0.6 glass heights a second, then lifted.
+  // And the same ticks with the hand off, as the stones melt anyway.
+  let tick = 1250, still = h;
+  for (let x = 0.6; x < width + 0.15; x += 0.01) { still = call("hail ticked", still, tick, off); h = call("hail ticked", h, tick++, hand(x, 0.08)); }
+  for (let k = 0; k < 120; k++) { still = call("hail ticked", still, tick, off); h = call("hail ticked", h, tick++, off); }
+  const after = stones(h), ids = new Set(after.map((s) => s.id)), kept = new Set(stones(still).map((s) => s.id));
+  // What was right of the hand is swept off the end; what was left of
+  // where it went down is still there if it hasn't melted, and the rest
+  // at rest again.
+  const stayed = right.filter((s) => kept.has(s.id));
+  assert.ok(stayed.length >= 3, `${stayed.length} stones on the right left unmelted`);
+  assert.ok(stayed.filter((s) => ids.has(s.id)).length <= 1, `${stayed.filter((s) => ids.has(s.id)).length} of ${stayed.length} stones left on the right`);
+  for (const s of left) if (kept.has(s.id)) assert.ok(ids.has(s.id), `stone ${s.id} on the left gone`);
+  for (const s of after) assert.ok(s.v < 0.03, `a stone still moves ${s.v}`);
 });

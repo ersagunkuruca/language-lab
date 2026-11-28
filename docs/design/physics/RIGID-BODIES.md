@@ -166,6 +166,24 @@ Measured: five chips stacked on the sill stand for 240 ticks, each on the
 one below, level and at rest (rain.test). Hail of chips and discs piles
 up with no stone in the sill.
 
+## G19c, built (2026-11-28)
+
+The hand is a kinematic body: `hand touch` makes a touch between a stone
+and the frame's side of the solver (b = −1, no mass), whose `bounce`, the
+speed the two must part at, is the hand's speed toward the stone. Its
+speed is from `Hail`'s new `hand`, where the wipe was last tick, held to 4
+glass heights a second so a hand put down far off flings nothing. The
+hand pushes every stone as the disc round it, a chip too (its half
+length), which is enough for a hand. A side of the frame lets go of a
+stone the hand is on (`not handed`), and a stone past an end is gone (`on
+sill`), so a wipe sweeps the sill clear. `hail ticked` takes the wipe;
+`ticked` passes the pane's.
+
+Measured: a pile settled, the hand drawn along the sill from 0.6 to past
+the right edge sweeps off what was right of it, leaves what was left of
+it, and the stones come to rest again (rain.test, against the same ticks
+with the hand off, as the stones melt anyway).
+
 ## What stays out
 
 - **3D bodies.** rain-page is flat.
