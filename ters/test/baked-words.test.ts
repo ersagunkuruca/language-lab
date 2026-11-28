@@ -23,7 +23,7 @@ const bytesOf = (words: number[], kind: "f32" | "i32" | "f64"): number[] => {
   return [...new Uint8Array(v.buffer)];
 };
 
-test("baked float32 at, float64 at and int32 at read each word back exactly, evaluated and compiled the same (G16a, G16b1)", () => {
+test("baked float32 at, float64 at and int32 at read each word back exactly, evaluated and compiled the same (G16a, G16b1, G16b3b)", () => {
   const floats = [0, 1.5, -2.25, Math.fround(0.1), Math.fround(-1e-3), 3.4028234663852886e38, 2 ** -149, 2 ** -126, Math.fround(123456.789)];
   const ints = [0, -1, 1, 2 ** 31 - 1, -(2 ** 31), 123456789];
   const doubles = [0, 0.1, -2.5, Math.PI, 1e300, -1.7976931348623157e308, 5e-324, 2.2250738585072014e-308, 123456789.123456789];
@@ -45,12 +45,17 @@ test("baked float32 at, float64 at and int32 at read each word back exactly, eva
   // Past the bytes, 0.
   NAMES.push("past the end");
   def("past the end", () => k.call(SHOW_ANY, k.equal(k.call(lib("baked float32 at"), bytes(bytesOf([1.5], "f32")), k.int(4)), k.lit(0))));
+  // Partly past the bytes: those past them read as 0, so 1.5's last two
+  // bytes (0xC0, 0x3F) then two 0s. Compiled JavaScript reads the word
+  // with a DataView (G16b3b), and agrees.
+  NAMES.push("straddling");
+  def("straddling", () => k.call(SHOW_ANY, k.call(lib("baked int32 at"), bytes(bytesOf([1.5], "f32")), k.int(2))));
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const r = makeRunner(code, info, { print: () => {}, names });
   const evaluated = NAMES.map((n) => r.value(code.defs.find((d) => names[d] === n)!));
-  assert.deepEqual(evaluated, NAMES.map((n) => (n === "no bytes" ? "none" : "true")));
+  assert.deepEqual(evaluated, NAMES.map((n) => (n === "no bytes" ? "none" : n === "straddling" ? "16320" : "true")));
   const defs = compiledDefs(code, info, names, NAMES) as unknown as Record<string, unknown>;
   assert.deepEqual(NAMES.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), evaluated);
 });

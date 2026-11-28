@@ -153,8 +153,10 @@ Each target finds the bytes its own way:
 - **G16b3a** (done): the power tables are values, made once. Decoding
   20,000 drops in compiled JavaScript went from 934 ms to 30 ms, which is
   still more than the 20 ms `start pane` takes to compute them.
-- **G16b3b**: compiled JavaScript reads a word directly (a DataView), so
-  that decoding costs less than computing.
+- **G16b3b** (done): compiled JavaScript reads a word directly, with a
+  DataView kept by the bytes. Decoding the 20,000 drops' records takes
+  9.6 ms on a first run, against 31.8 ms with the prelude's readers and
+  about 20 ms for computing them.
 - **G16b3c**: the bake step for pages. Compile the definition alone to
   JavaScript, run it in Node, write the bytes, keep them in the store,
   and carry them with the page. rain-page's `start pane` comes from the

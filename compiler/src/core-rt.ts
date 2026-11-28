@@ -63,6 +63,25 @@ const branched = (): Branches => { if (!BRANCHES) throw new Unsupported("running
 // A page's worker answering its maps (C61 c′), where the page has any.
 export const branchWorkerOfPage = () => BRANCHES?.pageWorker();
 
+// A bake's bytes as a DataView and where they start (G16b3b): kept by
+// the value, so each word read is a load.
+const BAKED_VIEWS = new WeakMap<object, { v: DataView; at: number }>();
+function bakedWord(b: unknown, p: unknown, n: number, read: (v: DataView, i: number) => number): number {
+  let s = BAKED_VIEWS.get(b as object);
+  if (!s) {
+    const l = (b as { fields: unknown[] }).fields[0];
+    const u = l instanceof ItemsList && l.b instanceof Uint8Array ? { u: l.b, at: l.i } : { u: plainBytes(b), at: 0 };
+    s = { v: new DataView(u.u.buffer, u.u.byteOffset, u.u.byteLength), at: u.at };
+    BAKED_VIEWS.set(b as object, s);
+  }
+  const q = Number(p), i = s.at + q;
+  if (!Number.isInteger(q)) return 0;
+  if (i >= s.at && i + n <= s.v.byteLength) return read(s.v, i);
+  // Partly outside: the bytes outside read as 0, as `byte at` gives them.
+  for (let j = 0; j < n; j++) BAKED_EDGE.setUint8(j, i + j >= s.at && i + j < s.v.byteLength ? s.v.getUint8(i + j) : 0);
+  return read(BAKED_EDGE, 0);
+}
+const BAKED_EDGE = new DataView(new ArrayBuffer(8));
 const big = (x: I.Int) => BigInt(x);
 // An array held as columns (columns.ts) given whole to a host, as rows
 // (C348: the flock page's birds, drawn three times a frame): each item made
@@ -1018,6 +1037,11 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
     // program, which a page carries (G11a), by its key; none where there
     // is none, so the decoder gives its definition's body as written.
     case "bakedBytes": return (key) => { let b: Uint8Array | null = null; try { b = rt.world?.readBytes?.(`baked/${key as string}.bin`) ?? null; } catch { /* none */ } return b ? { tag: SOME, fields: [bytesValue(b)] } : { tag: NONE, fields: [] }; };
+    // A bake's words (G16b3b), little-endian, read where the bytes are:
+    // the world's bytes as they came, or the bytes copied out once.
+    case "bakedInt32": return (b, p) => I.norm(BigInt(bakedWord(b, p, 4, (v, i) => v.getInt32(i, true))));
+    case "bakedFloat32": return (b, p) => bakedWord(b, p, 4, (v, i) => { const x = v.getFloat32(i, true); return Number.isFinite(x) ? x : 0; });
+    case "bakedFloat64": return (b, p) => bakedWord(b, p, 8, (v, i) => { const x = v.getFloat64(i, true); return Number.isFinite(x) ? x : 0; });
     case "environmentVariable": return (name) => { const v = rt.world?.environmentVariable?.(name as string) ?? null; return v === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [v.normalize("NFC")] }; };
     case "fetchText": return (u) => tried(() => w("fetchText")(u as string));
     // A fetch as a ticket (L150b, C182), as run.ts starts one: in the
