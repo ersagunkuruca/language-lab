@@ -2467,15 +2467,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // each and each of do since I331: their rows get views whose Bools
     // read as booleans (core-rt.ts cellFns).
     const handsOn = sig?.t === "fn" && sig.params.some((p) => p.t === "fn") && target !== CELL_OPS.each && target !== CELL_OPS.eachArray && target !== CELL_OPS.eachOf;
-    if (deep && (!HOST_CELLS.has(target) || handsOn)) throw new Refused(`uses ${nm(target)} on data holding a Bool, which isn't lowered yet`);
     if (ts.some((t) => severalInside(t!))) throw new Refused(`uses ${nm(target)} on a function with several answers, which the evaluator's can't call yet`);
     const t = ts[ts.length - 1]!;
     // A draw is given its site and what its two functions read (G9c).
+    // Its instances may hold a Bool (G19b, a hailstone's chip): the frame
+    // reads each leaf as a boolean or as the evaluator's True (gpu-frame.ts
+    // put), and on the CPU only our own functions are given them.
     if (target === FRAME_OPS.draw && n.args.length === 4) {
       const caps = [...new Set([...refsIn(n.args[2]), ...refsIn(n.args[3])])].filter((b) => env.has(b));
       const site = drawSites.push({ site: drawSites.length, at: n.id, vertex: n.args[2], fragment: n.args[3], caps }) - 1;
       return { k: "rt", fn: `host:${target}`, args: [...n.args.map((a) => expr(a, env, f, false)), { k: "num", v: site }, ...caps.map((b): SExpr => ({ k: "local", i: env.get(b)! }))], host: { t, partial: false } };
     }
+    if (deep && (!HOST_CELLS.has(target) || handsOn)) throw new Refused(`uses ${nm(target)} on data holding a Bool, which isn't lowered yet`);
     return { k: "rt", fn: `host:${target}${t === "i32" ? ":bool" : deep ? `:deep:${boolShapes(ts as LType[])}` : ""}`, args: n.args.map((a) => expr(a, env, f, false)), host: { t, partial: effs.includes(CHOICE) || !!STD_MANY[target] || target === CELL_OPS.read || target === CELL_OPS.readAt } };
   }
   // A relation run some way with one answer, for JavaScript from the core

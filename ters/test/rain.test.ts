@@ -69,8 +69,10 @@ test("rain: looked at closer, the canvas shows the glass's middle and the hand w
 });
 
 test("rain: hail strikes the glass, falls and comes to rest on the sill (G19a)", () => {
-  // The stones as the hail keeps them: (id, x, y, angle, vx, vy, spin, radius).
-  const stones = (h: Value) => items((h as Rec).fields[0]).map((s) => s.fields.map(num));
+  // The stones as the hail keeps them: (id, x, y, angle, vx, vy, spin,
+  // radius, chip); the discs' geometry checked here, the chips' with G19b.
+  const chip = (v: Value) => (v as { tag?: string }).tag === "std.bool.true";
+  const stones = (h: Value) => items((h as Rec).fields[0]).map((s) => [...s.fields.slice(0, 8).map(num), chip(s.fields[8]) ? 1 : 0]);
   let h = r.value(named("no hail"));
   // It hails from tick 120, a stone every fifth tick: thirty of them.
   for (let tick = 120; tick < 270; tick++) h = call("hail ticked", h, tick);
@@ -82,19 +84,55 @@ test("rain: hail strikes the glass, falls and comes to rest on the sill (G19a)",
   assert.ok(pile.length > 20 && pile.length < 30, `${pile.length} stones left`);
   const sill = 0.05, width = 640 / 480;
   let fastest = 0;
-  for (const [, x, y, , vx, vy, , radius] of pile) {
+  for (const [, x, y, , vx, vy, , radius, isChip] of pile) {
     // On the sill or above it, between the frame's sides, overlapping
     // nothing by more than the solver's slop and a little more.
-    assert.ok(y - radius > sill - 0.004, `a stone ${(sill - (y - radius)).toFixed(4)} into the sill`);
+    if (!isChip) assert.ok(y - radius > sill - 0.004, `a stone ${(sill - (y - radius)).toFixed(4)} into the sill`);
     assert.ok(x - radius > -0.004 && x + radius < width + 0.004, `a stone at ${x}`);
     fastest = Math.max(fastest, Math.hypot(vx, vy));
   }
   for (let i = 0; i < pile.length; i++) for (let j = i + 1; j < pile.length; j++) {
     const [a, b] = [pile[i], pile[j]];
-    assert.ok(Math.hypot(a[1] - b[1], a[2] - b[2]) > a[7] + b[7] - 0.004, "two stones deep in each other");
+    if (!a[8] && !b[8]) assert.ok(Math.hypot(a[1] - b[1], a[2] - b[2]) > a[7] + b[7] - 0.004, "two stones deep in each other");
   }
   // At rest: the fastest stone no faster than a tick of gravity (1.5
   // a second each second), as a stone melting off its touch falls a tick
   // before it touches again; they strike the glass at 0.6 a second.
   assert.ok(fastest < 0.03, `the fastest stone still moves ${fastest.toFixed(4)} a second`);
+});
+
+test("rain: five chips of ice stacked on the sill stand, and the hail tumbles chips and discs into a pile (G19b)", () => {
+  type Data = { tag: string; fields: Value[] };
+  const none = r.value(named("no hail")) as Data, stone = r.value(named("no stone")) as Data;
+  const drops = (r.value(named("start pane")) as Data).fields[0] as Data;
+  const list = (xs: Value[]): Value => xs.reduceRight((t: Value, x) => ({ tag: drops.tag, fields: [x, t] }), { tag: (none.fields[0] as Data).tag, fields: [] });
+  const truth = (b: boolean) => ({ tag: b ? "std.bool.true" : "std.bool.false", fields: [] });
+  const flag = (v: Value) => (v as Data).tag === "std.bool.true";
+  const stones = (h: Value) => items((h as Rec).fields[0]).map((s) => ({ x: num(s.fields[1]), y: num(s.fields[2]), angle: num(s.fields[3]), v: Math.hypot(num(s.fields[4]), num(s.fields[5])), r: num(s.fields[7]), chip: flag(s.fields[8]) }));
+  // Five chips 0.04 long and 0.02 thick, each laid on the one below, a
+  // little to one side and the other.
+  const chip = (k: number) => ({ tag: stone.tag, fields: [k + 1, 0.6 + 0.002 * (k % 2), 0.05 + 0.0101 + 0.0201 * k, 0, 0, 0, 0, 0.02, truth(true)] });
+  let h: Value = { tag: none.tag, fields: [list([0, 1, 2, 3, 4].map(chip)), none.fields[1], 1] };
+  for (let tick = 1000; tick < 1240; tick++) h = call("hail ticked", h, tick);
+  const stack = stones(h);
+  assert.equal(stack.length, 5);
+  stack.forEach((s, k) => {
+    // Each still on the one below, level, at rest, though melting thinner.
+    assert.ok(Math.abs(s.x - 0.6) < 0.01, `chip ${k} slid to ${s.x}`);
+    assert.ok(Math.abs(s.angle) < 0.1, `chip ${k} turned ${s.angle}`);
+    assert.ok(s.v < 0.05, `chip ${k} moves ${s.v}`);
+    if (k) assert.ok(Math.abs(s.y - stack[k - 1].y - s.r) < 0.003, `chip ${k} ${s.y - stack[k - 1].y} above the one below, ${s.r} thick`);
+  });
+  // The hail: a stone every fifth tick, four in ten of them chips.
+  h = r.value(named("no hail"));
+  for (let tick = 120; tick < 270; tick++) h = call("hail ticked", h, tick);
+  for (let tick = 1000; tick < 1250; tick++) h = call("hail ticked", h, tick);
+  const pile = stones(h);
+  assert.ok(pile.some((s) => s.chip) && pile.some((s) => !s.chip));
+  for (const s of pile) {
+    // A chip lies on a side, flat or on its end; nothing is in the sill.
+    const lowest = s.chip ? s.y - s.r * Math.max(Math.abs(Math.sin(s.angle)) + 0.5 * Math.abs(Math.cos(s.angle)), 0) : s.y - s.r;
+    assert.ok(lowest > 0.046, `a stone ${0.05 - lowest} into the sill`);
+    assert.ok(s.v < 0.03, `a stone still moves ${s.v}`);
+  }
 });

@@ -86,5 +86,14 @@ a pile rests instead of jittering. The stones are drawn on the GPU as a
 third draw over the glass, lit by the probes. A tick for 110 to 120
 stones is 2 to 4 ms compiled to JavaScript.
 
+Four stones in ten are chips (G19b): flat shards of ice twice as long as
+they are thick, struck at an angle and spinning. Whether two touch is
+found by separating axes, each chip's two sides tried as the line between
+them, and where they touch by clipping the face that meets the other
+against its sides, so a chip lying on another touches at two points and
+stays level. A chip on the sill or on a disc is the same, the sill a face
+and the disc a point. Each stone carries whether it is a chip, and the
+GPU draws the two kinds in one draw.
+
 Credits: random numbers by the ZX81's generator (Sinclair Research, 1981);
 a fixed step after Glenn Fiedler's Fix Your Timestep (2004); the fireflies and the points on each bulb spread by Martin Roberts's R2 sequence ("The unreasonable effectiveness of quasirandom sequences", 2018); soft shadows by distributed ray tracing (Robert L. Cook, Thomas Porter and Loren Carpenter, SIGGRAPH 1984); ambient occlusion after Sergei Zhukov, Andrei Iones and Grigorij Kronin ("An ambient light illumination model", 1998); the wall's light kept as Quake's lightmaps were (id Software, 1996); the drops lit by probes, an irradiance volume (Gene Greger, Peter Shirley, Philip M. Hubbard and Donald P. Greenberg, 1998) kept in circular harmonics as Peter-Pike Sloan, Jan Kautz and John Snyder (2002) and Ravi Ramamoorthi and Pat Hanrahan (2001) keep light in spherical ones; the fireflies' soft shadows by sphere tracing (John C. Hart, "Sphere tracing", 1996) the leaves' distance as Íñigo Quílez marches a soft shadow ("Soft shadows in raymarched SDFs", 2010), the distance kept as samples (Sarah F. Frisken, Ronald N. Perry, Alyn P. Rockwood and Thouis R. Jones, "Adaptively sampled distance fields", 2000); the hail by sequential impulses after Erin Catto ("Iterative dynamics with temporal coherence", GDC 2005; "Fast and simple physics using sequential impulses", GDC 2006) and his Box2D Lite, the overlap pushed out as Jürgen Baumgarte stabilised constraints (1972).
