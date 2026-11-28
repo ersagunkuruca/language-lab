@@ -79,7 +79,17 @@ export function readType(text: string, known: Map<string, Id>, params: Map<strin
     // and reads as a unit.
     const unit = head === NUMBER && words.length === n + 1 ? parseUnit(words[n]) : null;
     if (unit) return (add) => add({ kind: "tref", target: head, args: [], unit });
-    const args: Build[] = words.slice(n).map((w) => { const id = lookup(w); if (!id) throw new Error(`no type named ${w}`); return (add) => add({ kind: "tref", target: id, args: [] }); });
+    // Each argument the longest run of words that names a type, as the
+    // head is: `List Push move` is a List of Push move (L297).
+    const args: Build[] = [];
+    for (let j = n; j < words.length;) {
+      let k = words.length - j;
+      while (k > 0 && !lookup(words.slice(j, j + k).join(" "))) k--;
+      if (!k) throw new Error(`no type named ${words[j]}`);
+      const id = lookup(words.slice(j, j + k).join(" "))!;
+      args.push((add) => add({ kind: "tref", target: id, args: [] }));
+      j += k;
+    }
     for (;;) {
       if (peek()?.t === "(") { i++; args.push(grouped()); continue; }
       const w = peek()?.t === "word" ? lookup(ts[i].s) : undefined;

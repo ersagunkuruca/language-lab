@@ -194,7 +194,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L297 | Text reading: a two-word type in a field's type needs brackets (`List (Push move)`), and steps inside a fold's or match's arm weren't found to read, so chomsky used helpers | [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) "Findings" (L293f) | P3 | S |  |
 
 ### Ersagun's current asks
 
