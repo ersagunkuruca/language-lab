@@ -15,8 +15,7 @@ A game's precomputed data is the other kind: megabytes, made once, and
 loaded as they are. Lightmaps, probes and distance fields are examples,
 and so is rain-page's `start pane`, 20,000 drops of five Float32s made at
 start. None of it belongs in the code. It belongs in a file that the
-program reads at start, laid out the way the target holds it, so loading
-is a copy rather than a parse.
+program reads at start, as words it decodes without parsing text.
 
 G11a already carries files with a page. A page holds the files its
 program reads by name, with any non-text bytes kept as the page's store
@@ -59,7 +58,7 @@ The bake runs the definition compiled, not evaluated. A lightmap traced
 in the evaluator would take hours. G17 traces on the CPU threads, so the
 bake runs the definition as a small native program (C, its threads)
 where there is a C compiler, and as compiled JavaScript in Node
-otherwise. The program writes its answer's bytes in the target's layout.
+otherwise. The program writes its answer's bytes in the bake's layout (below).
 
 Numbers: `+`, `-`, `*`, `/` and `sqrt` are bit-exact on every target, and
 sin, cos, exp and pow are within a few ulp (PLATFORM MATH, 2026-11-03).
@@ -73,7 +72,7 @@ The bake store sits beside the run store (run-store.ts) in the kept
 directory. Each bake is keyed by:
 
 - the definition's nodes and those of every definition it reaches;
-- the target's layout of its type;
+- the bake's layout of its type (below);
 - the bake's own version.
 
 A rebuild with nothing changed reads the bytes back and runs nothing.
@@ -81,29 +80,62 @@ Editing any of those nodes makes a new key. Because the key says when a
 bake is stale, the editor can show that later (an Editor lane row,
 after G16).
 
-Each target gets the bake its own way:
+## How it is loaded
+
+The representation a list gets is the compiler's choice, made per program
+and per target: cons cells, an array, columns, Float32 storage. So a
+loader written per target would need one copy for each of those choices.
+Instead, the bake rewrites the definition's body into a decoder written
+in Ters:
+
+```
+match baked bytes("<key>") {
+  some(b) → map(range(n), (i) → drop(float32 at(b, 20 · i), …))
+  none → <the body as written>
+}
+```
+
+The compiler then compiles the decoder like any other code, into
+whatever representation it chose for the answer. Rows and columns, a
+page and native code, all come out of the same rewrite. Three internal
+builtins carry it, none of them offered:
+
+- `baked bytes(key) : Option Bytes`. It is pure: the bytes are a
+  function of the key, and `none` (no file, or a header that doesn't
+  match) gives the body as written.
+- `float32 at`, `float64 at` and `int32 at` of (Bytes, Int): a
+  little-endian word. On JavaScript this is a DataView, on C a memcpy,
+  on WebAssembly a load (Bytes are native since C350).
+
+The bake's layout is the answer's leaves in order: an item after
+another, each leaf a 4-byte or 8-byte word, as the type's Float32,
+Float64 and Int say. Lists start with their length. Each file starts
+with a header: the magic "TERSBAKE", the layout's version, the key, and
+the length. A file whose header doesn't match gives `none`, so a bake can
+make a program slower to start, but never wrong.
+
+The rewritten definition still makes its records one by one. For
+rain-page's drops, what the bake saves is the work of making each one
+(`scattered`'s random numbers and arithmetic), not the making of the
+list.
+
+Each target finds the bytes its own way:
 
 - **Page** (`ters build-web`, the editor's apps): a carried file, as in
-  G11a. It is read at start into a Float32Array or Int32Array over the
-  bytes, or into the page's columns.
+  G11a.
 - **Native** (`ters native`, the desktop apps): a file beside the
-  executable, read at start into the array's buffer with one `fread`. A
-  C array literal of megabytes compiles too slowly.
-- **WebAssembly** (`ters wasi`): the same file, preopened, copied into
-  linear memory.
+  executable, read at start. A C array literal of megabytes compiles too
+  slowly.
+- **WebAssembly** (`ters wasi`): the same file, preopened.
 - **Phones**: an asset in the app.
-
-Each file starts with a header: the magic "TERSBAKE", the layout's
-version, the key, and the length. A file whose header doesn't match
-isn't read: the program computes the answer at start instead. A bake can
-make a program slower to start, but never wrong.
 
 ## Steps
 
-- **G16a**: measure first. Find how much of rain-page's start is `start
-  pane`, as compiled JavaScript and as native code. Build the layout and
-  the loader for one target, the page: an Array of records of Float32s
-  as columns, written by hand in a test and read back equal.
+- **G16a**: measure first (done: `start pane` is about 48 ms of a
+  compiled JavaScript run, against 36 to 42 ms for the rest). Then the
+  builtins `baked bytes`, `float32 at`, `float64 at` and `int32 at`,
+  evaluated and compiled for JavaScript, tested with bytes written by
+  hand.
 - **G16b**: the bake step for pages. Compile the definition alone to
   JavaScript, run it in Node, write the bytes, keep them in the store,
   and carry them with the page. rain-page's `start pane` comes from the
@@ -123,8 +155,8 @@ this.
 - **A bake a person writes.** There is no `bake(…)` call and no
   annotation. Baking is a way the compiler chooses, written in the
   decisions file.
-- **Asset formats.** A bake writes the target's own layout, not PNG or
-  KTX. Reading images a person made is the Host and assets row.
+- **Asset formats.** A bake writes its own layout of the answer's
+  leaves, not PNG or KTX. Reading images a person made is the Host and assets row.
 - **Baking with effects.** A definition that reads a file or the clock
   isn't baked. When its inputs change, the program as written changes
   nothing, so the key couldn't say the bake is stale.
