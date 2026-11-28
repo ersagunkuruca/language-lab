@@ -10,11 +10,14 @@ import { CONS, FALSE, NIL, TRUE } from "./std.ts";
 
 // `lit`: a value a match on values (L164c) takes, `text` how it reads:
 // a field matched on by value inside a case, cons("-", rest).
-// A name an inner otherwise reads is its row's for the field.
-export type Pat = { v: Id } | { con: Id; args: Pat[] } | { lit: Id; text: string } | { any: true };
+// A name an inner otherwise reads is its row's for the field. `as`: a
+// field taken apart that the row's body reads whole too, number(x) as a.
+export type Pat = { v: Id } | { con: Id; args: Pat[] } | { lit: Id; text: string } | { any: true } | { as: Id; p: Pat };
 // `at` is the node a row stands for: its leaf case, or the inner match
 // whose otherwise it is.
-export interface Row { pat: Pat; binds: Id[]; body: Id; at: Id }
+// `copies`: the other cases this row stands for, each with a copy of its
+// body, as an otherwise is kept (a case it reads whole, below).
+export interface Row { pat: Pat; binds: Id[]; body: Id; at: Id; copies?: Id[] }
 
 const reads = (code: Code, root: Id, ids: Id[]) => subtree(code, root).some((y) => ids.includes((code.nodes[y] as { target?: Id }).target!));
 
@@ -28,7 +31,7 @@ function plainMatch(code: Code, info: Info | null, m: NodeOf<"match">): boolean 
   return !(d?.kind === "def" && d.body && (code.nodes[d.body] as { effect?: true }).effect);
 }
 
-const put = (p: Pat, b: Id, q: Pat): Pat => ("v" in p ? (p.v === b ? q : p) : "con" in p ? { con: p.con, args: p.args.map((a) => put(a, b, q)) } : p);
+const put = (p: Pat, b: Id, q: Pat): Pat => ("v" in p ? (p.v === b ? q : p) : "con" in p ? { con: p.con, args: p.args.map((a) => put(a, b, q)) } : "as" in p ? { as: p.as, p: put(p.p, b, q) } : p);
 
 function litPat(code: Code, id: Id): Pat {
   const n = code.nodes[id] as NodeOf<"lit">;
@@ -42,20 +45,44 @@ export function matchRows(code: Code, info: Info | null, m: NodeOf<"match">): Ro
     if (n.kind !== "match" || !plainMatch(code, info, n)) return undefined;
     const s = code.nodes[n.scrutinee];
     if (s.kind !== "ref" || !binds.includes(s.target)) return undefined;
-    // The otherwise may read it: its row names the field there.
-    return n.arms.some((x) => reads(code, x, [s.target])) ? undefined : n;
+    // A case may read it too: its row names the field there with `as`, as
+    // the otherwise's names it. Cases that read it whole and none of their
+    // parts are an otherwise kept as copies, one row naming the field, when
+    // they say the same (two or more, or the same as the otherwise); else,
+    // cons(_, _) as tail only saying it isn't empty, the match reads better
+    // kept.
+    const ws = whole(n);
+    if (!ws.length) return n;
+    const k = shape(code, ws[0].body);
+    return ws.every((a) => shape(code, a.body) === k) && (ws.length > 1 || (n.otherwise !== null && shape(code, n.otherwise) === k)) && (n.otherwise === null || shape(code, n.otherwise) === k) ? n : undefined;
   };
+  const whole = (n: NodeOf<"match">): NodeOf<"arm">[] => {
+    const b = (code.nodes[n.scrutinee] as NodeOf<"ref">).target;
+    return n.arms.map((x) => code.nodes[x] as NodeOf<"arm">).filter((a) => !a.value && reads(code, a.body, [b]) && !reads(code, a.body, a.binds));
+  };
+  // A row names a field whole only where its own body reads it.
+  const plain = (p: Pat, body: Id): Pat => ("as" in p ? (reads(code, body, [p.as]) ? { as: p.as, p: plain(p.p, body) } : plain(p.p, body)) : "con" in p ? { con: p.con, args: p.args.map((a) => plain(a, body)) } : p);
   const rows = (pat: Pat, binds: Id[], body: Id, at: Id): Row[] => {
     const inner = deeper(binds, body);
-    if (!inner) return [{ pat, binds, body, at }];
+    if (!inner) return [{ pat: plain(pat, body), binds, body, at }];
     const b = (code.nodes[inner.scrutinee] as NodeOf<"ref">).target;
     const rest = binds.filter((x) => x !== b);
+    const ws = whole(inner);
+    // The copies read as one row, last, the field named; with the
+    // otherwise, if there is one, among them.
+    // Each copy says the same, so its rows are the first's, row for row:
+    // each of those stands for its place in every copy.
+    const each = [...ws.map((a) => rows(put(pat, b, { v: b }), binds, a.body, a.id)), ...(ws.length && inner.otherwise ? [rows(put(pat, b, { v: b }), binds, inner.otherwise, inner.id)] : [])];
+    const copies: Row[] = each.length ? each[0].map((r, i) => ({ ...r, copies: [...(r.copies ?? []), ...each.slice(1).flatMap((c) => [c[i].at, ...(c[i].copies ?? [])])] })) : [];
     return [
-      ...inner.arms.flatMap((a) => {
+      ...inner.arms.filter((a) => !ws.some((w) => w.id === a)).flatMap((a) => {
         const arm = code.nodes[a] as NodeOf<"arm">;
-        return rows(put(pat, b, arm.value ? litPat(code, arm.value) : { con: arm.variant, args: arm.binds.map((x) => ({ v: x })) }), [...rest, ...arm.binds], arm.body, a);
+        const q: Pat = arm.value ? litPat(code, arm.value) : { con: arm.variant, args: arm.binds.map((x) => ({ v: x })) };
+        const whole = reads(code, arm.body, [b]);
+        return rows(put(pat, b, whole ? { as: b, p: q } : q), [...(whole ? binds : rest), ...arm.binds], arm.body, a);
       }),
-      ...(inner.otherwise ? (reads(code, inner.otherwise, [b]) ? rows(put(pat, b, { v: b }), binds, inner.otherwise, inner.id) : rows(put(pat, b, { any: true }), rest, inner.otherwise, inner.id)) : []),
+      ...copies,
+      ...(inner.otherwise && !ws.length ? (reads(code, inner.otherwise, [b]) ? rows(put(pat, b, { v: b }), binds, inner.otherwise, inner.id) : rows(put(pat, b, { any: true }), rest, inner.otherwise, inner.id)) : []),
     ];
   };
   return m.arms.flatMap((a) => {
@@ -65,14 +92,29 @@ export function matchRows(code: Code, info: Info | null, m: NodeOf<"match">): Ro
 }
 
 // Are these rows more than the match's own cases?
-export const flattened = (rows: Row[]) => rows.some((r) => "con" in r.pat && r.pat.args.some((a) => !("v" in a)));
+export const flattened = (rows: Row[]) => rows.some((r) => "as" in r.pat || ("con" in r.pat && r.pat.args.some((a) => !("v" in a))));
 
 // Could a value match both? Rows of one decision tree can't, but for a
 // row that takes anything somewhere (an otherwise read as _ or a name).
 const overlap = (p: Pat, q: Pat): boolean =>
-  "any" in p || "v" in p || "any" in q || "v" in q ? true
+  "as" in p ? overlap(p.p, q) : "as" in q ? overlap(p, q.p)
+  : "any" in p || "v" in p || "any" in q || "v" in q ? true
   : "lit" in p || "lit" in q ? "lit" in p && "lit" in q && p.text === q.text
   : p.con === q.con && p.args.every((a, i) => overlap(a, q.args[i]));
+
+// The values both take, as a pattern; null when none.
+const meet = (p: Pat, q: Pat): Pat | null =>
+  "as" in p ? meet(p.p, q) : "as" in q ? meet(p, q.p)
+  : "any" in p || "v" in p ? q : "any" in q || "v" in q ? p
+  : "lit" in p || "lit" in q ? ("lit" in p && "lit" in q && p.text === q.text ? p : null)
+  : p.con !== q.con ? null
+  : (() => { const args = p.args.map((a, i) => meet(a, q.args[i])); return args.every(Boolean) ? { con: p.con, args: args as Pat[] } : null; })();
+// Does p take every value q does?
+const takes = (p: Pat, q: Pat): boolean =>
+  "as" in p ? takes(p.p, q) : "as" in q ? takes(p, q.p)
+  : "any" in p || "v" in p ? true : "any" in q || "v" in q ? false
+  : "lit" in p ? "lit" in q && p.text === q.text : "lit" in q ? false
+  : p.con === q.con && p.args.every((a, i) => takes(a, q.args[i]));
 
 // What an expression says, without its ids: two copies of ‹bad line›(n)
 // are the same.
@@ -97,7 +139,11 @@ export function sharedOtherwise(code: Code, all: Row[], otherwise?: Id): { rows:
   for (const r of all) if (!open(r) && !reads(code, r.body, r.binds)) { const k = shape(code, r.body); groups.set(k, [...(groups.get(k) ?? []), r]); }
   const same = otherwise ? groups.get(shape(code, otherwise)) : [...groups.values()].filter((g) => g.length > 1).sort((a, b) => b.length - a.length)[0];
   const kept = same ? all.filter((r) => !same.includes(r)) : all;
-  if (!same || kept.some((k) => same.some((r) => all.indexOf(r) < all.indexOf(k) && overlap(k.pat, r.pat)))) return { rows: all, otherwise, folded: [] };
+  // What they share some kept row before already takes: add(into, a,
+  // number(0)) after add(into, number(_), b) is fine with
+  // add(into, number(x), number(y)) first.
+  const caught = (k: Row, r: Row) => { const both = meet(k.pat, r.pat); return !!both && kept.slice(0, kept.indexOf(k)).some((j) => takes(j.pat, both)); };
+  if (!same || kept.some((k) => same.some((r) => all.indexOf(r) < all.indexOf(k) && overlap(k.pat, r.pat) && !caught(k, r)))) return { rows: all, otherwise, folded: [] };
   return { rows: kept, otherwise: otherwise ?? same[0].body, folded: same };
 }
 
@@ -111,6 +157,7 @@ export function patternWith<T>(p: Pat, name: (id: Id) => T, con: (id: Id) => T, 
     if ("v" in q) return [name(q.v)];
     if ("any" in q) return [punct("_")];
     if ("lit" in q) return lit ? lit(q.lit) : [punct(q.text)];
+    if ("as" in q) return [...parts(q.p), punct(" as "), name(q.as)];
     const items: Pat[] = [];
     let end: Pat = q;
     while ("con" in end && end.con === CONS) { items.push(end.args[0]); end = end.args[1]; }
@@ -135,6 +182,13 @@ export function sharedPlaces(code: Code, info: Info | null, m: NodeOf<"match">):
   return m.otherwise ? [...rows, { parent: m.id, slot: "otherwise", binds: [] }] : rows;
 }
 
+// A row an otherwise's copies stand for (`copies`): each copy's place,
+// with the case's own names, none of which they read.
+export function copyPlaces(code: Code, info: Info | null, m: NodeOf<"match">): Place[][] {
+  const place = (at: Id): Place => (code.nodes[at].kind === "arm" ? { parent: at, slot: "body", binds: (code.nodes[at] as NodeOf<"arm">).binds } : { parent: at, slot: "otherwise", binds: [] });
+  return matchRows(code, info, m).filter((r) => r.copies?.length).map((r) => [place(r.at), ...r.copies!.map(place)]);
+}
+
 // The copies are one row: an edit that changes one of them, leaving it
 // reading none of its own names, is made to all of them (each a fresh
 // copy of the edited one), in the same step. Gives back the copies' ids,
@@ -157,13 +211,17 @@ export function sameEverywhere(before: Code, after: Code, info: Info | null): { 
   const copied: [Id, Id][] = [];
   for (const m of matches) {
     if (inner.has(m)) continue;
-    const ps = sharedPlaces(before, info, before.nodes[m] as NodeOf<"match">);
+    for (const ps of [sharedPlaces(before, info, before.nodes[m] as NodeOf<"match">), ...copyPlaces(before, info, before.nodes[m] as NodeOf<"match">)]) {
     if (ps.length < 2) continue;
     const old = shape(before, inPlace(before, ps[0])!);
     const now = ps.map((p) => inPlace(code, p));
     if (now.some((x) => !x)) continue;
     const edited = ps.filter((p, i) => shape(code, now[i]!) !== old);
     if (edited.length !== 1 || reads(code, inPlace(code, edited[0])!, edited[0].binds)) continue;
+    // Nor names only the edited copy has, a case's around it inside the copy.
+    const named = (p: Place) => { const out: Id[] = []; for (let x: Id | undefined = p.parent; x && x !== m; x = up(x)) { const n = code.nodes[x]; if (n?.kind === "arm") out.push(...n.binds); } return out; };
+    const own = named(edited[0]);
+    if (ps.some((p) => p !== edited[0] && reads(code, inPlace(code, edited[0])!, own.filter((b) => !named(p).includes(b))))) continue;
     const from = inPlace(code, edited[0])!, ids = subtree(code, from);
     const nodes = copyNodes(code.nodes);
     for (const p of ps) {
@@ -175,6 +233,7 @@ export function sameEverywhere(before: Code, after: Code, info: Info | null): { 
     }
     code = { nodes, defs: code.defs };
     places += ps.length;
+    }
   }
   return { code, copied, places };
 }

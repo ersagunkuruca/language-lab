@@ -133,10 +133,32 @@ decision order.
   one row left puts its body back as the outer arm's body. That is the
   inverse of match deeper, and it is drawn as the pattern losing a level.
 
+## `as` names (L294, 2026-11-28)
+
+A field can be taken apart and read whole in the same row:
+`cons(0, [y, ..more] as ys) → y + length(ys)`. The MCP text reads
+`pattern as name` and writes a step naming the field. The view draws
+`as` in the one row whose body reads the field.
+
+A row that reads a field whole, beside rows that take it apart, is the
+other common case. machine's `simplified` has
+`add(into, number(x), number(y))` and then `add(into, a, number(0))`. The
+tree keeps the second row as copies, one in each other case of `a`
+(`register`, `named`). Copies that read the field and none of their own
+parts, and that say the same thing, are drawn as one row naming the
+field, after its siblings. Editing that row edits every copy, as the
+shared otherwise does. When a row's body reads the field and none of its
+parts, and it isn't such a copy (`cons(_, _)` only saying the list isn't
+empty), the inner match stays drawn as a match.
+
+Folding rows into `otherwise` used to be refused when a row left after
+them could catch the same values. It is now allowed when an earlier row
+already takes those values: `add(into, a, number(0))` after
+`add(into, number(_), b) → instruction` is fine, because
+`add(into, number(x), number(y))` comes first.
+
 ## Not in the first step
 
-- `as` names (`cons(date, rest as ‹after date›)`), for a field that is both
-  taken apart and read whole. No example needs it yet.
 - Literal patterns (`"+"`, `0`). calc's `symbol(m) → m = "+"` would read
   better as `symbol("+")`, but that means flattening an `if` on equality.
   That is a different view, after this one.
