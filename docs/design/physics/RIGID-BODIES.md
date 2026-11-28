@@ -209,6 +209,47 @@ the right side jammed there and slipped under the hand. Now the test
 holds the hand just above the sill, and a side lets go of every stone
 while the hand is near it (`not handed`), so the pile goes off the end.
 
+## G19e, measured (2026-11-28)
+
+A copy of rain-page made a benchmark (the driver
+`/mnt/project-files/game-rain/g19e-bench.ts`; no new example): n stones
+laid on the sill in rows of 50, 30 ticks to settle, then 60 ticks of
+`hail ticked`, or 60 of one phase alone, compiled to a JavaScript module
+(`ters compile`) and run by Node here. Per tick, less the start:
+
+| stones | tick | neighbours (broad) | touches of (narrow) | solved (ten passes) |
+|---|---|---|---|---|
+| 200 | 9 ms | 2 ms | 4 ms | 11 ms |
+| 1,000 | 72 ms | 1 ms | 8 ms | 40 ms |
+| 5,000 | 266 ms | 10 ms | 22 ms | 36 ms |
+
+(At 5,000 the upper rows are still falling after 30 ticks, so about as
+many stones touch as at 1,000; the tick's own touches look up last
+tick's impulses, which the phase alone doesn't.) A profile of the 5,000
+run: 34% collecting garbage; of the rest, finding the touches 53%, the
+solver 43%, everything else 4%.
+
+What it says for G20:
+
+- The broad phase is not the cost: the grid finds 5,000 stones'
+  neighbours in 10 ms.
+- The solver makes a `Touch` and a `Solving` record, and a stone, for
+  every touch in every pass, and the garbage they leave is a third of
+  the time. Its arrays are not written in place: `replace at` is the
+  Array's constant replace (Baker's shallow binding), a new version per
+  write. Records updated where nothing else holds them (owned-records.ts)
+  don't reach these, which go through a fold's accumulator.
+- A 16 ms frame holds about 200 stones on the CPU as compiled now. A
+  parallel solver on the GPU (Jacobi, or graph colouring) is G20's
+  question; so is whether the narrow phase, a map over pairs, goes to
+  the GPU as the drops' slide does.
+
+On the way: `ters compile` of a main that counts neighbours in a fold
+crashed ("no runtime function neighbours.grid"): asking a fold's arm
+what may fail looked the grid up in a runtime table it isn't in. The
+grid gives up where it can't take the places, so scalar.ts now counts it
+as one that may fail (gpu-grid.test).
+
 ## What stays out
 
 - **3D bodies.** rain-page is flat.
