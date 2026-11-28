@@ -98,6 +98,11 @@ import { HeldMap, HeldSet, originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM, writtenA
 
 const ZIPPED = PRELUDE_DEFS["zipped"];
 const BAKED_BYTES = PRELUDE_DEFS["baked bytes"];
+// A bake's words, read directly by compiled JavaScript (G16b3b): its
+// world op by the prelude's reader.
+const BAKED_WORDS = new Map<string, "bakedInt32" | "bakedFloat32" | "bakedFloat64">([
+  [PRELUDE_DEFS["baked int32 at"], "bakedInt32"], [PRELUDE_DEFS["baked float32 at"], "bakedFloat32"], [PRELUDE_DEFS["baked float64 at"], "bakedFloat64"],
+]);
 import { ownEffects, parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, pureTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
@@ -2045,6 +2050,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
           return { k: "world", op: "bakedBytes", aborts: false, args: args(), t };
         }
+        // Its words: a DataView's read, where the prelude's reader adds
+        // four bytes and looks up a power of two (G16b3b).
+        const word = opts.baked ? BAKED_WORDS.get(originalOf(target)) : undefined;
+        if (word && n.args.length === 2) return { k: "world", op: word, aborts: false, args: args(), t: word === "bakedInt32" ? "int" : "f64" };
         // An environment variable (L253): the world's, as the evaluator
         // answers it, an Optional Text.
         if ((opts.host || opts.handlers) && target === ENV_OP) {
