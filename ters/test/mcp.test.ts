@@ -131,6 +131,41 @@ test("pin holds a definition's type, kept in the folder's signatures.json, so a 
   assert.ok(existsSync(join(dir, "signatures.json")));
 });
 
+test("pin at a type written: the body is checked at its inputs' types, a count at Int counted and a field read of the record pinned (L296)", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pins");
+  mkdirSync(dir);
+  writeFileSync(join(dir, "code.json"), '{"nodes":{},"defs":[]}');
+  text("open", { path: dir });
+  // Two types with a field named start: the pin says which one m is.
+  text("define", { name: "Grammar", kind: "type", first: "grammar(start: Text)" });
+  text("define", { name: "Automaton", kind: "type", first: "automaton(start: Int)" });
+  text("define", { name: "first state", kind: "function", params: ["m"] });
+  assert.equal(text("pin", { at: "first state", type: "(Automaton) -> Int" }), "ok: first state : (Automaton) -> Int");
+  text("replace", { at: "first state", find: "□", text: "m.start + 1" });
+  // A count down with nothing Int-only in it: generic, so it might not finish.
+  text("define", { name: "loose", kind: "function", params: ["k"] });
+  text("replace", { at: "loose", find: "□", text: "if k ≤ 0 then 0 else loose(k - 1)" });
+  assert.match(text("defs"), /  loose : \(a\) -\[Diverge\]-> b$/m);
+  // Pinned at Int, it is counted, so it ends.
+  text("define", { name: "down", kind: "function", params: ["k"] });
+  text("pin", { at: "down", type: "(Int) -> Int" });
+  text("replace", { at: "down", find: "□", text: "if k ≤ 0 then 0 else down(k - 1)" });
+  assert.match(text("defs"), /  down : \(Int\) -> Int$/m);
+  // Pinned after its body is written, the same: its input is the pin's
+  // before it is judged.
+  assert.equal(text("pin", { at: "loose", type: "(Int) -> Int" }), "ok: loose : (Int) -> Int");
+  // A small letter is a type variable; a body that breaks the pin is refused.
+  text("define", { name: "same", kind: "function", params: ["x"] });
+  text("pin", { at: "same", type: "(a) -> a" });
+  text("replace", { at: "same", find: "□", text: "x" });
+  assert.match(text("defs"), /  same : \(a\) -> a$/m);
+  assert.match(call("replace", { at: "down", find: "then 0", text: "then \"none\"" }).text, /down is pinned to \(Int\) -> Int/);
+  assert.match(call("pin", { at: "same", type: "(List Bogus) -> a" }).text, /no type named Bogus/);
+});
+
 test("types with fields and cases, an interface with ports, a way at a cost, and `by its ways` are written through the MCP (I183)", async () => {
   const { cpSync, mkdtempSync, writeFileSync } = await import("node:fs");
   const { join } = await import("node:path");
