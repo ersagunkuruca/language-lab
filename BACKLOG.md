@@ -194,6 +194,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L296 | A parameter's type in text, or a count the checker reads at a generic number: a count down with nothing Int-only in its body stays generic, so the counting check (L46, Int only) leaves it `Diverge`; chomsky's driver writes `quotient(rounds, 1) < 0` and deletes it, four times. The same cause makes `m.start` pick another record type's `start` field. Built as a pin written in the MCP's text plus pins typing a body's inputs (#3585, #3593), reverted 2026-11-28 by Ersagun ("revert it until we have a clearer view"); parked until he picks a way. One proposal: pin by narrowing the inferred type (a ↦ Int) rather than writing one | [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) "Findings" (L293f) | P2 | M | ⏸ |
 
 ### Ersagun's current asks
 
