@@ -7939,6 +7939,11 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
 // and no answer the flag $none, as in WGSL and js-scalar.ts. `of` is the
 // items written out, k of them (`array.of3.a0`).
 const SHADER_ARRAYS: Record<string, Omit<RtFn, "name">> = {
+  // A grid's cell, its count and its k-th item (G15b2, scalar.ts
+  // shaderFold): a shader's alone (wgsl.ts), never a module's.
+  "array.cell": { params: [["a", "array"]], result: "i32", locals: [], uses: [], body: "unreachable" },
+  "array.cellCount": { params: [["a", "array"], ["c", "i32"]], result: "i32", locals: [], uses: [], body: "unreachable" },
+  "array.cellItem": { params: [["a", "array"], ["c", "i32"], ["k", "i32"]], result: "i32", locals: [], uses: [], body: "unreachable" },
   "array.size32": {
     params: [["a", "array"]], result: "i32", locals: [], uses: [],
     body: `

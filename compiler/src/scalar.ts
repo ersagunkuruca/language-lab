@@ -78,7 +78,7 @@ import { cleanBody, live, NotWritten, roundedKey, writtenExpr, writtenSteps, typ
 import { tornRoots } from "./torn.ts";
 import { solveMode, determinism, analyzer, wrapperOf, type Plan as ModePlanT } from "../../ters/src/lang/modes.ts";
 import { inlineLists } from "./inline-lets.ts";
-import { fuseSteps } from "./fuse-steps.ts";
+import { fuseSteps, REACHES } from "./fuse-steps.ts";
 import { shareFoldItems } from "./fold-items.ts";
 import { finiteChecks } from "./finite-checks.ts";
 import { envSet } from "./zero-parts.ts";
@@ -5233,27 +5233,69 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (cons.binds[1] && refsIn(cons.body).includes(cons.binds[1]!)) throw new Refused("folds over a list reading the rest of it as a list (a shader holds a list as an array)");
     const free = [...new Set(arms.flatMap((a) => refsIn(a.body)))].filter((b) => env.has(b));
     const caps = free.map((b) => f.locals[env.get(b)!]);
-    const params: LType[] = [array, "int32", result, ...caps];
+    // The items that reach a place (G15b2, LIGHTS.md): a fold over within
+    // reach's items, made one with a test of each (fuse-steps.ts), may
+    // read only those filed in here's cell of a grid of the items by place
+    // (gpu-draws.ts builds it), in order; every item where there is none.
+    const grid = reachGrid(cons, env, array);
+    const params: LType[] = [array, ...(grid ? ["int32" as LType] : []), "int32", result, ...caps];
+    const at = grid ? 1 : 0, left0 = 1 + at, acc = 2 + at, from = 3 + at;
     const g: SFunc = { def: cons.id, name: `${f.name}.fold.items`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
     const gi = funcs.push(g) - 1;
-    let inner = new Map(free.map((b, j) => [b, 3 + j]));
+    let inner = new Map(free.map((b, j) => [b, from + j]));
     const k = g.locals.push("int32") - 1, x = g.locals.push(array.item) - 1;
     if (cons.binds[0]) inner = new Map(inner).set(cons.binds[0]!, x);
-    if (cons.results[1]) inner = new Map(inner).set(cons.results[1]!, 2);
-    const a: SExpr = { k: "local", i: 0 }, left: SExpr = { k: "local", i: 1 };
+    if (cons.results[1]) inner = new Map(inner).set(cons.results[1]!, acc);
+    const a: SExpr = { k: "local", i: 0 }, left: SExpr = { k: "local", i: left0 }, cell: SExpr = { k: "local", i: 1 };
+    const position: SExpr = grid ? { k: "rt", fn: `array.cellItem.a${array.index}`, args: [a, cell, { k: "local", i: k }] } : { k: "local", i: k };
     g.body = {
-      k: "if", t: result, cond: { k: "op", op: "ieq", args: [left, { k: "int", v: 0n }] }, then: { k: "local", i: 2 },
+      k: "if", t: result, cond: { k: "op", op: "ieq", args: [left, { k: "int", v: 0n }] }, then: { k: "local", i: acc },
       else: {
         k: "let", i: k, value: { k: "op", op: "isub", args: [left, { k: "int", v: 1n }] },
         body: {
-          k: "let", i: x, value: { k: "rt", fn: `array.get.a${array.index}`, args: [a, { k: "local", i: k }] },
-          body: { k: "call", fn: gi, args: [a, { k: "local", i: k }, expr(cons.body, inner, g, false), ...free.map((_, j): SExpr => ({ k: "local", i: 3 + j }))], tail: true },
+          k: "let", i: x, value: { k: "rt", fn: `array.get.a${array.index}`, args: [a, position] },
+          body: { k: "call", fn: gi, args: [a, ...(grid ? [cell] : []), { k: "local", i: k }, expr(cons.body, inner, g, false), ...free.map((_, j): SExpr => ({ k: "local", i: from + j }))], tail: true },
         },
       },
     };
     if (fails(g.body, funcs)) g.partial = true;
     const al = f.locals.push(array) - 1, xs: SExpr = { k: "local", i: al };
-    return { k: "let", i: al, value: expr(n.scrutinee, env, f, false), body: { k: "call", fn: gi, args: [xs, { k: "rt", fn: `array.length.a${array.index}`, args: [xs] }, expr(nil.body, env, f, false), ...free.map((b): SExpr => ({ k: "local", i: env.get(b)! }))], tail } };
+    const start = (count: SExpr, c?: SExpr): SExpr => ({ k: "call", fn: gi, args: [xs, ...(c ? [c] : []), count, expr(nil.body, env, f, false), ...free.map((b): SExpr => ({ k: "local", i: env.get(b)! }))], tail });
+    let body: SExpr;
+    if (grid) {
+      const cl = f.locals.push("int32") - 1, c: SExpr = { k: "local", i: cl };
+      body = { k: "let", i: cl, value: { k: "rt", fn: `array.cell.a${array.index}`, args: [xs, { k: "int", v: BigInt(grid.place) }, { k: "int", v: BigInt(grid.reach) }, ...grid.here(f)] }, body: start({ k: "rt", fn: `array.cellCount.a${array.index}`, args: [xs, c] }, c) };
+    } else body = start({ k: "rt", fn: `array.length.a${array.index}`, args: [xs] });
+    return { k: "let", i: al, value: expr(n.scrutinee, env, f, false), body };
+  }
+  // A cons arm testing each item with `reaches(item, place, reach, here)`
+  // (fuse-steps.ts guarded) whose place is one Float64 or a record of two
+  // and whose place and reach are functions of the item alone: the
+  // functions of an item giving its place and its reach, and here's
+  // leaves; else null, and the fold reads every item.
+  function reachGrid(cons: NodeOf<"arm">, env: Map<Id, number>, array: AType): { place: number; reach: number; here: (f: SFunc) => SExpr[] } | null {
+    const m = code.nodes[cons.body];
+    if (!REACHES || m?.kind !== "match") return null;
+    const c = code.nodes[m.scrutinee];
+    if (!isCall(c) || c.args.length !== 4) return null;
+    const fn = code.nodes[c.fn];
+    if (fn?.kind !== "ref" || fn.target !== REACHES) return null;
+    const [, place, reach, here] = c.args;
+    const ht = stype(zonk(here));
+    const dims = ht === "f64" ? 1 : ht && isRecord(ht) && ht.fields.length === 2 && ht.fields.every((x) => x.t === "f64") ? 2 : 0;
+    if (!dims || !env.has((code.nodes[here] as { target?: Id }).target ?? "") && code.nodes[here]?.kind !== "lit") return null;
+    // Each as a function of the item: the function given, applied to it.
+    const of = (g: Id, which: string, res: LType): number | null => {
+      const t = stype(zonk(g));
+      if (!t || !isFn(t)) return null;
+      const h: SFunc = { def: g, name: `reach grid ${which}`, params: [array.item], result: res, locals: [array.item], body: { k: "num", v: 0 }, spends: false, budgeted: false };
+      try { h.body = { k: "apply", fn: expr(g, new Map(), h, false), t, args: [{ k: "local", i: 0 }], tail: false, tmp: h.locals.push(t) - 1 }; }
+      catch (e) { if (e instanceof Refused) return null; throw e; }
+      return funcs.push(h) - 1;
+    };
+    const p = of(place, "place", ht as LType), r = of(reach, "reach", "f64");
+    if (p === null || r === null) return null;
+    return { place: p, reach: r, here: (f) => { const e = expr(here, env, f, false); return dims === 1 ? [e] : [0, 1].map((i): SExpr => ({ k: "get", rec: e, t: ht as RType, i })); } };
   }
   // A fold over `items of array(a)` whose arms don't use the rest of the
   // list itself, as `characters` above: no list and no stack, the items

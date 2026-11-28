@@ -131,8 +131,21 @@ Ersagun measures on a real GPU later, as with G13d.
   against 417 and 40 without them:
   every pixel testing every firefly is most of the frame, which is what
   the grid is for.
-- **G15b2**: the grid, a compute pass, and its `way` entry in the
-  decisions, built only if G15b1's numbers say it pays.
+- **G15b2**: the grid. Built (done): a shader's fold over the items
+  that reach here, where here is one Float64 or a record of two, reads
+  only the indices filed in here's cell (scalar.ts `reachGrid`, wgsl.ts
+  `grids`). gpu-draws.ts writes the cell functions and two compute
+  passes; gpu-frame.ts runs them before the draw, only when the list's
+  items changed. One thread finds where the items' reach spans. Then one
+  thread per cell files the items whose reach, widened by 0.01% and
+  1e-7, overlaps that cell, in order, up to 32. A cell with more, a list
+  under 32 items, or a place that isn't finite reads every item, so the
+  sum is the same, in the same order (gpu-grid.test: the same pixels).
+  The grid has √n cells a side, at most 64, or n in a line. rain-page on
+  SwiftShader: 442 ms a frame at 1x and 56 ms at 4x, against 1,254 and
+  881 forward, and 417 and 40 with no fireflies.
+  **G15b2b**: its `way` entry in the decisions, so a person may hold a
+  fold to every item.
 - **G15c**: shadow maps, waiting for a page with depth.
 
 ## What stays out

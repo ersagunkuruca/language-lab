@@ -35,10 +35,11 @@ A thousand fireflies drift behind the glass, a list made each tick, each
 a small light with its own reach. The glass sums the light of those
 within reach of each place (`within reach`, G15b), which the compiler
 makes one loop over the fireflies, each tested where it is, so no list of
-those that reach is made on the GPU. Every pixel still tests every
-firefly: on SwiftShader a frame takes 1.25 s at 1x, against 0.42 s
-without them. A grid of the fireflies by place, so a pixel tests only
-its own cell's, is G15b2.
+those that reach is made on the GPU. A grid of the fireflies by place,
+built on the GPU each tick, lets a pixel test only those filed in its
+own cell (G15b2). On SwiftShader a frame takes 0.44 s at 1x, against
+1.25 s with every pixel testing every firefly and 0.42 s with no
+fireflies.
 
 Credits: random numbers by the ZX81's generator (Sinclair Research, 1981);
 a fixed step after Glenn Fiedler's Fix Your Timestep (2004).

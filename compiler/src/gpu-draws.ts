@@ -185,6 +185,10 @@ export const cullable = (ir: CoreIR): Id[] => {
   return (ir.drawSites ?? []).filter((d) => sites[d.site]?.cull).map((d) => d.at);
 };
 
+// The items a grid's cell holds the indices of (G15b2): a cell with more
+// reads every item.
+export const GRID_CAP = 32;
+
 function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[], whole = false, unculled = false): DrawSite {
   const zonk = (x: Id) => { const y = ir.info.typeOf.get(x); return y && ir.info.subst.zonk(y); };
   const capTypes = caps.map(zonk);
@@ -287,7 +291,88 @@ function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]
 fn lab_list${r}_len() -> i32 { return i32(lab_list${r}[0]); }
 fn lab_list${r}_at(i: i32) -> ${wgslType(item)} { return ${rebuilt(item, structs, fromWord((k) => `lab_list${r}[1u + u32(i) * ${n}u + ${k}u]`))}; }`;
   }).join("");
-  const readLists = lists.map((_, r) => ` _ = lab_list${r}[0];`).join("");
+  // A grid over a list's items by place (G15b2, LIGHTS.md), where a fold
+  // over the items that reach here reads only those filed in here's cell
+  // (wgsl.ts grids): its header (columns, rows, the low corner, cells per
+  // unit, as words 0 to 5), then each cell's count and the first GRID_CAP
+  // items' indices, in order. A cell holding more, or no cell at all (no
+  // columns: few items, or places not finite), reads every item. Built
+  // on the GPU when the list changes: one thread finds where the items'
+  // reach spans, then a thread a cell files the items whose reach, a
+  // little widened, overlaps it.
+  const gridded = [...(sh.grids ?? [])].filter(([, g]) => g.place && g.reach);
+  const head = (r: number) => `lab_gridr${r}`;
+  const gridding = [...(sh.grids ?? [])].map(([r, g]) => {
+    const ok = !!(g.place && g.reach), two = g.dims === 2, C = GRID_CAP + 1, b = head(r);
+    const word = (k: number) => `bitcast<f32>(${b}[${k}u])`;
+    const cellOf = (x: string, j: number) => `clamp(i32(floor((${x} - ${word(2 + j)}) * ${word(4 + j)})), 0i, i32(${b}[${j}u]) - 1i)`;
+    return `
+@group(0) @binding(${24 + r}) var<storage, read> ${b}: array<u32>;
+fn lab_grid${r}_cell(x: f32${two ? ", y: f32" : ""}) -> i32 {
+  ${ok ? `if (${b}[0] == 0u) { return -1i; }
+  return ${two ? `${cellOf("y", 1)} * i32(${b}[0]) + ` : ""}${cellOf("x", 0)};` : "return -1i;"}
+}
+fn lab_grid${r}_count(c: i32) -> i32 {
+  if (c < 0i) { return lab_list${r}_len(); }
+  let n = ${b}[8u + u32(c) * ${C}u];
+  if (n > ${GRID_CAP}u) { return lab_list${r}_len(); }
+  return i32(n);
+}
+fn lab_grid${r}_item(c: i32, k: i32) -> i32 {
+  if (c < 0i) { return k; }
+  if (${b}[8u + u32(c) * ${C}u] > ${GRID_CAP}u) { return k; }
+  return i32(${b}[8u + u32(c) * ${C}u + 1u + u32(k)]);
+}`;
+  }).join("");
+  const building = () => gridded.map(([r, g]) => {
+    const two = g.dims === 2, C = GRID_CAP + 1, w = `lab_grid${r}`, v = two ? "vec2f" : "f32";
+    const placeOf = `${two ? `let q = ${g.place}(it); let p = vec2f(${leafAt("q", g.at, [0], structs)}, ${leafAt("q", g.at, [1], structs)});` : `let p = ${g.place}(it);`} let rr = abs(${g.reach}(it)) * 1.0001 + 1.0e-7;`;
+    const fin = (x: string) => (two ? `all(${x} == ${x}) && all(abs(${x}) < vec2f(3.0e38))` : `${x} == ${x} && abs(${x}) < 3.0e38`);
+    return `
+@group(0) @binding(${24 + r}) var<storage, read_write> ${w}: array<u32>;
+@compute @workgroup_size(1) fn ${w}_bounds() {
+${start}  let n = lab_list${r}_len();
+  var lo = ${v}(3.0e38);
+  var hi = ${v}(-3.0e38);
+  var fine = n > 0i;
+  for (var i = 0i; i < n; i++) {
+    let it = lab_list${r}_at(i);
+    ${placeOf}
+    lo = min(lo, p - rr); hi = max(hi, p + rr);
+    if (!(${fin("p - rr")} && ${fin("p + rr")})) { fine = false; }
+  }
+  if (!fine) { ${w}[0] = 0u; return; }
+  let span = max(hi - lo, ${v}(1.0e-30));
+  ${two ? `let scale = vec2f(f32(${w}[0]), f32(${w}[1])) / span;
+  ${w}[2] = bitcast<u32>(lo.x); ${w}[3] = bitcast<u32>(lo.y); ${w}[4] = bitcast<u32>(scale.x); ${w}[5] = bitcast<u32>(scale.y);` : `let scale = f32(${w}[0]) / span;
+  ${w}[2] = bitcast<u32>(lo); ${w}[3] = 0u; ${w}[4] = bitcast<u32>(scale); ${w}[5] = 0u;`}
+}
+@compute @workgroup_size(64) fn ${w}_main(@builtin(global_invocation_id) lab_g: vec3u) {
+${start}  let sx = ${w}[0];
+  let sy = ${w}[1];
+  let c = lab_g.x;
+  if (c >= sx * sy) { return; }
+  let here = vec2i(i32(c % sx), i32(c / sx));
+  let lo = vec2f(bitcast<f32>(${w}[2]), bitcast<f32>(${w}[3]));
+  let scale = vec2f(bitcast<f32>(${w}[4]), bitcast<f32>(${w}[5]));
+  let last = vec2i(i32(sx) - 1i, i32(sy) - 1i);
+  let base = 8u + c * ${C}u;
+  let n = lab_list${r}_len();
+  var count = 0u;
+  for (var i = 0i; i < n; i++) {
+    let it = lab_list${r}_at(i);
+    ${placeOf}
+    let a = clamp(vec2i(floor((${two ? "p" : "vec2f(p, 0.0)"} - rr - lo) * scale)), vec2i(0i), last);
+    let b = clamp(vec2i(floor((${two ? "p" : "vec2f(p, 0.0)"} + rr - lo) * scale)), vec2i(0i), last);
+    if (all(a <= here) && all(here <= b)) {
+      if (count < ${GRID_CAP}u) { ${w}[base + 1u + count] = u32(i); }
+      count++;
+    }
+  }
+  ${w}[base] = count;
+}`;
+  }).join("");
+  const readLists = lists.map((_, r) => ` _ = lab_list${r}[0];`).join("") + [...(sh.grids ?? [])].map(([r]) => ` _ = ${head(r)}[0];`).join("");
   if (sh.wgsl.includes("lab_sampled(") && !textures.length) throw new Error("samples a texture it doesn't capture (sampled reads a pass's target the draw's function was written beside)");
   // Texture t at a place across it, between its four nearest texels (the
   // sampler's), at its full size (level 0), so either stage may read it.
@@ -346,7 +431,7 @@ ${gaveNone ? `    if (${gaveNone}) { b = 63u; }
   const wgsl = `${sh.wgsl}
 @group(0) @binding(0) var<uniform> lab_caps: array<vec4u, ${Math.max(1, Math.ceil(words / 4))}>;
 @group(0) @binding(1) var<storage, read> lab_inst: array<u32>;
-@group(0) @binding(2) var<storage, read> lab_corner: array<u32>;${listing}${kept ? `\noverride lab_iw: u32 = ${nI}u;${instance.map((_, j) => `\noverride lab_i${j}: u32 = ${j}u;`).join("")}` : ""}${sampling}
+@group(0) @binding(2) var<storage, read> lab_corner: array<u32>;${listing}${gridding}${kept ? `\noverride lab_iw: u32 = ${nI}u;${instance.map((_, j) => `\noverride lab_i${j}: u32 = ${j}u;`).join("")}` : ""}${sampling}
 struct LabPlaced {
   @builtin(position) position: vec4f,
 ${vary.join("\n")}
@@ -364,7 +449,7 @@ ${gaveNone ? `  if (${gaveNone}) { var nan = 0x7fc00000u; o.position = vec4f(bit
 @fragment fn lab_fs(o: LabPlaced) -> @location(0) vec4f {
 ${lists.length ? `  // Every Array in the layout, read or not.\n ${readLists}\n` : ""}${textures.length ? `  // The sampler and every texture in the layout, read or not.\n  _ = lab_sampler;${textures.map((_, k) => ` _ = lab_tex${k};`).join("")}\n` : ""}${start}  let k = ${fEntry}(${[v, ...capsWgsl].join(", ")});
 ${fuel || none ? `  if (${[fuel ? "lab_fuel < 0.0" : "", none ? "lab_none" : ""].filter(Boolean).join(" || ")}) { discard; }\n` : ""}  return vec4f(${k[0]}, ${k[1]}, ${k[2]}, ${colour === 4 ? k[3] : "1.0"});
-}${culling}
+}${culling}${building()}
 `;
-  return { wgsl, caps: capLeaves as Leaf[][], instance, corner, colour, ...(textures.length ? { textures } : {}), ...(kept ? { kept } : {}), ...(cull ? { cull: true as const } : {}), ...(lists.length ? { lists: lists.map((cap, r) => ({ cap, leaves: listLeaves[r]! })) } : {}) };
+  return { wgsl, caps: capLeaves as Leaf[][], instance, corner, colour, ...(textures.length ? { textures } : {}), ...(kept ? { kept } : {}), ...(cull ? { cull: true as const } : {}), ...(lists.length ? { lists: lists.map((cap, r) => ({ cap, leaves: listLeaves[r]! })) } : {}), ...(gridded.length ? { grids: gridded.map(([r, g]) => ({ list: r, dims: g.dims, cap: GRID_CAP })) } : {}) };
 }
