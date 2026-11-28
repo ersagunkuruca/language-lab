@@ -351,9 +351,9 @@ test("rain-page's drops stay on the GPU between ticks, slid by the kernel and dr
     assert.ok([12, all + steps].includes(kept.reads[0]), kept.reads.join(" "));
     const first = kept.log.indexOf(-12), since = kept.log.slice(first);
     // Before it, the frames drew ordinary lists of drops, sending only the
-    // 3 leaves a drop's vertex reads, not all 5 (G13c); the kernel was
-    // sent all 5.
-    assert.deepEqual([...new Set(kept.log.slice(0, first).filter((n) => n >= steps))].sort(), [drops * 3 * 4, all], kept.log.join(" "));
+    // 4 leaves a drop's vertex reads (where, how big, and how fast, for a
+    // running drop's tail), not all 5 (G13c); the kernel was sent all 5.
+    assert.deepEqual([...new Set(kept.log.slice(0, first).filter((n) => n >= steps))].sort(), [drops * 4 * 4, all], kept.log.join(" "));
     assert.deepEqual(since.filter((n) => n >= steps), [], kept.log.join(" "));
     // Held on the CPU: each run brings the drops back, and frames send them.
     assert.ok(onCpu.reads.every((n) => n === all + steps), onCpu.reads.join(" "));

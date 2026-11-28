@@ -1,8 +1,12 @@
 # rain-page: Rain
 
-Rain on the greenhouse glass at night: 20,000 drops sliding down it, the
-greenhouse dark behind with three lamps glowing. Drag across the glass to wipe
-the drops away; new ones run in from the top. Closer looks at the glass's
+Rain on the greenhouse glass at night: 20,000 drops on it, the
+greenhouse dark behind with three lamps glowing. Most drops are small
+beads that cling where they strike; one in thirty-two is big and runs
+down, now and then catching, drawn long with its tail above it. Each
+drop is a small lens: the lamps' light seen through it from the side
+away from them, a glint, a darker rim. Drag across the glass to wipe the
+drops away; the rain strikes the glass again elsewhere. Closer looks at the glass's
 middle two, then four times as close, then at the whole glass again; at
 four times most drops are outside the picture, which is what culling
 (G14) skips.
@@ -12,9 +16,12 @@ Each drop is a record of Float32s, as a graphics card keeps
 them, and each tick is one map over the drops, so the tick can run as a
 compute kernel (G12) on data that never leaves the GPU (G13). The picture
 is one frame with two draws: the glass behind, one quad, and every drop,
-a small square shaded as a bead.
+a small square shaded as a lens.
 
-Every product in a drop's slide is by a power of two, so it is exact. A
+Every product in a drop's slide is by a power of two, so it is exact
+(the drops' sizes too, and where a new one strikes: each of across and
+up two seeds' spots, one halved, added and wrapped, as the generator's
+neighbours fall in rows). A
 GPU may fuse a·b + c into one rounding; with exact products that gives the
 same Float32 as the CPU, so a kernel's drops are the evaluator's.
 
