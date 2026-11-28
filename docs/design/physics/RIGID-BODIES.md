@@ -102,6 +102,45 @@ gap for G20.
   where the time goes (broad phase, narrow phase, solver); whether the
   solver's arrays are written in place.
 
+## G19a, built (2026-11-28)
+
+`Hail` is a field of rain-page's `Pane`: the stones (`Stone`: an id, a
+place, an angle, a velocity, a spin and a radius, in glass heights), the
+impulses each touch kept from last tick (a `Map (Int, Int) Push`, by the
+pair's ids, the frame's sides numbered below zero), and a seed.
+`hail ticked` is the tick: the stones fall and melt (`fallen`), one is
+added every fifth tick while it hails, `touches of` finds the touches
+(`neighbours` within 0.06 for the pairs, then the frame's three sides),
+`solved` warms the stones by last tick's impulses and runs ten `pass`es
+of `applied` over the touches, and `stone moved` integrates.
+
+What the first runs showed:
+
+- Discs on a flat sill roll for ever, since friction at a rolling
+  contact does no work. A pile only came to rest with a drag on the spin
+  (`rolling drag`, 3 a second, Box2D's angular damping), so that went in.
+- A stone that melts off its touch falls one tick before it touches
+  again, so a resting stone shows a speed of up to one tick of gravity
+  (0.025). Speculative touches (G19d) would close that gap.
+- Each pass walks the touches in the order the last pass left them,
+  which reverses them; on every target the same.
+- `replace at` on the stones is the Array's constant replace (Baker's
+  shallow binding, C93c), not a copy. A tick for 110 to 120 stones is 2
+  to 4 ms compiled to JavaScript (a profile: 17% collecting garbage, the
+  rest in `applied` and the records it makes). Melting keeps the pile
+  near 120, so the 200-stone measure moves to G19e, with a pile made for it.
+- `ticked` first built the pane after the hail's tick in one expression,
+  `pane(map(p.drops, …), …, hail ticked(p.hail, p.tick))`. The drops'
+  slide then waited in the call's join closure, and the compiler, which
+  keeps a list on the GPU only when the map's answers go straight into
+  the record, brought the drops back from the GPU every tick, with no
+  word (gpu-resident.test caught it). `ticked` ticks the hail first now;
+  C368 is the compiler's row to follow answers through the closure.
+- The stones' draw is a third draw on the GPU.
+
+Test: rain.test, 30 stones fall, rest on the sill and deep in no other
+stone, the fastest slower than a tick of gravity.
+
 ## What stays out
 
 - **3D bodies.** rain-page is flat.

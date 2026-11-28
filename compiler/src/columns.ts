@@ -28,6 +28,7 @@
 // analysis). An array captured by a closure given to a call stays columns.
 
 import { isFloat32, kids, mapKids, type AType, type CoreIR, type DType, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { gpuMaps } from "./gpu-maps.ts";
 
 type Local = Extract<SExpr, { k: "local" }>;
 const loc = (i: number): Local => ({ k: "local", i });
@@ -210,6 +211,14 @@ export function columns(ir: CoreIR, roots: number[], opts: { plain?: boolean; wh
   return n;
 }
 
+// The sites of a page's maps the GPU may run (gpu-maps.ts), once a program.
+const kernelsOf = new WeakMap<object, Set<number>>();
+function kernelSites(ir: CoreIR): Set<number> {
+  const key = ir.awayMaps ?? ir;
+  let k = kernelsOf.get(key);
+  if (!k) kernelsOf.set(key, k = new Set(Object.keys(gpuMaps(ir)).map(Number)));
+  return k;
+}
 // `deep`: a record in a field a column per leaf (whole, or plain, where
 // such a field is a Float32's or a record of Float64s: C362). `plain`:
 // WebAssembly's columns, with fewer ops than JavaScript's.
@@ -237,6 +246,20 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
   const arrayOf = (e: SExpr | undefined): boolean =>
     !!e && ((e.k === "local" && isArray(fnNow.locals[e.i], a)) || (e.k === "call" && isArray(funcs[e.fn].result, a)) || (e.k === "rt" && ofA(e.fn) && !e.fn.startsWith("array.get") && !e.fn.startsWith("array.length")) || (e.k === "let" && arrayOf(e.body)));
   const worth = rts.get("map.worth");
+  // But an array a page's map may send to the GPU (C369: where the map
+  // has a kernel, gpu-maps.ts) stays rows: run in turn, the map would
+  // never go (rain-page's drops once it hails). One only for the workers
+  // (flock's birds) is columns still, the faster in turn.
+  const sites = (e: SExpr, out: number[] = []): number[] => {
+    if (e.k === "if" && e.cond.k === "rt" && e.cond.fn === "map.worth" && arrayOf(e.cond.args[0])) found(e.then, (x) => { if (x.k === "world" && x.op === "mapAway" && x.args[3]?.k === "num") out.push(x.args[3].v); return false; });
+    kids(e).forEach((k) => sites(k, out));
+    return out;
+  };
+  for (const i of live) if (worth?.has(i)) {
+    fnNow = funcs[i];
+    const sent = sites(funcs[i].body), kernels = sent.length ? kernelSites(ir) : undefined;
+    if (sent.some((s) => kernels!.has(s))) { if (typeof process !== "undefined" && process.env.COLUMNS_WHY) console.error("columns:", r.name, "kept rows, sent to the GPU in", funcs[i].name); return false; }
+  }
   for (const i of live) if (worth?.has(i)) { fnNow = funcs[i]; funcs[i].body = inTurn(funcs[i].body); }
   const now = [...live].some((i) => worth?.has(i)) ? reached(work, roots) : live;
 

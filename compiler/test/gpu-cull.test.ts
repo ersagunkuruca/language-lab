@@ -47,24 +47,28 @@ function still(zoom: number, held?: (lines: string[]) => void): string {
 
 test("rain-page's drop draw has a cull pass, its glass of one instance none (G14b)", () => {
   const html = readFileSync(still(4), "utf8");
-  assert.equal((html.match(/fn lab_cull_main\(/g) ?? []).length, 1);
+  // The drops' and the hail's (G19a).
+  assert.equal((html.match(/fn lab_cull_main\(/g) ?? []).length, 2);
   assert.match(html, /let lab_it = lab_ii; \/\/ drawn/);
 });
 
 // The cull is the compiler's choice, written in the program's decisions
 // (G14b2): a person may hold the draw unculled, every instance drawn.
 test("rain-page's drop draw's culling is a decisions entry, held to none it draws every drop (G14b2)", () => {
-  let entry = "";
+  const entries: string[] = [];
   const html = readFileSync(still(4, (lines) => {
-    const at = lines.findIndex((l) => / place: frame of's draw culling: /.test(l));
-    assert.ok(at >= 0, lines.join("\n"));
-    assert.match(lines[at], /^\S+ place: frame of's draw culling: GPU; among none, GPU; target JavaScript page$/);
-    assert.equal(lines.filter((l) => /draw culling/.test(l)).length, 1);
-    lines[at] = entry = `held ${lines[at].replace(": GPU;", ": none;")}`;
+    // The drops' draw and the hail's (G19a), each held.
+    const at = lines.flatMap((l, k) => (/ place: frame of's draw culling: /.test(l) ? [k] : []));
+    assert.equal(at.length, 2, lines.join("\n"));
+    for (const k of at) {
+      assert.match(lines[k], /^\S+ place: frame of's draw culling: GPU; among none, GPU; target JavaScript page$/);
+      lines[k] = `held ${lines[k].replace(": GPU;", ": none;")}`;
+      entries.push(lines[k]);
+    }
   }), "utf8");
   assert.doesNotMatch(html, /fn lab_cull_main\(/);
-  const said = spawnSync(process.execPath, [lab, "check", join(dir, "rain-4-held")], { encoding: "utf8" }).stdout.split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
-  assert.deepEqual(said, [`held   ${entry.split(" ")[1]} (JavaScript page): every instance drawn, where the compiler would cull it on the GPU`]);
+  const said = spawnSync(process.execPath, [lab, "check", join(dir, "rain-4-held")], { encoding: "utf8" }).stdout.split("\n").filter((l) => /^(held   |stale  |new    )/.test(l));
+  assert.deepEqual(said.sort(), entries.map((e) => `held   ${e.split(" ")[1]} (JavaScript page): every instance drawn, where the compiler would cull it on the GPU`).sort());
 });
 
 test("rain-page four times closer: culled, it draws only the drops in the picture, and the same picture (G14b)", { skip: !exe && "no Chromium" }, async () => {
