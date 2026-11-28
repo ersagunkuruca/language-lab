@@ -97,6 +97,7 @@ import { countsInto } from "./fold-chunks.ts";
 import { HeldMap, HeldSet, originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM, writtenAt } from "../../ters/src/lang/prelude-ids.ts";
 
 const ZIPPED = PRELUDE_DEFS["zipped"];
+const BAKED_BYTES = PRELUDE_DEFS["baked bytes"];
 import { ownEffects, parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, pureTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
@@ -676,7 +677,7 @@ const awayOn = (at: Id): SExpr[] => { const on = onWorkers.page.get(at), n = run
 const worthHeld = (at: Id, away: boolean): SExpr[] => ((away ? onWorkers.page.has(at) : onWorkers.js.has(at)) ? [{ k: "bool", v: true }] : []);
 const always = (at: Id): SExpr[] => { const n = runsOf(at); return onWorkers.js.has(at) || n.length ? [{ k: "bool", v: onWorkers.js.has(at) }, ...n] : []; };
 
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean; everyItem?: ReadonlySet<Id> } = {}): CoreIR {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean; everyItem?: ReadonlySet<Id>; baked?: true } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
@@ -697,7 +698,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean; everyItem?: ReadonlySet<Id> }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean; everyItem?: ReadonlySet<Id>; baked?: true }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes, carry); } finally { stopSite = outer; }
 }
@@ -796,7 +797,7 @@ function preparedIn(code: Code, info: Info, names: Names, roots: Id[], host: boo
 }
 
 const fronts = new WeakMap<Set<string>, { code: Code; info: Info; names: Names; rounded: Id[] }>();
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean; everyItem?: ReadonlySet<Id> }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean; everyItem?: ReadonlySet<Id>; baked?: true }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
   let here: { node: Id; def: Id } | null = null;
@@ -2036,6 +2037,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if ((opts.host || opts.handlers) && target === NOW_OP) return { k: "world", op: "now", aborts: false, args: [], t: "f64" };
         // Asking for a permission (L236): the world's, as the evaluator asks.
         if ((opts.host || opts.handlers) && target === ASK_PERMISSION_OP) return { k: "world", op: "askPermission", aborts: false, args: args(), t: "i32" };
+        // A bake's bytes (G16, BAKING.md): compiled JavaScript asks its
+        // world for the file the build wrote; elsewhere the prelude's body,
+        // none, so a bake's decoder gives its definition's body.
+        if (opts.baked && BAKED_BYTES && originalOf(target) === BAKED_BYTES) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          return { k: "world", op: "bakedBytes", aborts: false, args: args(), t };
+        }
         // An environment variable (L253): the world's, as the evaluator
         // answers it, an Optional Text.
         if ((opts.host || opts.handlers) && target === ENV_OP) {

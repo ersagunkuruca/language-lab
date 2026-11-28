@@ -989,7 +989,7 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   // its handlers are put in.
   ({ code, info, names } = overLiterals(`lowering's front ${roots.join(" ")}`, { code, info, names }, () => front(code, info, names, roots)));
   const f = overLiterals(`handlers put in ${roots.join(" ")}`, { code, info, names }, () => fusedProgram(code, info, names));
-  let ir = lowerScalar(f.code, endsAsBefore(given, f.info), f.names, roots, { data: true, host: true, printed: (c, id) => planOf(c, `solve:${id}`) !== null });
+  let ir = lowerScalar(f.code, endsAsBefore(given, f.info), f.names, roots, { data: true, host: true, baked: true, printed: (c, id) => planOf(c, `solve:${id}`) !== null });
   // The passes up to the Ints' ranges read numbers' values only where
   // they say so (ir-again.ts readValue): an edit of a number takes their
   // last answer with the new values put in (machine's 250 ms a number edit).

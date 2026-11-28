@@ -30,6 +30,11 @@ import { evaluatorTicks, makeRunner, OutOfSteps, withSteps, type Data, type Valu
 import { INT, Subst, type Type } from "../../ters/src/lang/types.ts";
 import { SIGS } from "../../ters/src/lang/std.ts";
 import { CONS, NIL, S } from "../../ters/src/lang/std-ids.ts";
+import { originalOf, PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
+
+// A bake's bytes (BAKING.md): read as the program runs, never folded here,
+// where there are none.
+const BAKED_BYTES = PRELUDE_DEFS["baked bytes"];
 
 // The weighing: the answer's size (one per number, text, case and field)
 // at most WORK_PER_NODE of the work it saves, and at most MAX_SIZE.
@@ -110,6 +115,13 @@ export function bakeCalls(code: Code, info: Info, names: Names): { code: Code; b
     // value's once.
     const body = nodes[def.body];
     walk(def.body, body.kind === "lambda" && body.params.length > 0);
+  }
+  // Nothing that reads a bake's bytes is folded: as evaluated it would
+  // give the body as written, and run it.
+  if (BAKED_BYTES && nodeIds(nodes).some((x) => { const n = nodes[x]; return n.kind === "ref" && originalOf(n.target) === BAKED_BYTES; })) {
+    const reachesBytes = (id: Id) => subtree(code, id).some((x) => { const n = nodes[x]; return n?.kind === "ref" && originalOf(n.target) === BAKED_BYTES; })
+      || [...dependenciesOfAll(code, [id])].some((d) => originalOf(d) === BAKED_BYTES);
+    for (let i = found.length - 1; i >= 0; i--) if (reachesBytes(found[i].id)) found.splice(i, 1);
   }
   if (!found.length) return { code, baked: [], reads: new Set() };
   const reads = new Set<Id>();

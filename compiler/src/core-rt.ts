@@ -1014,6 +1014,10 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
     case "mySoundLatency": return () => rt.world?.soundLatency?.() ?? 0;
     case "askPermission": return (what) => (rt.world?.askPermission ?? (() => true))(what as string);
     // An environment variable (L253), as run.ts answers it.
+    // A bake's bytes (G16, BAKING.md): the file the build wrote beside the
+    // program, which a page carries (G11a), by its key; none where there
+    // is none, so the decoder gives its definition's body as written.
+    case "bakedBytes": return (key) => { let b: Uint8Array | null = null; try { b = rt.world?.readBytes?.(`baked/${key as string}.bin`) ?? null; } catch { /* none */ } return b ? { tag: SOME, fields: [bytesValue(b)] } : { tag: NONE, fields: [] }; };
     case "environmentVariable": return (name) => { const v = rt.world?.environmentVariable?.(name as string) ?? null; return v === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [v.normalize("NFC")] }; };
     case "fetchText": return (u) => tried(() => w("fetchText")(u as string));
     // A fetch as a ticket (L150b, C182), as run.ts starts one: in the
