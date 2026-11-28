@@ -95,5 +95,12 @@ stays level. A chip on the sill or on a disc is the same, the sill a face
 and the disc a point. Each stone carries whether it is a chip, and the
 GPU draws the two kinds in one draw.
 
+The hand that wipes the glass pushes the stones too (G19c). It goes where
+it is put, and nothing pushes it back: to the solver it is as the frame
+is, a body nothing moves, but a stone it touches must part from it at
+least as fast as it comes on, its speed found from where it was the tick
+before. The sides of the frame don't hold a stone the hand is pushing, so
+a wipe along the sill sweeps the hail off its end.
+
 Credits: random numbers by the ZX81's generator (Sinclair Research, 1981);
 a fixed step after Glenn Fiedler's Fix Your Timestep (2004); the fireflies and the points on each bulb spread by Martin Roberts's R2 sequence ("The unreasonable effectiveness of quasirandom sequences", 2018); soft shadows by distributed ray tracing (Robert L. Cook, Thomas Porter and Loren Carpenter, SIGGRAPH 1984); ambient occlusion after Sergei Zhukov, Andrei Iones and Grigorij Kronin ("An ambient light illumination model", 1998); the wall's light kept as Quake's lightmaps were (id Software, 1996); the drops lit by probes, an irradiance volume (Gene Greger, Peter Shirley, Philip M. Hubbard and Donald P. Greenberg, 1998) kept in circular harmonics as Peter-Pike Sloan, Jan Kautz and John Snyder (2002) and Ravi Ramamoorthi and Pat Hanrahan (2001) keep light in spherical ones; the fireflies' soft shadows by sphere tracing (John C. Hart, "Sphere tracing", 1996) the leaves' distance as Íñigo Quílez marches a soft shadow ("Soft shadows in raymarched SDFs", 2010), the distance kept as samples (Sarah F. Frisken, Ronald N. Perry, Alyn P. Rockwood and Thouis R. Jones, "Adaptively sampled distance fields", 2000); the hail by sequential impulses after Erin Catto ("Iterative dynamics with temporal coherence", GDC 2005; "Fast and simple physics using sequential impulses", GDC 2006) and his Box2D Lite, the overlap pushed out as Jürgen Baumgarte stabilised constraints (1972).
