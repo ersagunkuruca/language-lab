@@ -179,6 +179,9 @@ test("types with fields and cases, an interface with ports, a way at a cost, and
   assert.match(text("define", { name: "Vec", kind: "type", first: "vec(x: Float64, y: Float64)" }), /\| vec\(x#\w+: Float64, y#\w+: Float64\)/);
   text("define", { name: "Ball", kind: "type", first: "ball(number: Int, place: Vec, velocity: Vec)" });
   assert.match(text("define", { name: "Table", kind: "type", first: "table(time: Float64, balls: List Ball, log: List Text)" }), /balls#\w+: List Ball, log#\w+: List Text/);
+  // A type named in two words, in a field's type without brackets (L297).
+  text("define", { name: "Push move", kind: "type", first: "push(symbol: Text)" });
+  assert.match(text("define", { name: "Moves", kind: "type", first: "moves(all: List Push move, top: Push move)" }), /all#\w+: List \(‹Push move›\), top#\w+: ‹Push move›/);
   text("define", { name: "Event", kind: "type", first: "meets(time: Float64, first: Int, second: Int)" });
   assert.match(text("add_case", { at: "Event", case: "drops(time: Float64, ball: Int)" }), /\| drops\(time#\w+: Float64, ball#\w+: Int\)/);
   assert.match(text("define", { name: "Toucher", kind: "interface", first: "gap at: (a, Ball, Float64) -> Float64" }), /‹gap at›#\w+ : \(a, Ball, Float64\) -> Float64/);
@@ -203,6 +206,9 @@ test("a match's cases are written through the MCP: a split by a type named, a ca
   mkdirSync(dir);
   writeFileSync(join(dir, "code.json"), '{"nodes":{},"defs":[]}');
   text("open", { path: dir });
+  // A type named in two words, in a field's type without brackets (L297).
+  text("define", { name: "Push move", kind: "type", first: "push(symbol: Text)" });
+  assert.match(text("define", { name: "Moves", kind: "type", first: "moves(all: List Push move, top: Push move)" }), /all#\w+: List \(‹Push move›\), top#\w+: ‹Push move›/);
   text("define", { name: "Event", kind: "type", first: "meets(time: Float64, first: Int, second: Int)" });
   text("add_case", { at: "Event", case: "drops(time: Float64, ball: Int)" });
   text("add_case", { at: "Event", case: "never" });
@@ -786,6 +792,26 @@ test("a value or a case inside a pattern is written as nested matches and read b
   text("replace", { at: "deep", find: "□", text: 'match cs\n  cons(0, cons(y, _)) → y\n  [x] → x · 10\n  otherwise → -1' });
   assert.equal(text("eval", { text: '(sign(["-"]), sign(["x"]), sign([]), arrow(["-", ">"]), arrow(["-", "x"]), arrow([]))' }), "= (1, 2, 0, 1, 2, 3) : (a, b, c, d, e, f) where a, b, c, d, e, f are Numbers");
   assert.match(text("eval", { text: "(deep([0, 7]), deep([4]), deep([0]), deep([4, 5]))" }), /^= \(7, 40, 0, -1\)/);
+});
+
+// Steps inside a match's or a fold's arm, written a step at a time with a
+// □ after each, as chomsky's driver writes bodies (L297): each step is
+// read where its arm is, the arm's names in scope.
+test("steps in a match's and a fold's arm are written a step at a time", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "stepped", kind: "function", params: ["xs"] });
+  text("replace", { at: "stepped", find: "□", text: "match xs\n  nil → 0\n  cons(h, t) → k = h + 1; □" });
+  text("replace", { at: "stepped", find: "□", text: "m = k + h; □" });
+  text("replace", { at: "stepped", find: "□", text: "m · 2" });
+  text("define", { name: "folded steps", kind: "function", params: ["xs"] });
+  text("replace", { at: "folded steps", find: "□", text: "fold xs\n  nil → 0\n  cons(h, t) with r → (k = h + r; □)" });
+  text("replace", { at: "folded steps", find: "□", text: "k · 2" });
+  assert.match(text("eval", { text: "(stepped([1, 2]), folded steps([1, 2]))" }), /^= \(6, 10\)/);
 });
 
 // As-patterns (L294): `[x, ..more] as all` takes a field apart and names it
