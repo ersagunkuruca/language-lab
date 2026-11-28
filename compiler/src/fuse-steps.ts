@@ -20,6 +20,7 @@
 // consumer's shape rather than a foldr/build rule.
 
 import { children, mapIds, freshId, subtree, isCall, type Code, type Id, type Node, copyNodes, dropNode } from "../../ters/src/model.ts";
+import { NODE_COPIED_FROM } from "../../ters/src/lang/prelude-ids.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
 import { ARRAY_OPS, CONS, LIST, NIL, TRUE, FALSE } from "../../ters/src/lang/std.ts";
@@ -179,7 +180,7 @@ function rewrite(code: Code, info: Info, made: Map<Id, Type> | null, at: Id, c: 
     const s = nodes[fold.scrutinee] as Extract<Node, { kind: "call" }>;
     nodes[fold.scrutinee] = { ...s, args: [xs] } as Node;
     typed?.items(fold.scrutinee, s.fn);
-  } else { nodes[fold.scrutinee] = { ...code.nodes[xs], id: fold.scrutinee } as Node; typed?.set(fold.scrutinee, typed.of(xs)); }
+  } else { nodes[fold.scrutinee] = { ...code.nodes[xs], id: fold.scrutinee } as Node; typed?.set(fold.scrutinee, typed.of(xs)); NODE_COPIED_FROM.set(fold.scrutinee, xs); }
   // The item arm: a fresh item, and its old binder g of it, as a let
   // (a function written there, applied).
   for (const a of g === null ? [] : fold.arms) {
@@ -301,6 +302,9 @@ function guarded(code: Code, at: Id): Code {
   // The item named, so reaches can be given it.
   const item = cons.binds[0] ?? fresh({ kind: "binder" } as Omit<Node, "id">);
   const test = fresh({ kind: "call", fn: fresh({ kind: "ref", target: REACHES! } as Omit<Node, "id">), args: [fresh({ kind: "ref", target: item } as Omit<Node, "id">), place, reach, here] } as Omit<Node, "id">);
+  // The test stands for the call as written, so its way (G15b2b, the grid
+  // or every item) is held by that call.
+  NODE_COPIED_FROM.set(test, call.id);
   const yes = fresh({ kind: "arm", variant: TRUE, binds: [], results: [], body: cons.body } as Omit<Node, "id">);
   const no = fresh({ kind: "arm", variant: FALSE, binds: [], results: [], body: fresh({ kind: "ref", target: cons.results[1]! } as Omit<Node, "id">) } as Omit<Node, "id">);
   const body = fresh({ kind: "match", scrutinee: test, arms: [yes, no], otherwise: null } as Omit<Node, "id">);

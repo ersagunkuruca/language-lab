@@ -255,6 +255,15 @@ export function nearLines(ir: Lowered & { nearSites?: { at: Id; by: "grid" | "k-
   const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
   return [...new Set(ir.nearSites.map(({ at, by }) => `${at} way: ${nameOf(defOf(at))}'s neighbours: ${by === "grid" ? "grid of reach cells" : by}; among every pair, grid, k-d tree; target JavaScript`))];
 }
+// Each within reach call whose fold a draw reads by a grid over the items'
+// places (G15b2b, gpu-draws.ts griddable), by the call: a grid, or held,
+// every item.
+const WITHIN = /^(\S+) way: .*'s items within reach: (every item|grid); among every item, grid; target JavaScript page$/;
+// Named in the program as written: lowering fuses the call away.
+export function withinLines(code: Code, calls: readonly Id[], names: Names): string[] {
+  const { defOf, nameOf } = definitionOf({ code } as Lowered, names);
+  return calls.map((at) => `${at} way: ${nameOf(defOf(at))}'s items within reach: grid; among every item, grid; target JavaScript page`);
+}
 // The ways held, by the call: every pair, or a grid of cells this wide.
 const nearHeld = (l: string): [Id, "every pair" | "k-d tree" | number] | null => {
   const m = l.startsWith(HELD) ? NEAR.exec(l.slice(HELD.length)) : null;
@@ -352,11 +361,12 @@ const CULLING = /^(\S+) place: .*'s draw culling: (none|GPU); among none, GPU; t
 // And the maps held on the GPU though their arithmetic is only close
 // (`close`, G12), each among the page's too, on the GPU; and the record
 // fields whose lists are held on the CPU (`cpu`, G13b); and the draws held
-// unculled (`unculled`, G14b2).
-export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][]; pool: [string, number][]; near: [Id, "every pair" | "k-d tree" | number][]; close: Id[]; cpu: Id[]; unculled: Id[] }
-export const NONE_HELD: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [], close: [], cpu: [], unculled: [] };
+// unculled (`unculled`, G14b2); and the within reach calls held to every
+// item (`everyItem`, G15b2b).
+export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][]; pool: [string, number][]; near: [Id, "every pair" | "k-d tree" | number][]; close: Id[]; cpu: Id[]; unculled: Id[]; everyItem: Id[] }
+export const NONE_HELD: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [], close: [], cpu: [], unculled: [], everyItem: [] };
 export function heldPlaces(lines: readonly string[]): HeldPlaces {
-  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [], close: [], cpu: [], unculled: [] };
+  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [], close: [], cpu: [], unculled: [], everyItem: [] };
   for (const l of lines) {
     const near = nearHeld(l);
     if (near) { out.near.push(near); continue; }
@@ -364,6 +374,8 @@ export function heldPlaces(lines: readonly string[]): HeldPlaces {
     if (pooled) { if (/^\d+$/.test(pooled[2])) out.pool.push([pooled[3], Number(pooled[2])]); continue; }
     const culling = l.startsWith(HELD) ? CULLING.exec(l.slice(HELD.length)) : null;
     if (culling) { if (culling[2] === "none") out.unculled.push(culling[1]); continue; }
+    const within = l.startsWith(HELD) ? WITHIN.exec(l.slice(HELD.length)) : null;
+    if (within) { if (within[2] === "every item") out.everyItem.push(within[1]); continue; }
     const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null;
     if (!p) continue;
     const [, id, on, , runs, target] = p;
@@ -404,6 +416,7 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
       else if (place[4] !== undefined && !(Number(place[4]) >= 1 && Number(place[4]) <= 4096)) throw new Error(`a placement's runs are from 1 to 4096: ${l}`);
       continue;
     }
+    if (!m && WITHIN.test(l.slice(HELD.length))) continue;
     const near = NEAR.exec(l.slice(HELD.length));
     if (!m && near) {
       if (near[3] !== undefined && near[3] !== "reach" && !(Number(near[3]) > 0 && Number.isFinite(Number(near[3])))) throw new Error(`a grid's cells are some positive number of the reach's units on a side: ${l}`);
@@ -427,8 +440,8 @@ export function heldAndPicked(written: readonly string[], now: readonly string[]
 function heldIn(written: readonly string[]): (l: string) => boolean {
   const of = new Set(heldOf(written).keys());
   const places = new Set(written.flatMap((l) => { const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null; return p ? [`${p[1]} ${p[5]}`] : []; }));
-  const near = new Set(written.flatMap((l) => { const m = l.startsWith(HELD) ? NEAR.exec(l.slice(HELD.length)) : null; return m ? [m[1]] : []; }));
-  return (l) => { const p = PLACE.exec(l); return of.has(ENTRY.exec(l)?.[1] ?? "") || (!!p && places.has(`${p[1]} ${p[5]}`)) || near.has(NEAR.exec(l)?.[1] ?? ""); };
+  const near = new Set(written.flatMap((l) => { const m = l.startsWith(HELD) ? (NEAR.exec(l.slice(HELD.length)) ?? WITHIN.exec(l.slice(HELD.length))) : null; return m ? [m[1]] : []; }));
+  return (l) => { const p = PLACE.exec(l); return of.has(ENTRY.exec(l)?.[1] ?? "") || (!!p && places.has(`${p[1]} ${p[5]}`)) || near.has((NEAR.exec(l) ?? WITHIN.exec(l))?.[1] ?? ""); };
 }
 const key = (l: string) => (l.startsWith(HELD) ? l.slice(HELD.length) : l);
 // What a check says of the held entries: where the compiler, choosing
@@ -445,7 +458,9 @@ export function heldWarnings(written: readonly string[], alone: readonly string[
   });
   const ways = new Map(alone.flatMap((l) => { const m = NEAR.exec(l); return m ? [[m[1], m[2]] as const] : []; }));
   const near = written.flatMap((l) => { const m = l.startsWith(HELD) ? NEAR.exec(l.slice(HELD.length)) : null, was = m && ways.get(m[1]); return m && was && was !== m[2] ? [`held   ${m[1]}: neighbours by ${m[2]}, where the compiler would find them on a ${was}`] : []; });
-  return [...[...heldOf(written)].filter(([of, rep]) => picks.has(of) && picks.get(of) !== rep).map(([of, rep]) => `held   ${of}: ${rep}, where the compiler would pick ${picks.get(of)}`), ...places, ...near];
+  const gridded = new Map(alone.flatMap((l) => { const m = WITHIN.exec(l); return m ? [[m[1], m[2]] as const] : []; }));
+  const within = written.flatMap((l) => { const m = l.startsWith(HELD) ? WITHIN.exec(l.slice(HELD.length)) : null, was = m && gridded.get(m[1]); return m && was && was !== m[2] ? [`held   ${m[1]} (JavaScript page): ${m[2] === "every item" ? "every item read" : "read by a grid"}, where the compiler would ${was === "every item" ? "read every item" : "read them by a grid"}`] : []; });
+  return [...[...heldOf(written)].filter(([of, rep]) => picks.has(of) && picks.get(of) !== rep).map(([of, rep]) => `held   ${of}: ${rep}, where the compiler would pick ${picks.get(of)}`), ...places, ...near, ...within];
 }
 
 // The entries of a choices file, its comments left out.

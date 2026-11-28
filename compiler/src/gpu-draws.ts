@@ -164,11 +164,12 @@ export function packsOf(sites: Record<number, DrawSite>): string {
 // `whole`: the draws whose instances may be a list kept on the GPU (G13,
 // gpu-resident.ts), laid out as a kernel's answers are, every leaf of an
 // instance: such a site says that layout as `kept`.
-// `unculled`: the draws held drawn whole (below).
-export function gpuDraws(ir: CoreIR, whole: ReadonlySet<number> = new Set(), unculled: ReadonlySet<Id> = heldWhole): { sites: Record<number, DrawSite>; refused: Map<number, string> } {
+// `unculled`: the draws held drawn whole (below). `everyItem`: the
+// within reach calls held to every item, no grid (below).
+export function gpuDraws(ir: CoreIR, whole: ReadonlySet<number> = new Set(), unculled: ReadonlySet<Id> = heldWhole, everyItem: ReadonlySet<Id> = heldEveryItem): { sites: Record<number, DrawSite>; refused: Map<number, string> } {
   const sites: Record<number, DrawSite> = {}, refused = new Map<number, string>();
   for (const d of ir.drawSites ?? []) {
-    try { sites[d.site] = drawSite(ir, d.site, d.vertex, d.fragment, d.caps, whole.has(d.site), unculled.has(d.at)); }
+    try { sites[d.site] = drawSite(ir, d.site, d.vertex, d.fragment, d.caps, whole.has(d.site), unculled.has(d.at), everyItem); }
     catch (e) { refused.set(d.site, e instanceof Error ? e.message : String(e)); }
   }
   return { sites, refused };
@@ -184,12 +185,20 @@ export const cullable = (ir: CoreIR): Id[] => {
   const sites = gpuDraws(ir, new Set(), new Set()).sites;
   return (ir.drawSites ?? []).filter((d) => sites[d.site]?.cull).map((d) => d.at);
 };
+// The within reach calls a person held to every item (the program's
+// decisions, `every item`, G15b2b): a draw's fold over them reads every
+// item, no grid.
+let heldEveryItem: ReadonlySet<Id> = new Set();
+export function holdEveryItem(at: Iterable<Id>) { heldEveryItem = new HeldSet(at); }
+// The within reach calls whose folds a draw reads by a grid, found with
+// none held: an entry held so is still written.
+export const griddable = (ir: CoreIR): Id[] => [...new Set(Object.values(gpuDraws(ir, new Set(), new Set(), new Set()).sites).flatMap((s) => (s.grids ?? []).map((g) => g.call)))];
 
 // The items a grid's cell holds the indices of (G15b2): a cell with more
 // reads every item.
 export const GRID_CAP = 32;
 
-function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[], whole = false, unculled = false): DrawSite {
+function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[], whole = false, unculled = false, everyItem: ReadonlySet<Id> = new Set()): DrawSite {
   const zonk = (x: Id) => { const y = ir.info.typeOf.get(x); return y && ir.info.subst.zonk(y); };
   const capTypes = caps.map(zonk);
   if (capTypes.some((t) => !t)) throw new Error("reads a value whose type isn't known");
@@ -236,7 +245,7 @@ function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]
   const code: Code = { ...ir.code, defs: [...ir.code.defs, ...defs], nodes };
   const info: Info = { ...ir.info, typeOf };
   const names = { ...(ir as { names?: Names }).names, [vId]: `draw ${site} vertex`, [fId]: `draw ${site} fragment` } as Names;
-  const l = lowerScalar(code, info, names, defs, { records: true, shader: true, reached: true });
+  const l = lowerScalar(code, info, names, defs, { records: true, shader: true, reached: true, everyItem });
   for (const [id, which] of [[vId, "vertex"], [fId, "fragment"]] as const) if (l.refused.has(id)) throw new Error(`its ${which} function ${l.refused.get(id)}`);
   const vi = l.funcs.findIndex((g) => g.def === vId && !g.inner), fi = l.funcs.findIndex((g) => g.def === fId && !g.inner);
   const vf = l.funcs[vi], ff = l.funcs[fi];
@@ -451,5 +460,5 @@ ${lists.length ? `  // Every Array in the layout, read or not.\n ${readLists}\n`
 ${fuel || none ? `  if (${[fuel ? "lab_fuel < 0.0" : "", none ? "lab_none" : ""].filter(Boolean).join(" || ")}) { discard; }\n` : ""}  return vec4f(${k[0]}, ${k[1]}, ${k[2]}, ${colour === 4 ? k[3] : "1.0"});
 }${culling}${building()}
 `;
-  return { wgsl, caps: capLeaves as Leaf[][], instance, corner, colour, ...(textures.length ? { textures } : {}), ...(kept ? { kept } : {}), ...(cull ? { cull: true as const } : {}), ...(lists.length ? { lists: lists.map((cap, r) => ({ cap, leaves: listLeaves[r]! })) } : {}), ...(gridded.length ? { grids: gridded.map(([r, g]) => ({ list: r, dims: g.dims, cap: GRID_CAP })) } : {}) };
+  return { wgsl, caps: capLeaves as Leaf[][], instance, corner, colour, ...(textures.length ? { textures } : {}), ...(kept ? { kept } : {}), ...(cull ? { cull: true as const } : {}), ...(lists.length ? { lists: lists.map((cap, r) => ({ cap, leaves: listLeaves[r]! })) } : {}), ...(gridded.length ? { grids: gridded.map(([r, g]) => ({ list: r, dims: g.dims, cap: GRID_CAP, call: g.call })) } : {}) };
 }

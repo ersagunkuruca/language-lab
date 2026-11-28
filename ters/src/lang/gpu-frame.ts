@@ -52,8 +52,9 @@ export interface Site {
   // from word 8 each cell's count and its first `cap` items' indices. The
   // module's compute entries lab_gridR_bounds (one thread) and
   // lab_gridR_main (a thread a cell) fill it from the columns and rows.
-  // No columns: every item is read.
-  grids?: { list: number; dims: 1 | 2; cap: number }[];
+  // No columns: every item is read. `call`: the within reach call it is
+  // for, as written (G15b2b).
+  grids?: { list: number; dims: 1 | 2; cap: number; call: string }[];
 }
 // A compiled draw's site (its fields after the four: the site's key in
 // the page's table, and the captured values).

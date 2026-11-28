@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync} from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Session } from "../../ters/mcp/session.ts";
@@ -27,8 +27,8 @@ const exe = chromiumPath();
 
 // rain-page's first glass, drawn once at the start: no ticks, so both
 // pages draw the same fireflies.
-function still(): string {
-  const program = join(dir, "rain"), out = `${program}.html`;
+function still(held?: (lines: string[]) => void): string {
+  const program = join(dir, held ? "rain-held" : "rain"), out = `${program}.html`;
   cpSync(join(import.meta.dirname, "../../ters/examples/rain-page"), program, { recursive: true });
   const s = new Session(program);
   s.remove("main");
@@ -36,6 +36,12 @@ function still(): string {
   const hole = /□#(\w+)/.exec(s.view("main"))![1];
   s.replace(hole, `with([attribute("width", "320"), attribute("height", "240"), render(() => frame of(start pane, 1.0))], tag("canvas", nil))`);
   s.save();
+  if (held) {
+    assert.equal(spawnSync(process.execPath, [lab, "decisions", program], { encoding: "utf8" }).status, 0);
+    const lines = readFileSync(`${program}.decisions`, "utf8").split("\n");
+    held(lines);
+    writeFileSync(`${program}.decisions`, lines.join("\n"));
+  }
   const r = spawnSync(process.execPath, [lab, "build-web", program, "-o", out], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   return out;
@@ -47,7 +53,28 @@ test("rain-page's glass reads its fireflies by cell of a grid two passes build (
   assert.equal((page.match(/fn lab_grid\d+_bounds\(/g) ?? []).length, 1);
   assert.equal((page.match(/fn lab_grid\d+_main\(/g) ?? []).length, 1);
   assert.match(page, /= lab_grid\d+_cell\([^)]*\);/);
-  assert.match(page, /grids:\[\{list:\d+,dims:2,cap:32\}\]/);
+  assert.match(page, /grids:\[\{list:\d+,dims:2,cap:32,call:"\w+"\}\]/);
+});
+
+// The grid is the compiler's choice, written in the program's decisions
+// (G15b2b) by the within reach call as written: a person may hold it to
+// every item, no grid.
+test("rain-page's within reach is a decisions entry, held to every item it has no grid (G15b2b)", () => {
+  let entry = "";
+  const page = readFileSync(still((lines) => {
+    const at = lines.findIndex((l) => / way: glass colour's items within reach: /.test(l));
+    assert.ok(at >= 0, lines.join("\n"));
+    assert.match(lines[at], /^\S+ way: glass colour's items within reach: grid; among every item, grid; target JavaScript page$/);
+    assert.equal(lines.filter((l) => /items within reach/.test(l)).length, 1);
+    const call = lines[at].split(" ")[0];
+    // The call as written, not a copy lowering made.
+    assert.equal(JSON.parse(readFileSync(join(dir, "rain-held", "code.json"), "utf8")).nodes[call]?.kind, "call");
+    lines[at] = entry = `held ${lines[at].replace(": grid;", ": every item;")}`;
+  }), "utf8");
+  assert.doesNotMatch(page, /fn lab_grid\d+_main\(/);
+  assert.doesNotMatch(page, /grids:\[/);
+  const said = spawnSync(process.execPath, [lab, "check", join(dir, "rain-held")], { encoding: "utf8" }).stdout.split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
+  assert.deepEqual(said, [`held   ${entry.split(" ")[1]} (JavaScript page): every item read, where the compiler would read them by a grid`]);
 });
 
 test("rain-page's glass by the grid is the picture drawn reading every firefly (G15b2)", { skip: !exe && "no Chromium" }, async () => {
