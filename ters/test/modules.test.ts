@@ -301,7 +301,7 @@ test("a pin holds a definition's type: a change that breaks it is an error there
   const pinned = infer(changed, baseNames(k.names), undefined, { pins });
   assert.equal(pinned.errors.length, 1);
   assert.equal(pinned.errors[0].id, area);
-  assert.match(pinned.errors[0].message, /area is pinned to \(Float64\) -> Float64, and this makes it \(Float64\) -> Text/);
+  assert.match(pinned.errors[0].message, /area is pinned to \(Float64\) -> Float64, and this makes it \(a\) -> Text/);
   // A body more general than its pin is fine: the pin promises less.
   const id: Code = { nodes: withNodes(code.nodes, { [lam.body]: { id: lam.body, kind: "ref", target: (code.nodes[body] as { params: Id[] }).params[0] } }), defs: code.defs };
   assert.deepEqual(infer(id, k.names, undefined, { pins }).errors, []);

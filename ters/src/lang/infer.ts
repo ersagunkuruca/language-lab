@@ -1119,19 +1119,6 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const t = expr(body, new Map(), { effs: [], tail: null });
       unifyAt(d, mono.get(d)!, t);
     }
-    // A pinned function's inputs are the pin's once its body is typed, before
-    // the group is judged and generalized (L296): a count down pinned at Int
-    // is counted (L46) though nothing in the body is Int-only. Its result
-    // and effects are still the body's, and kept to the pin below; inputs
-    // the body can't take are left to that check, which says so at the pin.
-    for (const d of group) {
-      const pin = opts.pins?.[d];
-      const p = pin && code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""]?.kind === "lambda" ? fresh(pin, s).type : undefined;
-      if (p?.t !== "fn") continue;
-      const want: Type = { t: "fn", params: p.params, ret: s.fresh(), eff: s.freshRow() };
-      try { s.trial().unify(mono.get(d)!, want); } catch (e) { if (e instanceof TypeError) continue; throw e; }
-      s.unify(mono.get(d)!, want);
-    }
     // The group's recursive calls' inputs, now that its bodies are checked.
     for (const { call, params, args } of recursiveCalls.splice(0)) params.forEach((p, i) => {
       try { s.unify(p, args[i]); }
