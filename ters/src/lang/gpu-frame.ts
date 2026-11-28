@@ -46,6 +46,14 @@ export interface Site {
   // as `leaves`, in a storage buffer at binding 16 + r after its length.
   // Such a capture has no words in the uniform.
   lists?: { cap: number; leaves: Leaf[] }[];
+  // The grids over captured Arrays (G15b2, gpu-draws.ts): list r's items
+  // filed by cell in a storage buffer at binding 24 + r, as words: the
+  // columns and rows, the low corner and cells per unit (2 to 5, f32), then
+  // from word 8 each cell's count and its first `cap` items' indices. The
+  // module's compute entries lab_gridR_bounds (one thread) and
+  // lab_gridR_main (a thread a cell) fill it from the columns and rows.
+  // No columns: every item is read.
+  grids?: { list: number; dims: 1 | 2; cap: number }[];
 }
 // A compiled draw's site (its fields after the four: the site's key in
 // the page's table, and the captured values).
@@ -99,7 +107,10 @@ function put(v: Value, leaves: Leaf[], f: Float32Array, n: Int32Array, at: numbe
 const sameItems = (a: Value[] | null, b: Value[]) => a !== null && a.length === b.length && a.every((x, i) => x === b[i]);
 const words = (count: number) => { const b = new ArrayBuffer(Math.max(16, Math.ceil(count / 4) * 16)); return { b, f: new Float32Array(b), n: new Int32Array(b) }; };
 
-interface Slot { list: Value[] | null; items: GPUBuffer | null; caps: GPUBuffer | null; capsWere: string; group: GPUBindGroup | null; groupFor: unknown[]; cull?: Culling; lists?: { was: Value[] | null; buffer: GPUBuffer | null }[] }
+interface Slot { list: Value[] | null; items: GPUBuffer | null; caps: GPUBuffer | null; capsWere: string; group: GPUBindGroup | null; groupFor: unknown[]; cull?: Culling; lists?: { was: Value[] | null; buffer: GPUBuffer | null; grid?: Gridded }[] }
+// A list's grid (G15b2): its buffer, the items it was built for, and the
+// two passes' groups.
+interface Gridded { buffer: GPUBuffer; was: Value[] | null; groups: GPUBindGroup[]; groupFor: GPUBuffer | null }
 // A culled draw's buffers (G14b): each instance's flag, the kept
 // instances' indices in order, drawIndexedIndirect's five words, and the
 // two passes' counts; with the bind groups made of them.
@@ -112,6 +123,11 @@ interface Culling { n: number; flags: GPUBuffer; ids: GPUBuffer; args: GPUBuffer
 const CULL_FROM = 256;
 // Off where a test says so, to compare the pictures.
 const culling = () => !(globalThis as { labCullOff?: true }).labCullOff;
+// Grids (G15b2): over a list of at least this many items, each side as
+// many cells as the square root of their count (a line: the count), at
+// most these; fewer are read whole.
+const GRID_FROM = 32, GRID_SIDE = 64, GRID_LINE = 4096;
+const gridding = () => !(globalThis as { labGridOff?: true }).labGridOff;
 // The kept instances' indices in order: one workgroup, each of its 256
 // threads counting a run of the flags, the counts summed (Hillis and
 // Steele's scan), then each run's kept indices written from where its
@@ -218,7 +234,7 @@ export class GpuFrames {
   }
 
   // Encodes the cull of a draw's n instances (G14b), before its pass.
-  private cull(enc: GPUCommandEncoder, slot: Slot, site: Site, kept: boolean, buffers: GPUBuffer[], n: number, corners: number, indices: number, drawn: Drawn, lists: GPUBuffer[] = []): Culling {
+  private cull(enc: GPUCommandEncoder, slot: Slot, site: Site, kept: boolean, buffers: GPUBuffer[], n: number, corners: number, indices: number, drawn: Drawn, lists: GPUBuffer[] = [], grids: GPUBuffer[] = []): Culling {
     const D = this.device, U = GPUBufferUsage;
     let c = slot.cull;
     if (!c || c.n < n) {
@@ -232,9 +248,9 @@ export class GpuFrames {
     const flag = this.compute(`cull\u0000${kept}\u0000${site.wgsl}`, site.wgsl, "lab_cull_main", this.placesOf(site, kept));
     const scan = this.compute("scan", KEPT_IN_ORDER, "lab_main");
     // The flagging pass's group, made again when what it binds changes.
-    const bound = [...buffers, ...lists];
+    const bound = [...buffers, ...lists, ...grids];
     if (bound.length !== c.groupFor.length || bound.some((b, i) => b !== c!.groupFor[i]) || !c.groups.has("flag")) {
-      c.groups.set("flag", D.createBindGroup({ layout: flag.getBindGroupLayout(0), entries: [...[...buffers, c.flags, c.job].map((buffer, binding) => ({ binding, resource: { buffer } })), ...lists.map((buffer, r) => ({ binding: 16 + r, resource: { buffer } }))] }));
+      c.groups.set("flag", D.createBindGroup({ layout: flag.getBindGroupLayout(0), entries: [...[...buffers, c.flags, c.job].map((buffer, binding) => ({ binding, resource: { buffer } })), ...lists.map((buffer, r) => ({ binding: 16 + r, resource: { buffer } })), ...(site.grids ?? []).map((g, j) => ({ binding: 24 + g.list, resource: { buffer: grids[j] } }))] }));
       c.groupFor = bound;
     }
     if (!c.groups.has("scan")) c.groups.set("scan", D.createBindGroup({ layout: scan.getBindGroupLayout(0), entries: [c.flags, c.ids, c.args, c.scan].map((buffer, binding) => ({ binding, resource: { buffer } })) }));
@@ -243,6 +259,36 @@ export class GpuFrames {
     p.setPipeline(scan); p.setBindGroup(0, c.groups.get("scan")!); p.dispatchWorkgroups(1);
     p.end();
     return c;
+  }
+
+  // List r's grid (G15b2), built again when its items changed: its
+  // columns and rows written, then the site's two passes encoded, before
+  // the draw's pass. Below GRID_FROM items, or where a test turns grids
+  // off, no columns.
+  private grid(enc: GPUCommandEncoder, site: Site, r: number, g: { dims: 1 | 2; cap: number }, held: { buffer: GPUBuffer | null; was: Value[] | null; grid?: Gridded }, its: Value[], drawn: Drawn): void {
+    const D = this.device, n = its.length;
+    const on = gridding() && n >= GRID_FROM;
+    const sx = !on ? 0 : g.dims === 2 ? Math.min(GRID_SIDE, Math.max(1, Math.ceil(Math.sqrt(n)))) : Math.min(GRID_LINE, n), sy = !on ? 0 : g.dims === 2 ? sx : 1;
+    const size = (8 + sx * sy * (g.cap + 1)) * 4;
+    let grid = held.grid;
+    if (grid && sameItems(grid.was, its) && grid.buffer.size >= size) return;
+    if (!grid || grid.buffer.size < size) {
+      grid?.buffer.destroy();
+      grid = held.grid = { buffer: D.createBuffer({ size: Math.max(32, size), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST }), was: null, groups: [], groupFor: null };
+    }
+    grid.was = its;
+    D.queue.writeBuffer(grid.buffer, 0, new Uint32Array([sx, sy, 0, 0, 0, 0, 0, 0]));
+    drawn.bytes += 32;
+    if (!sx) return;
+    const passes = ["bounds", "main"].map((e) => this.compute(`grid\u0000${e}\u0000${r}\u0000${site.wgsl}`, site.wgsl, `lab_grid${r}_${e}`));
+    if (grid.groupFor !== held.buffer) {
+      grid.groups = passes.map((p) => D.createBindGroup({ layout: p.getBindGroupLayout(0), entries: [{ binding: 16 + r, resource: { buffer: held.buffer! } }, { binding: 24 + r, resource: { buffer: grid!.buffer } }] }));
+      grid.groupFor = held.buffer;
+    }
+    const p = enc.beginComputePass();
+    p.setPipeline(passes[0]); p.setBindGroup(0, grid.groups[0]); p.dispatchWorkgroups(1);
+    p.setPipeline(passes[1]); p.setBindGroup(0, grid.groups[1]); p.dispatchWorkgroups(Math.ceil((sx * sy) / 64));
+    p.end();
   }
 
   private buffer(data: ArrayBuffer | Uint32Array, usage: number): GPUBuffer {
@@ -362,9 +408,12 @@ export class GpuFrames {
             held.was = its;
             drawn.bytes += w.b.byteLength;
           }
+          const g = site.grids?.find((x) => x.list === r);
+          if (g) this.grid(enc, site, r, g, held, its, drawn);
           return held.buffer;
         });
-        const culled = culling() && !!site.cull && n >= CULL_FROM ? this.cull(enc, slot, site, !!kept, [slot.caps!, instances, mesh.corners], n, mesh.n, mesh.count, drawn, lists) : null;
+        const grids = (site.grids ?? []).map((g) => slot.lists![g.list].grid!.buffer);
+        const culled = culling() && !!site.cull && n >= CULL_FROM ? this.cull(enc, slot, site, !!kept, [slot.caps!, instances, mesh.corners], n, mesh.n, mesh.count, drawn, lists, grids) : null;
         const pipeline = this.pipeline(site, depth, format, !!kept, !!culled);
         // The textures sampled, by the names of the targets captured.
         const sampled = (site.textures ?? []).map((i) => {
@@ -372,11 +421,12 @@ export class GpuFrames {
           if (!drawnNow.has(t)) throw new Error(`the texture "${t}" is read before a pass of this frame draws it`);
           return this.textures.get(t)!;
         });
-        const want: unknown[] = [slot.caps, instances, mesh.corners, pipeline, ...sampled, ...lists];
+        const want: unknown[] = [slot.caps, instances, mesh.corners, pipeline, ...sampled, ...lists, ...grids];
         if (!slot.group || want.length !== slot.groupFor.length || want.some((x, i) => x !== slot.groupFor[i])) {
           const entries: GPUBindGroupEntry[] = [slot.caps!, instances, mesh.corners].map((buffer, binding) => ({ binding, resource: { buffer } }));
           if (sampled.length) entries.push({ binding: 3, resource: this.linear() }, ...sampled.map((t, k) => ({ binding: 4 + k, resource: t.createView() })));
           entries.push(...lists.map((buffer, r) => ({ binding: 16 + r, resource: { buffer } })));
+          entries.push(...(site.grids ?? []).map((g, j) => ({ binding: 24 + g.list, resource: { buffer: grids[j] } })));
           slot.group = this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
           slot.groupFor = want;
         }

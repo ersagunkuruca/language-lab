@@ -75,7 +75,13 @@ export interface Framed { wgsl: string; count: number; values: (time: number) =>
 // entries: every function printed, by its index in lowered.funcs, those
 // under a budget too: a kernel of the runtime's own (C61 d′) sets the
 // budget itself.
-export interface Shader { wgsl: string; funcs: ShaderFunc[]; entries: Map<number, string>; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }>; matrices: Set<number>; framed?: Framed }
+// grids: the page's arrays read by cell (G15b2, scalar.ts shaderFold), by
+// buffer: the functions of an item giving its place (one Float64 or a
+// record of two) and its reach, and how many Float64s a place is.
+// gpu-draws.ts writes lab_gridR_cell, _count and _item and the passes that
+// fill the grid.
+export interface Grid { place: string; reach: string; dims: 1 | 2; at: LType }
+export interface Shader { wgsl: string; funcs: ShaderFunc[]; entries: Map<number, string>; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }>; matrices: Set<number>; framed?: Framed; grids?: Map<number, Grid> }
 const INFIX: Partial<Record<Op, string>> = {
   add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&&", or: "||", iless: "<", ieq: "==", iand: "&", ior: "|", ixor: "^",
 };
@@ -395,7 +401,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
       kids(e).forEach(walk);
       // Every array the printer will need the size of.
       if ((e.k === "if" || e.k === "budget") && isArray(e.t)) szOf(locals, e);
-      if (e.k === "rt" && /^array\.(push|pushFront|rest|length|at|get)\./.test(e.fn)) szOf(locals, e.args[0]);
+      if (e.k === "rt" && /^array\.(push|pushFront|rest|length|at|get|cell|cellCount|cellItem)\./.test(e.fn)) szOf(locals, e.args[0]);
       // Every instance a call runs. Calling itself as the last step is a
       // loop, which reuses its inputs, so their sizes must stay the same.
       if (e.k === "call") {
@@ -454,6 +460,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
   for (const [i, why] of bad) refused.set(funcs[i].def, why);
 
   const kept = funcs.map((_, i) => i).filter((i) => !bad.has(i));
+  const gridAt = new Map<number, { place: number; reach: number; dims: 1 | 2 }>();
   const used = new Set<string>();
   const ident = (name: string, suffix: string) => {
     let base = name.replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
@@ -707,6 +714,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
     refused,
     structs,
     matrices,
+    ...(gridAt.size ? { grids: new Map([...gridAt].map(([r, g]) => [r, { place: wname.get(`${g.place}`)!, reach: wname.get(`${g.reach}`)!, dims: g.dims, at: funcs[g.place].result }])) } : {}),
   };
 
   function func(f: SFunc, inst: Inst): string {
@@ -771,6 +779,24 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
             const n = szOf(L, e.args[0]), a = temp();
             pre.push(`${d}let ${a} = ${bare(ex(e.args[0], pre, d))};`);
             return n ? `${tname(at, n - 1)}(${Array.from({ length: n - 1 }, (_, j) => `${a}[${j + 1}]`).join(", ")})` : a;
+          }
+          // A grid's cell (G15b2): of an array the page gives, its cell
+          // here and the items filed there, in order; of any other, every
+          // item (no cell).
+          if (op === "cell" || op === "cellCount" || op === "cellItem") {
+            const g = givenOf(e.args[0]);
+            if (g === null) ex(e.args[0], pre, d);
+            // A cell's: the functions giving an item's place and its reach,
+            // by their indices, then here's leaves.
+            const xs = e.args.slice(op === "cell" ? 3 : 1).map((a) => bare(ex(a, pre, d)));
+            if (op === "cell") {
+              if (g === null) return "-1i";
+              const [p, r] = [e.args[1], e.args[2]].map((a) => Number((a as { v: bigint }).v));
+              gridAt.set(g, { place: p, reach: r, dims: xs.length as 1 | 2 });
+              return `lab_grid${g}_cell(${xs.join(", ")})`;
+            }
+            if (op === "cellCount") return g === null ? `${szOf(L, e.args[0])}i` : `lab_grid${g}_count(${xs[0]})`;
+            return g === null ? xs[1] : `lab_grid${g}_item(${xs.join(", ")})`;
           }
           const r = op === "length" || op === "at" || op === "get" ? givenOf(e.args[0]) : null;
           if (r !== null && op === "length") return opts.given!.length(r);

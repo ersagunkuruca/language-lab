@@ -27,7 +27,8 @@ import { SIGS } from "../../ters/src/lang/std.ts";
 import { DIVERGE, Subst, type Type } from "../../ters/src/lang/types.ts";
 
 const MAPS = new Set([preludeDef("map"), preludeDef("array map")].filter((x): x is Id => !!x));
-const WITHIN = preludeDef("within reach"), REACHES = preludeDef("reaches");
+const WITHIN = preludeDef("within reach");
+export const REACHES = preludeDef("reaches");
 
 // `types`: the types of the nodes the rewrites made, carried from the
 // check given (I203, the compiler redesign's stage 2), or null where one
