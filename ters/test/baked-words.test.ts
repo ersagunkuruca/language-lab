@@ -59,3 +59,33 @@ test("baked float32 at, float64 at and int32 at read each word back exactly, eva
   const defs = compiledDefs(code, info, names, NAMES) as unknown as Record<string, unknown>;
   assert.deepEqual(NAMES.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), evaluated);
 });
+
+test("baked float32 bytes, float64 bytes and int32 bytes write each word as a DataView does, evaluated and compiled the same (G16b3c)", () => {
+  const floats = [0, 1.5, -2.25, Math.fround(0.1), Math.fround(-1e-3), 3.4028234663852886e38, 2 ** -149, 2 ** -126, Math.fround(123456.789), 2 ** -127 * 3];
+  const ints = [0, -1, 1, 2 ** 31 - 1, -(2 ** 31), 123456789];
+  const doubles = [0, 0.1, -2.5, Math.PI, 1e300, -1.7976931348623157e308, 5e-324, 2.2250738585072014e-308, 2.225073858507201e-308, 123456789.123456789];
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const exported = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
+  const NAMES: string[] = [], WANT: string[] = [];
+  const show = (xs: number[]) => `[${xs.join(", ")}]`;
+  floats.forEach((x, i) => { NAMES.push(`float ${i}`); WANT.push(show(bytesOf([x], "f32"))); def(`float ${i}`, () => k.call(SHOW_ANY, k.call(lib("baked float32 bytes"), k.lit(x)))); });
+  // An Int may stop (past 32 bits), so it is attempted.
+  const attempted = (body: () => Id) => k.match(k.call(exported("attempt"), k.thunk(body)), [
+    { variant: OUTCOME_V.done, names: ["bytes"], body: ([b]) => k.call(SHOW_ANY, b) },
+    { variant: OUTCOME_V.refused, names: ["why"], body: () => k.lit("refused") },
+  ]);
+  ints.forEach((x, i) => { NAMES.push(`int ${i}`); WANT.push(show(bytesOf([x], "i32"))); def(`int ${i}`, () => attempted(() => k.call(lib("baked int32 bytes"), k.int(x)))); });
+  doubles.forEach((x, i) => { NAMES.push(`double ${i}`); WANT.push(show(bytesOf([x], "f64"))); def(`double ${i}`, () => k.call(SHOW_ANY, k.call(lib("baked float64 bytes"), k.lit(x)))); });
+  // Past 32 bits an Int stops the bake.
+  NAMES.push("too big"); WANT.push("refused");
+  def("too big", () => attempted(() => k.call(lib("baked int32 bytes"), k.int(2 ** 31))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const evaluated = NAMES.map((n) => r.value(code.defs.find((d) => names[d] === n)!));
+  assert.deepEqual(evaluated, WANT);
+  const defs = compiledDefs(code, info, names, NAMES) as unknown as Record<string, unknown>;
+  assert.deepEqual(NAMES.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), evaluated);
+});
