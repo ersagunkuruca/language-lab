@@ -52,9 +52,10 @@ test("rain-page's back wall is baked to a file its page carries, the compiler's 
   assert.deepEqual(baked.decisions.filter((l) => / way: probe light's answer: /.test(l)).map((l) => l.replace(/^\S+ /, "")), ["way: probe light's answer: baked to a file; among at start, baked to a file; target JavaScript page"]);
   assert.match(readFileSync(baked.html, "utf8"), /baked\/[0-9a-f]{24}\.bin/);
   assert.doesNotMatch(readFileSync(traced.html, "utf8"), /baked\/[0-9a-f]{24}\.bin/);
-  // Both draws stay on the GPU: the fireflies' within reach is one loop
-  // over a list kept as written (library-reps.ts), not an array of List.
-  for (const p of [baked.html, traced.html]) assert.equal((readFileSync(p, "utf8").match(/@fragment/g) ?? []).length, 2);
+  // Every draw stays on the GPU, the glass, the drops and the hail
+  // (G19a): the fireflies' within reach is one loop over a list kept as
+  // written (library-reps.ts), not an array of List.
+  for (const p of [baked.html, traced.html]) assert.equal((readFileSync(p, "utf8").match(/@fragment/g) ?? []).length, 3);
 });
 
 // The fireflies' soft shadows (G18c, G18d, PROBES.md): the glass marches

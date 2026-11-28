@@ -67,3 +67,34 @@ test("rain: looked at closer, the canvas shows the glass's middle and the hand w
   for (let i = 0; i < img.rgba.length; i += 4) if (img.rgba[i] > 90) pale++;
   assert.ok(pale > 64 * 48 * 0.05, `${pale} pale of ${64 * 48}`);
 });
+
+test("rain: hail strikes the glass, falls and comes to rest on the sill (G19a)", () => {
+  // The stones as the hail keeps them: (id, x, y, angle, vx, vy, spin, radius).
+  const stones = (h: Value) => items((h as Rec).fields[0]).map((s) => s.fields.map(num));
+  let h = r.value(named("no hail"));
+  // It hails from tick 120, a stone every fifth tick: thirty of them.
+  for (let tick = 120; tick < 270; tick++) h = call("hail ticked", h, tick);
+  assert.equal(stones(h).length, 30);
+  // Then it stops (tick 1000 is between showers), and the pile settles.
+  for (let tick = 1000; tick < 1250; tick++) h = call("hail ticked", h, tick);
+  const pile = stones(h);
+  // They melt as they lie: the smallest are gone by now.
+  assert.ok(pile.length > 20 && pile.length < 30, `${pile.length} stones left`);
+  const sill = 0.05, width = 640 / 480;
+  let fastest = 0;
+  for (const [, x, y, , vx, vy, , radius] of pile) {
+    // On the sill or above it, between the frame's sides, overlapping
+    // nothing by more than the solver's slop and a little more.
+    assert.ok(y - radius > sill - 0.004, `a stone ${(sill - (y - radius)).toFixed(4)} into the sill`);
+    assert.ok(x - radius > -0.004 && x + radius < width + 0.004, `a stone at ${x}`);
+    fastest = Math.max(fastest, Math.hypot(vx, vy));
+  }
+  for (let i = 0; i < pile.length; i++) for (let j = i + 1; j < pile.length; j++) {
+    const [a, b] = [pile[i], pile[j]];
+    assert.ok(Math.hypot(a[1] - b[1], a[2] - b[2]) > a[7] + b[7] - 0.004, "two stones deep in each other");
+  }
+  // At rest: the fastest stone no faster than a tick of gravity (1.5
+  // a second each second), as a stone melting off its touch falls a tick
+  // before it touches again; they strike the glass at 0.6 a second.
+  assert.ok(fastest < 0.03, `the fastest stone still moves ${fastest.toFixed(4)} a second`);
+});

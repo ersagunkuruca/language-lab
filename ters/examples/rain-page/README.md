@@ -75,5 +75,16 @@ distance (the nearest of 16 discs at every step) made a frame on
 SwiftShader 18% slower, the field 1%. A firefly's reach is short next to
 the leaves, so its shadows are thin crescents at a leaf's edge.
 
+Now and then the rain turns to hail (G19a, RIGID-BODIES.md). A stone
+strikes the glass every fifth tick while it hails, falls, and lands on
+the window's sill, where it bounces, rolls and comes to rest against the
+others; the stones melt slowly, so the pile never fills the pane. Each
+tick finds which stones touch by `neighbours` (a grid, as the moths'),
+then solves every touch by sequential impulses, ten passes, each touch
+keeping what it has pushed so far and starting the next tick from it, so
+a pile rests instead of jittering. The stones are drawn on the GPU as a
+third draw over the glass, lit by the probes. A tick for 110 to 120
+stones is 2 to 4 ms compiled to JavaScript.
+
 Credits: random numbers by the ZX81's generator (Sinclair Research, 1981);
-a fixed step after Glenn Fiedler's Fix Your Timestep (2004); the fireflies and the points on each bulb spread by Martin Roberts's R2 sequence ("The unreasonable effectiveness of quasirandom sequences", 2018); soft shadows by distributed ray tracing (Robert L. Cook, Thomas Porter and Loren Carpenter, SIGGRAPH 1984); ambient occlusion after Sergei Zhukov, Andrei Iones and Grigorij Kronin ("An ambient light illumination model", 1998); the wall's light kept as Quake's lightmaps were (id Software, 1996); the drops lit by probes, an irradiance volume (Gene Greger, Peter Shirley, Philip M. Hubbard and Donald P. Greenberg, 1998) kept in circular harmonics as Peter-Pike Sloan, Jan Kautz and John Snyder (2002) and Ravi Ramamoorthi and Pat Hanrahan (2001) keep light in spherical ones; the fireflies' soft shadows by sphere tracing (John C. Hart, "Sphere tracing", 1996) the leaves' distance as Íñigo Quílez marches a soft shadow ("Soft shadows in raymarched SDFs", 2010), the distance kept as samples (Sarah F. Frisken, Ronald N. Perry, Alyn P. Rockwood and Thouis R. Jones, "Adaptively sampled distance fields", 2000).
+a fixed step after Glenn Fiedler's Fix Your Timestep (2004); the fireflies and the points on each bulb spread by Martin Roberts's R2 sequence ("The unreasonable effectiveness of quasirandom sequences", 2018); soft shadows by distributed ray tracing (Robert L. Cook, Thomas Porter and Loren Carpenter, SIGGRAPH 1984); ambient occlusion after Sergei Zhukov, Andrei Iones and Grigorij Kronin ("An ambient light illumination model", 1998); the wall's light kept as Quake's lightmaps were (id Software, 1996); the drops lit by probes, an irradiance volume (Gene Greger, Peter Shirley, Philip M. Hubbard and Donald P. Greenberg, 1998) kept in circular harmonics as Peter-Pike Sloan, Jan Kautz and John Snyder (2002) and Ravi Ramamoorthi and Pat Hanrahan (2001) keep light in spherical ones; the fireflies' soft shadows by sphere tracing (John C. Hart, "Sphere tracing", 1996) the leaves' distance as Íñigo Quílez marches a soft shadow ("Soft shadows in raymarched SDFs", 2010), the distance kept as samples (Sarah F. Frisken, Ronald N. Perry, Alyn P. Rockwood and Thouis R. Jones, "Adaptively sampled distance fields", 2000); the hail by sequential impulses after Erin Catto ("Iterative dynamics with temporal coherence", GDC 2005; "Fast and simple physics using sequential impulses", GDC 2006) and his Box2D Lite, the overlap pushed out as Jürgen Baumgarte stabilised constraints (1972).
