@@ -5341,12 +5341,29 @@ function readFirst(f: SFunc, funcs: SFunc[]): SExpr {
     for (const k of kids(e)) given(k, out);
     return out;
   };
+  // Records read in e that are bound outside it.
+  const recordsRead = (e: SExpr): Set<number> => {
+    const bound = new Set<number>();
+    for (const v of walk(e)) {
+      if (v.k === "let") bound.add(v.i);
+      for (const key of ["s", "res", "tmp", "item", "acc", "save"]) { const b = (v as Record<string, unknown>)[key]; if (typeof b === "number") bound.add(b); }
+    }
+    return new Set(walk(e).flatMap((v) => (v.k === "get" && v.rec.k === "local" && !bound.has(v.rec.i) ? [v.rec.i] : [])));
+  };
   const go = (e: SExpr): SExpr => {
     e = mapKids(e, go);
     if (e.k !== "let") return e;
     let body = e.body;
     const lets: { i: number; value: SExpr }[] = [];
-    for (const x of given(e.value, new Set())) {
+    // And a record that the rest only reads field by field while a call
+    // here may change what it holds (C370: the hail's `applied` reads
+    // `done.stones`, replaces stones in it through a call, and reads
+    // `done.touches` at its end, so the stones had two holders and were
+    // copied whole at each replace): its fields are read first too, so it
+    // is gone before the call.
+    const xs = given(e.value, new Set());
+    if (walk(e.value).some((v) => v.k === "call" || v.k === "apply")) for (const x of recordsRead(body)) xs.add(x);
+    for (const x of xs) {
       const t = f.locals[x];
       if (x === e.i || !isRecord(t) || t.mutable) continue;
       const n = occurs(body, x);

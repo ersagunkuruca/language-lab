@@ -6104,3 +6104,14 @@ fallen) is a few microseconds a stone.
 1. C370 (HA1): natively 9x, the biggest step.
 2. C371 (HA2): the solver's stones in place in JavaScript.
 3. C372 (HA3): mutual tail calls as one loop in compiled JavaScript.
+
+### After C370
+
+c.ts reads a record's fields before a call when the rest of the body only
+reads them, so `applied`'s `done` is gone before `impulse on` replaces
+stones and the stones are changed in place.
+
+| 100 ticks, ters native | 1,000 discs | 5,000 discs |
+|---|---|---|
+| before | 5.29 s (36x) | 94.8 s (140x) |
+| after | 0.50 s (3.4x) | 2.5 s (3.7x) |

@@ -34,3 +34,17 @@ test("hail: 100 ticks of 1000 discs, compiled, native and the C by hand", () => 
   ran("cc", ["-O2", "-ffp-contract=off", join(gaps, "hail.ideal.c"), "-o", join(dir, "c"), "-lm"]);
   assert.equal(ran(join(dir, "c"), ["100", "1000"]), want);
 });
+
+test("hail: natively the stones aren't copied at every touch the solver applies (C370)", () => {
+  if (skip) return;
+  // `applied` reads `done.stones`, replaces stones in it and reads
+  // `done.touches` at its end: c.ts readFirst reads both fields first, so
+  // the record is gone and the stones have one holder at each replace.
+  // Copied, 5,000 discs were 140 times the C by hand; in place, about 4.
+  ran(process.execPath, [lab, "native", folder, "-o", join(dir, "n")]);
+  ran("cc", ["-O2", "-ffp-contract=off", join(gaps, "hail.ideal.c"), "-o", join(dir, "c2"), "-lm"]);
+  const timed = (cmd: string) => { const t = performance.now(); const out = ran(cmd, ["20", "5000"]); return { out, ms: performance.now() - t }; };
+  const c = timed(join(dir, "c2")), n = timed(join(dir, "n"));
+  assert.equal(n.out, c.out);
+  assert.ok(n.ms < 20 * c.ms + 1000, `native ${n.ms.toFixed(0)} ms, C ${c.ms.toFixed(0)} ms`);
+});
