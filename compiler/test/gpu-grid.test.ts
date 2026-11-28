@@ -73,7 +73,7 @@ test("rain-page's within reach is a decisions entry, held to every item it has n
   }), "utf8");
   assert.doesNotMatch(page, /fn lab_grid\d+_main\(/);
   assert.doesNotMatch(page, /grids:\[/);
-  const said = spawnSync(process.execPath, [lab, "check", join(dir, "rain-held")], { encoding: "utf8" }).stdout.split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
+  const said = spawnSync(process.execPath, [lab, "check", join(dir, "rain-held")], { encoding: "utf8" }).stdout.split("\n").filter((l) => /^(held   |stale  |new    )/.test(l));
   assert.deepEqual(said, [`held   ${entry.split(" ")[1]} (JavaScript page): every item read, where the compiler would read them by a grid`]);
 });
 

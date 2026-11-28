@@ -43,8 +43,10 @@ test("a closure's capture holding a Bool is turned along its Bool paths when loo
 // away from the page's thread (G12a): before, a capture holding a Bool kept it.
 test("rain-page's map of its drops goes away, its capture with it (G12a)", () => {
   const p = load("rain-page"), main = p.named("main");
-  const ir = lowerCore(p.code, p.info, p.pres.names, [main]) as { awayMaps?: { how: string; caps: unknown[] }[] };
-  const maps = (ir.awayMaps ?? []).filter(m => m.how === "map");
+  const ir = lowerCore(p.code, p.info, p.pres.names, [main]) as { awayMaps?: { how: string; caps: string[] }[] };
+  // The drops' map is the one that captures the hand, `w`; the hail's
+  // (G19a) go away too.
+  const maps = (ir.awayMaps ?? []).filter(m => m.how === "map" && m.caps.some((c) => p.pres.names[c] === "w"));
   assert.equal(maps.length, 1);
   assert.equal(maps[0].caps.length, 1);
 });
