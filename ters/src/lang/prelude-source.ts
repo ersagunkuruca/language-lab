@@ -2129,7 +2129,7 @@ export function buildPrelude(): Module {
   const over = (a: Id, ps: Id, j: Id) => k.call(wholeOf, k.call(dividedOr, a, powerOf(ps, j), k.lit(0)));
   // A number's sign bit and size, then its word from its biased exponent
   // and fraction: the inverse of float32 at and float64 at.
-  const signed = (x: Id, bit: number, f: (a: Id) => Id) => k.let("size", k.call(S.abs, x), (a) =>
+  const signed = (x: Id, bit: number | bigint, f: (a: Id) => Id) => k.let("size", k.call(S.abs, x), (a) =>
     k.if(k.equal(a, k.lit(0)), k.int(0), iAdd(k.if(k.call(S.less, x, k.lit(0)), k.int(bit), k.int(0)), f(a))));
   // A Float32's 4 bytes: below 2^−126, exponent 0 and the size over
   // 2^−149; else the biased exponent e whose 2^(e − 150) · 2^23 is at
@@ -2142,7 +2142,7 @@ export function buildPrelude(): Module {
   // and the size over 2^−1074; else the j whose 2^(j − 1074) · 2^52 is at
   // most the size, the biased exponent j + 1, and the size over
   // 2^(j − 1074) less the hidden 1.
-  const float64Bytes = def("baked float64 bytes", ["number"], (x) => k.call(wordBytes, signed(x, 2 ** 63, (a) =>
+  const float64Bytes = def("baked float64 bytes", ["number"], (x) => k.call(wordBytes, signed(x, 2n ** 63n, (a) =>
     k.if(k.call(S.less, a, k.lit(2 ** -1022)), over(a, k.x(f64Powers), k.int(0)),
       k.let("power", k.call(powerAtMost, k.x(f64Powers), a, k.lit(2 ** 52), k.int(2045)), (j) =>
         iAdd(k.call(INT_OPS.mul, iAdd(j, k.int(1)), k.int(2 ** 52)), k.call(INT_OPS.sub, over(a, k.x(f64Powers), j), k.int(2 ** 52)))))), k.int(8)));
