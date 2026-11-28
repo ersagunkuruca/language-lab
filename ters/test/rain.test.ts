@@ -153,11 +153,12 @@ test("rain: the hand pushes the hail along the sill and sweeps it off the end (G
   const before = stones(h);
   const right = before.filter((s) => s.x > 0.75), left = before.filter((s) => s.x + s.r < 0.45);
   assert.ok(right.length >= 3 && left.length >= 3, `${right.length} stones to the right, ${left.length} to the left`);
-  // The hand put down on the sill at 0.6 and drawn right off the glass's
-  // edge, 0.6 glass heights a second, then lifted.
+  // The hand put down at 0.6 just above the sill (its middle 0.11 up,
+  // its reach 0.0625) and drawn right off the glass's edge, 0.6 glass
+  // heights a second, then lifted.
   // And the same ticks with the hand off, as the stones melt anyway.
   let tick = 1250, still = h;
-  for (let x = 0.6; x < width + 0.15; x += 0.01) { still = call("hail ticked", still, tick, off); h = call("hail ticked", h, tick++, hand(x, 0.08)); }
+  for (let x = 0.6; x < width + 0.15; x += 0.01) { still = call("hail ticked", still, tick, off); h = call("hail ticked", h, tick++, hand(x, 0.11)); }
   for (let k = 0; k < 120; k++) { still = call("hail ticked", still, tick, off); h = call("hail ticked", h, tick++, off); }
   const after = stones(h), ids = new Set(after.map((s) => s.id)), kept = new Set(stones(still).map((s) => s.id));
   // What was right of the hand is swept off the end; what was left of
@@ -168,4 +169,28 @@ test("rain: the hand pushes the hail along the sill and sweeps it off the end (G
   assert.ok(stayed.filter((s) => ids.has(s.id)).length <= 1, `${stayed.filter((s) => ids.has(s.id)).length} of ${stayed.length} stones left on the right`);
   for (const s of left) if (kept.has(s.id)) assert.ok(ids.has(s.id), `stone ${s.id} on the left gone`);
   for (const s of after) assert.ok(s.v < 0.03, `a stone still moves ${s.v}`);
+});
+
+test("rain: a stone shot at the sill ten times as fast as hail falls stops on it, not in it (G19d)", () => {
+  type Data = { tag: string; fields: Value[] };
+  const none = r.value(named("no hail")) as Data, stone = r.value(named("no stone")) as Data;
+  const drops = (r.value(named("start pane")) as Data).fields[0] as Data;
+  for (const chip of [false, true]) {
+    // At 6 glass heights a second, a tenth of one a tick: more than eight
+    // times its size, so a stone found touching only once it overlaps
+    // would be far into the sill first.
+    const s = { tag: stone.tag, fields: [7, 0.6, 0.3, 0.3, 0, -6.0, 0, 0.012, { tag: chip ? "std.bool.true" : "std.bool.false", fields: [] }] };
+    let h: Value = { tag: none.tag, fields: [{ tag: drops.tag, fields: [s, { tag: (none.fields[0] as Data).tag, fields: [] }] }, none.fields[1], 1, handOff()] };
+    let deepest = 0, last: Rec = s;
+    for (let tick = 1000; tick < 1090; tick++) {
+      h = call("hail ticked", h, tick, handOff());
+      last = items((h as Rec).fields[0])[0];
+      const [y, a, radius] = [num(last.fields[2]), num(last.fields[3]), num(last.fields[7])];
+      const low = chip ? y - radius * (Math.abs(Math.sin(a)) + 0.5 * Math.abs(Math.cos(a))) : y - radius;
+      deepest = Math.max(deepest, 0.05 - low);
+    }
+    assert.ok(deepest < 0.002, `a ${chip ? "chip" : "disc"} ${deepest.toFixed(4)} into the sill`);
+    // And it rests there, not thrown back up by the overlap pushed out.
+    assert.ok(num(last.fields[2]) < 0.07 && Math.abs(num(last.fields[5])) < 0.03, `a ${chip ? "chip" : "disc"} at ${num(last.fields[2])}`);
+  }
 });
