@@ -124,7 +124,13 @@ Ersagun measures on a real GPU later, as with G13d.
   LIBRARY.md, within-reach.test). A fold over it is one fold over the
   list, each item tested by `reaches` where it is (done: fuse-steps.ts),
   so a shader loops over the lights it captured and makes no list of
-  those that reach. rain-page's fireflies, lit forward, measured.
+  those that reach. rain-page's fireflies, lit forward, measured (done):
+  a thousand, made each tick by a map over `range`, spread over the glass
+  by Roberts' R2 sequence, each a spot and a reach of 0.006 to 0.012 of
+  it. On SwiftShader a frame took 1,254 ms at 1x and 881 ms at 4x,
+  against 417 and 40 without them:
+  every pixel testing every firefly is most of the frame, which is what
+  the grid is for.
 - **G15b2**: the grid, a compute pass, and its `way` entry in the
   decisions, built only if G15b1's numbers say it pays.
 - **G15c**: shadow maps, waiting for a page with depth.

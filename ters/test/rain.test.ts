@@ -31,7 +31,9 @@ test("rain: checked, its first frame the dark glass with drops on it", () => {
     if (green < 40) dark++;
     if (red > 90) pale++;
   }
-  assert.ok(dark > 64 * 48 * 0.1 && pale > 64 * 48 * 0.05, `${dark} dark, ${pale} pale of ${64 * 48}`);
+  // Dark between the drops, where no firefly lights it (G15b1: a
+  // thousand of them, each a small light).
+  assert.ok(dark > 64 * 48 * 0.05 && pale > 64 * 48 * 0.05, `${dark} dark, ${pale} pale of ${64 * 48}`);
 });
 
 test("rain: a tick slides the drops down, and the hand on the glass wipes them", () => {
