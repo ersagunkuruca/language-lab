@@ -184,6 +184,31 @@ the right edge sweeps off what was right of it, leaves what was left of
 it, and the stones come to rest again (rain.test, against the same ticks
 with the hand off, as the stones melt anyway).
 
+## G19d, built (2026-11-28)
+
+`ahead(s)`: how far down a stone may come in a tick, its fall speed and
+its spin times its size. `frame touch` and `corner touch` look for the
+sill that far below it, and a touch found before the two meet has a
+depth below 0, how far apart they are. `wanted(t)`, the speed the
+solver makes the two part at, is then that gap over a tick, a speed of
+approach: the stone comes as near as it is apart and no nearer. A
+touch that overlaps is as before (Baumgarte's share past the slop, or
+the bounce). As Paul Firth notes, a speculative touch doesn't bounce in
+the tick it lands; the hail on the sill barely does anyway.
+
+Only the sill: the sides and stone on stone stay as G19a found them, as
+nothing on rain-page moves fast enough sideways, or into another stone,
+to pass through. Measured: a disc and a chip shot at 6 glass heights a
+second (ten times the hail) went 0.064 into the sill before and were
+thrown back up the glass; now they stop on it (rain.test).
+
+It showed G19c leaning on a soft sill: G19c's test put the hand's middle
+lower than its reach above the sill, and the stones it pressed went into
+the sill and squirted out ahead. With the sill firm, the pile it drove at
+the right side jammed there and slipped under the hand. Now the test
+holds the hand just above the sill, and a side lets go of every stone
+while the hand is near it (`not handed`), so the pile goes off the end.
+
 ## What stays out
 
 - **3D bodies.** rain-page is flat.
