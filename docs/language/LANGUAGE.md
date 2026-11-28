@@ -1889,9 +1889,13 @@ the browser.
 
 ### Signatures are pins
 
-Types are still never written by hand. A **pin** freezes the type the
-checker inferred for a definition (`signatures.ts`), and makes it an
-interface:
+A **pin** freezes the type the checker inferred for a definition
+(`signatures.ts`), and makes it an interface. Through the MCP's text a
+pin may also be written (`pin` with a `type`, L296): `(Int) -> Int`, a
+small letter a type variable. A pinned function's inputs are the pin's
+before its body is typed, so a count down pinned at Int is counted (it
+ends) though nothing in the body is Int-only, and an input pinned at a
+record reads that record's fields where two types have one by that name.
 
 - an edit inside the definition must keep the pin, and if it doesn't, the
   error is at the definition: "area is pinned to (Float64) -> Float64, and

@@ -24,7 +24,8 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { sameLines } from "../src/lang/modules.ts";
 import { base, baseNames, optionsWith, programModules } from "../src/lang/load.ts";
 import type { Module } from "../src/lang/modules.ts";
-import { pinsOf, type Pins } from "../src/lang/signatures.ts";
+import { canonical, pinsOf, type Pin, type Pins } from "../src/lang/signatures.ts";
+import type { Type } from "../src/lang/types.ts";
 import { blocksOf, pieceText, type Blk, type Piece } from "../src/lang/render.ts";
 import { showIn, showType } from "../src/lang/types.ts";
 import { fromFile, own, toFile, type ProgramFile } from "../src/files.ts";
@@ -961,12 +962,17 @@ export class Session {
   // against it, as the editor's pin does (signatures.ts). With a pin, a
   // body that doesn't say its inputs' types itself (fields mapped of an
   // input) is still checked at them (L173c).
-  pin(at: string, off = false): string {
+  // With `type`, it is pinned at that type, written as the view shows one
+  // (L296): its inputs are then that type's in its body, so a count down
+  // pinned at Int is counted (L46) and an input pinned at a record reads
+  // that record's fields, whatever the body says yet.
+  pin(at: string, off = false, type?: string): string {
     const def = this.resolve(at);
     if (this.code.nodes[def]?.kind !== "def" || this.under.nodes[def]) throw new Error("pin takes one of the program's definitions");
     const was = { code: this.code, names: this.names, comments: this.comments, pins: this.pins };
     const pins = { ...this.pins };
     if (off) delete pins[def];
+    else if (type?.trim()) pins[def] = this.writtenPin(type);
     else { const p = pinsOf(this.info, [def], this.code)[def]; if (!p) throw new Error(`${this.name(def)} has no type to pin`); pins[def] = p; }
     const errs = this.info.errors.length;
     this.pins = pins;
@@ -981,6 +987,28 @@ export class Session {
     this.undos.push(was);
     this.save();
     return off ? "ok" : `ok: ${this.name(def)} : ${this.typeOf(def)}`;
+  }
+
+  // A type written as the view shows one, as a pin: a single small letter
+  // is a type variable, an effect list after an arrow is all that function
+  // does (a closed row), and units aren't read yet.
+  private writtenPin(text: string): Pin {
+    const vars = new Map<string, Id>();
+    for (const w of text.match(/(?<![\p{L}\p{N}_])\p{Ll}(?![\p{L}\p{N}_])/gu) ?? []) vars.set(w, `pin-var.${w}`);
+    const build = readType(text, typeNames(this.code, this.allNames, this.code.defs.filter((d) => !LIBRARY.code.nodes[d])), vars);
+    const nodes: Record<Id, NodeData> = {};
+    const top = build((n) => { const id = `t${Object.keys(nodes).length}`; nodes[id] = n; return id; });
+    const numbered = new Map<Id, number>();
+    const te = (id: Id): Type => {
+      const n = nodes[id];
+      if (n.kind === "tfun") return { t: "fn", params: n.params.map(te), ret: te(n.result), eff: { effs: [...(n.effects ?? [])], tail: null } };
+      if (n.kind !== "tref") throw new Error(`can't pin at ${text}`);
+      if (n.unit && Object.keys(n.unit).length) throw new Error("a written pin can't say units yet: pin without a type, then edit");
+      if (n.target.startsWith("pin-var.")) { if (!numbered.has(n.target)) numbered.set(n.target, numbered.size); return { t: "var", v: numbered.get(n.target)! }; }
+      return { t: "con", id: n.target, args: n.args.map(te) };
+    };
+    const t = te(top);
+    return canonical({ vars: [...numbered.values()], rows: [], type: t });
   }
 
   // A let `name = value` just before the step `at` is in (or at the top of
