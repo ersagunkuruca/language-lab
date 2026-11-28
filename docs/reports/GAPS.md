@@ -6019,3 +6019,88 @@ when no tick had moved them.
 At 2,000 birds the page now sends less than the one by hand, which sends
 the birds every frame though half its frames have no tick. What is left of
 the drawing is reading two objects a bird (FR5).
+
+## Game round 5: hail, physics at scale against C (2026-11-28, G20)
+
+Stage 5's round: rain-page's hail (G19, RIGID-BODIES.md) as a program,
+`compiler/gaps/hail`, raced against the same physics written by hand.
+The program is rain-page with a `main` that lays k discs of ice on the
+sill in rows of 50, each row a little to one side of the one below, and
+ticks them between showers with the hand off: every tick each disc falls
+and melts a little, `neighbours` finds which may touch (a grid), the
+touches are made (with last tick's impulses, warm starting), the solver
+runs ten passes of sequential impulses over them, and the discs move. A
+line every 25 ticks gives how many are left and their places' sum.
+`compiler/gaps/hail.ideal.c` is a C programmer's version: the stones one
+array of structs changed in place, a grid of cells as `neighbours` makes
+it, last tick's impulses in an open-addressing table, the arithmetic in
+the program's order, so it prints the same digits (checked to 300 ticks
+of 2,000 discs). `hail.ideal.js` is the C line by line in JavaScript,
+the stones columns of typed arrays.
+
+`node compiler/gaps/bench-hail.ts` (100 ticks; a process each, start-up
+included, one run each):
+
+| 100 ticks | 1,000 discs | | 5,000 discs | |
+|---|---|---|---|---|
+| C | 0.15 s | 1.0x | 0.68 s | 1.0x |
+| JS by hand | 0.46 s | 3.1x | 1.77 s | 2.6x |
+| ters native, one thread | 5.29 s | 35.7x | 94.8 s | 140x |
+| ters native | 5.31 s | 35.8x | 97.4 s | 144x |
+| ters wasi | 1.66 s | 11.2x | 10.3 s | 15.2x |
+| ters compile, one thread | 4.19 s | 28.3x | 14.6 s | 21.5x |
+| ters compile | 4.19 s | 28.3x | 18.6 s | 27.4x |
+
+The pile at 1,000 discs is about 4,000 touches a tick, so the solver
+applies some 44,000 touches a tick; at 5,000 discs five times that.
+
+### The gaps, ranked
+
+**HA1. Natively, the stones are copied whole at every touch the solver
+applies (C370).** 69% of `ters native`'s time is one array copy, called
+1.3 million times in 100 ticks: once for each `applied`. The solver
+threads `solving(stones, touches)` through its passes, and `applied`
+reads `done.stones`, works on it, replaces two stones in it (`impulse
+on`), and only at its end reads `done.touches`. Until that last read the
+record holds the stones too, so the array has two holders when it is
+replaced, and the replace copies it (a thousand stones; five thousand at
+the larger size, which is why native grows as the square). Reading
+`done.touches` first, a step moved by hand, takes `ters native` from
+5.3 s to 0.57 s at 1,000 discs with the same digits. The compiler can do
+that itself: where a record is only read by its fields, read them all
+where it is first read, so the record dies there.
+
+**HA2. In compiled JavaScript every replace in the solver makes a new
+version of the stones, and the collector takes 56% (C371).** `impulse
+on` replaces two stones, so each `applied` makes four array versions (a
+version note and a view each), four stone records of nine fields, a
+touch and a `solving` record: hundreds of thousands of objects a tick,
+all dead by the next touch. holders.ts doesn't follow the stones through
+the `solving` record and the passes' fold, so no replace is in place,
+and HA1's change by hand doesn't help here (4.2 s either way). After the
+collector: `relative along` 6%, `pushed` 5%, `impulse on` 4%, `applied`
+4%, `neighbours` 3%.
+
+**HA3. Two functions calling each other last aren't a loop in compiled
+JavaScript (C372).** The bench's first `main` ticked through `lived`
+calling `logged` calling `lived`, each call last. Compiled, each round
+kept a frame, so every tick's hail stayed reachable; and a kept old
+version of an array reaches every version after it (array-view.ts keeps
+the notes from old to new), so each kept tick held some 20 MB: 1.7 GB at
+100 ticks of 1,000 discs, out of memory at 300 ticks of 2,000. One
+function calling itself last is a loop, and the bench is written so now
+(218 MB at any length). The evaluator runs either as a loop (L281a).
+
+**HA4. ters wasi is the nearest, at 11x to 15x.** Its stones are wasm GC
+structs and no array is copied; the rest is the same allocation as HA2,
+which wasm's collector takes faster. Measured again after C370 and C371.
+
+**HA5. Workers on the map don't pay here.** `ters compile` with its
+workers is 27% slower at 5,000 discs: the map they take (each stone
+fallen) is a few microseconds a stone.
+
+### Next
+
+1. C370 (HA1): natively 9x, the biggest step.
+2. C371 (HA2): the solver's stones in place in JavaScript.
+3. C372 (HA3): mutual tail calls as one loop in compiled JavaScript.
