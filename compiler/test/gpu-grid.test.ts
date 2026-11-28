@@ -135,3 +135,34 @@ test("rain-page's glass by the grid is the picture drawn reading every firefly (
     assert.ok(colours.size > 3, String(colours.size));
   } finally { await browser.close(); }
 });
+
+// A main of its own that ticks rain-page's hail, whose touches are found
+// by `neighbours` on a grid, compiled to a module (not a page): the
+// grid's runtime gives up where it can't take the places, so the checks
+// of what may fail count it so, not by a runtime table it isn't in
+// (G19e, which measured the hail so).
+test("rain-page's hail compiles to a module and ticks as the evaluator does (G19e)", () => {
+  const program = join(dir, "rain-hail");
+  cpSync(join(import.meta.dirname, "../../ters/examples/rain-page"), program, { recursive: true });
+  const s = new Session(program);
+  s.define("hail after", "function", ["n"]);
+  s.replace("hail after", "fold range(n); nil → no hail; cons(i, r) with h → hail ticked(h, 120 + n - 1 - i, wipe(false, half, half))", "□");
+  // The stones' neighbours counted in a fold, as G19e's measure does: a
+  // fold's arm is asked what may fail, the grid in it too.
+  s.define("near sum", "function", ["ss", "k"]);
+  s.replace("near sum", "fold range(k); nil → 0; cons(i, r) with c → c + length(neighbours(ss, stone place, 0.06))", "□");
+  s.remove("main");
+  s.define("main", "function", []);
+  const hole = /□#(\w+)/.exec(s.view("main"))![1];
+  s.replace(hole, "print(show((near sum(hail after(80).stones, 3), map(hail after(80).stones, (t) => t.x + t.y))))");
+  s.save();
+  const out = join(dir, "rain-hail.mjs");
+  const c = spawnSync(process.execPath, [lab, "compile", program, "-o", out], { encoding: "utf8" });
+  assert.equal(c.status, 0, c.stderr);
+  const compiled = spawnSync(process.execPath, [out], { encoding: "utf8" });
+  assert.equal(compiled.status, 0, compiled.stderr);
+  const evaluated = spawnSync(process.execPath, [lab, "run", program, "--evaluator"], { encoding: "utf8" });
+  assert.equal(evaluated.status, 0, evaluated.stderr);
+  assert.match(compiled.stdout, /^\(\d+, \[0\.\d/);
+  assert.equal(compiled.stdout, evaluated.stdout);
+});
