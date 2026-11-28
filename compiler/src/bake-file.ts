@@ -151,14 +151,28 @@ export function bakeKey(code: Code, def: Id, l: Layout): string {
 
 export interface Baked { def: Id; key: string; file: Uint8Array; ms: number }
 
+// Where bakes are kept between builds (G16d2, ters/cli/bake-store.ts): a
+// bake's file by its key, which is a function of what it reads, and the
+// weighing of it, which is also a function of the compiler that reads it
+// back (the store keys it so). A rebuild with nothing changed runs no
+// bake and times nothing.
+export interface BakeStore {
+  file(key: string): Uint8Array | undefined;
+  keepFile(key: string, file: Uint8Array): void;
+  weighed(key: string): { computeMs: number; decodeMs: number } | undefined;
+  keepWeighed(key: string, w: { computeMs: number; decodeMs: number }): void;
+}
+
 // Bakes a value definition: runs its encoder compiled and gives the file,
 // or why not.
-export function bake(code: Code, info: Info, names: Record<Id, string>, def: Id): Baked | string {
+export function bake(code: Code, info: Info, names: Record<Id, string>, def: Id, store?: BakeStore): Baked | string {
   const d = code.nodes[def];
   if (d?.kind !== "def" || !d.body || code.nodes[d.body]?.kind === "lambda") return "isn't a value";
   const t = info.schemes.get(def)?.type ?? info.typeOf.get(def);
   const l = t && layoutOf(code, info, info.subst.zonk(t));
   if (!l) return "its answer isn't numbers in records and lists";
+  const key = bakeKey(code, def, l), kept = store?.file(key);
+  if (kept) return { def, key, file: kept, ms: 0 };
   const k = new Lang(code);
   const main = k.def("bake main");
   k.define(main, k.thunk(() => k.call(IO.writeBytes, k.lit("answer"), k.call(libDef("bytes of"), encoder(k, info, k.x(def), l)))));
@@ -175,8 +189,9 @@ export function bake(code: Code, info: Info, names: Record<Id, string>, def: Id)
   const ms = performance.now() - t0;
   if (status !== 0) return `its encoder stopped (exit status ${status})`;
   if (!answer) return "its encoder wrote nothing";
-  const key = bakeKey(code, def, l);
-  return { def, key, file: bakeFile(key, answer), ms };
+  const file = bakeFile(key, answer);
+  store?.keepFile(key, file);
+  return { def, key, file, ms };
 }
 
 // The definition's body rewritten into its decoder, the body as written
@@ -207,7 +222,7 @@ export const CARRY_MS_PER_KB = 0.036;
 // written, or baked however small its work.
 export type BakeWay = "at start" | "baked to a file";
 export interface Weighed { def: Id; name: string; computeMs: number; decodeMs: number; carryMs: number; bytes: number; baked: boolean; held?: BakeWay }
-export function bakedPage(code: Code, info: Info, names: Record<Id, string>, main: Id, options?: Parameters<typeof infer>[3], held: ReadonlyMap<Id, BakeWay> = new Map()): { code: Code; info: Info; files: Record<string, Uint8Array>; weighed: Weighed[] } {
+export function bakedPage(code: Code, info: Info, names: Record<Id, string>, main: Id, options?: Parameters<typeof infer>[3], held: ReadonlyMap<Id, BakeWay> = new Map(), store?: BakeStore): { code: Code; info: Info; files: Record<string, Uint8Array>; weighed: Weighed[] } {
   const holdsList = (l: Layout): boolean => l.k === "list" || (l.k === "record" && l.fields.some(holdsList));
   const candidates = [...dependenciesOfAll(code, [main])].filter((d) => {
     const n = code.nodes[d];
@@ -229,16 +244,20 @@ export function bakedPage(code: Code, info: Info, names: Record<Id, string>, mai
   for (const d of candidates) {
     const way = held.get(d);
     if (way === "at start") { weighed.push({ def: d, name: names[d], computeMs: 0, decodeMs: 0, carryMs: 0, bytes: 0, baked: false, held: way }); continue; }
-    const b = bake(code, info, names, d);
+    const b = bake(code, info, names, d, store);
     if (typeof b === "string") continue;
-    const one = withDecoder(code, info, b), oneInfo = infer(one, names, undefined, options);
-    if (oneInfo.errors.length) continue;
-    const file = `baked/${b.key}.bin`;
-    const world = { readBytes: (p: string) => { if (p !== file) throw new Error("no file"); return b.file; } };
-    const carryMs = (b.file.length * 4) / 3 / 1024 * CARRY_MS_PER_KB;
-    // One the page can't run compiled, here, stays as written.
-    let computeMs = 0, decodeMs = 0;
-    try { if (!way) { computeMs = timed(code, info, names[d], undefined); decodeMs = timed(one, oneInfo, names[d], world); } } catch { continue; }
+    const file = `baked/${b.key}.bin`, carryMs = (b.file.length * 4) / 3 / 1024 * CARRY_MS_PER_KB;
+    // Weighed before, by this compiler: as it was.
+    const kept = way ? undefined : store?.weighed(b.key);
+    let computeMs = kept?.computeMs ?? 0, decodeMs = kept?.decodeMs ?? 0;
+    if (!kept) {
+      const one = withDecoder(code, info, b), oneInfo = infer(one, names, undefined, options);
+      if (oneInfo.errors.length) continue;
+      const world = { readBytes: (p: string) => { if (p !== file) throw new Error("no file"); return b.file; } };
+      // One the page can't run compiled, here, stays as written.
+      try { if (!way) { computeMs = timed(code, info, names[d], undefined); decodeMs = timed(one, oneInfo, names[d], world); } } catch { continue; }
+      if (!way) store?.keepWeighed(b.key, { computeMs, decodeMs });
+    }
     const pays = way === "baked to a file" || decodeMs + carryMs < 0.9 * computeMs;
     weighed.push({ def: d, name: names[d], computeMs, decodeMs, carryMs, bytes: b.file.length, baked: pays, ...(way ? { held: way } : {}) });
     if (!pays) continue;

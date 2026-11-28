@@ -125,3 +125,31 @@ test("a page bakes an answer where reading it back pays (G16b3c3)", () => {
   const heldWorld = { readBytes: (p: string) => { const b = held.files[p]; if (!b) throw new Error("no file"); return b; } };
   assert.equal((compiledDefs(held.code, held.info, names, ["shown"], { print: () => {}, world: heldWorld } as never) as unknown as Record<string, () => unknown>).shown(), asWritten);
 });
+
+test("a page's bakes and weighings are read back from the store (G16d2)", () => {
+  const k = new Lang(LIBRARY.code);
+  const Spot = k.type("Spot", [], [["spot", [["x", () => k.tref(NUMBER)], ["n", () => k.tref(INT)]]]]);
+  const spots = k.def("spots"), main = k.def("shown");
+  k.define(spots, k.call(lib("map"), k.call(INT_OPS.range, k.int(50)), k.fn(["i"], (i) => k.call(Spot.v.spot, k.call(INT_OPS.toNumber, i), i))));
+  k.define(main, k.call(SHOW_ANY, k.x(spots)));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const files = new Map<string, Uint8Array>(), weighings = new Map<string, { computeMs: number; decodeMs: number }>();
+  let made = 0, timed = 0;
+  const store = { file: (key: string) => files.get(key), keepFile: (key: string, f: Uint8Array) => { made++; files.set(key, f); }, weighed: (key: string) => weighings.get(key), keepWeighed: (key: string, w: { computeMs: number; decodeMs: number }) => { timed++; weighings.set(key, w); } };
+  const first = bakedPage(code, info, names, main, checkOptions, new Map(), store);
+  assert.deepEqual([made, timed], [1, 1]);
+  // Again: no bake run, nothing timed, the same verdict.
+  const again = bakedPage(code, info, names, main, checkOptions, new Map(), store);
+  assert.deepEqual([made, timed], [1, 1]);
+  assert.deepEqual(again.weighed, first.weighed);
+  // Weighed as faster to read back: baked, from the kept file.
+  const [key] = files.keys();
+  weighings.set(key, { computeMs: 100, decodeMs: 1 });
+  const paid = bakedPage(code, info, names, main, checkOptions, new Map(), store);
+  assert.deepEqual([made, timed, paid.weighed[0].baked], [1, 1, true]);
+  assert.deepEqual(paid.files[`baked/${key}.bin`], files.get(key));
+  const world = { readBytes: (p: string) => { const b = paid.files[p]; if (!b) throw new Error("no file"); return b; } };
+  const asWritten = makeRunner(code, info, { print: () => {}, names }).value(main);
+  assert.equal((compiledDefs(paid.code, paid.info, names, ["shown"], { print: () => {}, world } as never) as unknown as Record<string, () => unknown>).shown(), asWritten);
+});

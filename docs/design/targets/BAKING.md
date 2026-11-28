@@ -55,7 +55,10 @@ to a file`, the answer is baked even when it is small.
 `ters decisions` writes the entry from the weighing, and `ters build-web`
 and `ters build-app` weigh again unless it is held (G16d1). The weighing
 is timed, so `ters check` doesn't weigh and never calls a bake entry
-stale; G16d2 keeps the weighing in the bake store with the bytes.
+stale. The bake store keeps each file by its key and each weighing by
+its key and the compiler that reads it back (G16d2), so a rebuild with
+nothing changed runs no bake and times nothing: rain-page's build-web
+goes from 4.1 s to 3.0 s.
 
 ## How it is made
 
@@ -191,7 +194,7 @@ Each target finds the bytes its own way:
   C compiler, with the file beside the executable or preopened.
 - **G16d**: the decisions entry, and build-web baking what the weighing
   keeps (G16d1, done), with the bytes and the weighing kept in the store
-  so a rebuild runs nothing (G16d2).
+  so a rebuild runs nothing (G16d2, done).
 - **G16e**: lists, records of arrays, and Bytes, beyond an Array of
   records.
 

@@ -748,11 +748,12 @@ async function pageFile(): Promise<string> {
   } catch (e) { fail((e as Error).message.replace(/^(ters|lab): /, "")); }
 }
 // A page's bakes (G16d, BAKING.md): each answer main reaches that a file
-// could hold, baked where reading it back pays, or as held.
+// could hold, baked where reading it back pays, or as held; the bakes and
+// weighings made before read back (G16d2).
 const bakesHeld = heldBakes(writtenChoices);
 async function bakedHere(q: { code: Code; info: Info; names: Names }, root: Id) {
-  const { bakedPage } = await import("../../compiler/src/bake-file.ts");
-  return bakedPage(q.code, q.info, q.names, root, q.info.options, bakesHeld);
+  const { bakedPage } = await import("../../compiler/src/bake-file.ts"), { bakeStore } = await import("./bake-store.ts");
+  return bakedPage(q.code, q.info, q.names, root, q.info.options, bakesHeld, bakeStore());
 }
 
 // Where a page's handler's maps may run (L280a's placement entries):
