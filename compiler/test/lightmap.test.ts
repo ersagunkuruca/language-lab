@@ -4,7 +4,7 @@
 // it to a file the page carries; held at start, the page traces it as it
 // loads. Either way the picture is the same, pixel for pixel. The picture
 // is read in headless Chromium (SwiftShader's WebGPU); skipped where there
-// is none.
+// is none. The drops' probes (G18a) and the leaves' distance (G18d) too.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -55,6 +55,20 @@ test("rain-page's back wall is baked to a file its page carries, the compiler's 
   // Both draws stay on the GPU: the fireflies' within reach is one loop
   // over a list kept as written (library-reps.ts), not an array of List.
   for (const p of [baked.html, traced.html]) assert.equal((readFileSync(p, "utf8").match(/@fragment/g) ?? []).length, 2);
+});
+
+// The fireflies' soft shadows (G18c, G18d, PROBES.md): the glass marches
+// the leaves' distance, read from a field of 256 × 192 samples of it. The
+// distance is exact: less than 0 inside a leaf, the way to the nearest
+// edge outside. The field is computed (or baked) as the weighing says, and
+// the glass stays on the GPU (above: two fragments).
+test("rain-page's fireflies' shadows march the leaves' distance, kept as samples (G18c, G18d)", () => {
+  const s = new Session(join(import.meta.dirname, "../../ters/examples/rain-page"));
+  const value = (e: string) => /= (.+) : (Float64|Int)$/m.exec(s.eval(e))![1];
+  assert.equal(value("leaf distance(leaves, 0.27, 0.42)"), "-0.035");
+  assert.equal(value("leaf distance(leaves, 0.27, 0.5)"), "0.045");
+  assert.equal(value("length(leaf field.texels)"), String(256 * 192));
+  assert.equal(baked.decisions.filter((l) => / way: leaf field's answer: /.test(l)).length, 1);
 });
 
 test("rain-page's picture is the same with its wall baked or traced at start (G17)", { skip: !exe && "no Chromium" }, async () => {

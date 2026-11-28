@@ -71,10 +71,22 @@ The march is the soft shadow by sphere tracing a distance field: step
 by the distance, keep the smallest ratio of distance to how far along,
 and that ratio is the penumbra (after Íñigo Quílez).
 
-- **G18c**: the fireflies' soft shadows behind the leaves, the exact
-  minimum, measured on SwiftShader.
-- **G18d**: the baked field against the exact one, built only if it
-  pays.
+- **G18c** (done): `leaf distance`, a fold over the leaves keeping the
+  nearest edge; `shadow march`, the march as a call of itself at its
+  end, so it is a loop on the GPU, in at most 8 steps: a step is no
+  longer than an even share of the way left, so the last one reaches the
+  firefly, and that share makes the count an Int, which the checker
+  counts (L46), so the march ends; `fly shade`, 1 on a leaf, which the
+  flies light, else the march. A firefly's reach (0.006 to 0.012) is
+  short next to the leaves (0.03 to 0.08), so the shadows are thin
+  crescents at the leaves' edges, about 0.2% of the picture.
+- **G18d** (done): measured on SwiftShader, the medians of four runs
+  each, interleaved: 446 ms a frame before the shadows, 525 marching the
+  exact distance (+18%), 450 marching `leaf field`, a 256 × 192 Image of
+  the distance read between samples (+1%). The field is 14% faster a
+  frame than the exact distance, past the 10%, so the glass reads it.
+  The weighing keeps the field computed at start (16 discs a sample is
+  cheap); the page loads in the same 165 to 186 ms.
 
 ## What stays out
 

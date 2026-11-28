@@ -39,6 +39,7 @@ import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
 import { countedCalls } from "./counting.ts";
+import { INT, type Type } from "./types.ts";
 import { ARRAY_OPS, INT_OPS, S, SET, TEXT_OPS } from "./std.ts";
 import { STD_IMPL, STD_MANY } from "./std-impl.ts";
 import { filled } from "./ports.ts";
@@ -314,7 +315,11 @@ export function wrapperOf(nodes: Code["nodes"], def: Id): { builtin: Id; args: n
   return { builtin: head.target, args };
 }
 
-export function analyzer(program: Code, names: Record<Id, string> = {}, { plansOnly = false, keepSlots = false } = {}) {
+// `typeOf`, the checker's types of the definitions where known: an input
+// typed Int is one a literal bound or step is read as an Int for (L46,
+// counting.ts), as the checker reads it; with none, only literals written
+// as Ints are.
+export function analyzer(program: Code, names: Record<Id, string> = {}, { plansOnly = false, keepSlots = false, typeOf }: { plansOnly?: boolean; keepSlots?: boolean; typeOf?: ReadonlyMap<Id, Type> } = {}) {
   // A use with no body is read with its ports bound (L211e).
   const code = filled(program);
   const nodes = code.nodes;
@@ -418,7 +423,9 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     let c = counts.get(d);
     if (!c) {
       const body = nodes[(nodes[d] as NodeOf<"def">).body ?? ""];
-      counts.set(d, (c = body?.kind === "lambda" ? countedCalls(code, d, body) : new Set()));
+      const t = typeOf?.get(d);
+      const isInt = t?.t === "fn" && body?.kind === "lambda" ? (param: Id) => { const p = t.params[body.params.indexOf(param)]; return p?.t === "con" && p.id === INT; } : undefined;
+      counts.set(d, (c = body?.kind === "lambda" ? countedCalls(code, d, body, isInt) : new Set()));
     }
     return c;
   };
