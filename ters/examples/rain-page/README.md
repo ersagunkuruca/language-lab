@@ -59,5 +59,14 @@ bead reads the four probes round its middle and shines where it faces
 the lamps, dull in a leaf's shadow. The probes take 85 ms compiled, and
 the compiler bakes them too.
 
+The fireflies cast soft shadows (G18c, G18d): the glass marches from a
+place toward each firefly within reach, each step as long as the nearest
+leaf is far, and keeps the narrowest the way gets for how far along,
+which is the penumbra. The leaves' distance is read from `leaf field`, a
+256 × 192 picture of it, copied in as the wall is: marching the exact
+distance (the nearest of 16 discs at every step) made a frame on
+SwiftShader 18% slower, the field 1%. A firefly's reach is short next to
+the leaves, so its shadows are thin crescents at a leaf's edge.
+
 Credits: random numbers by the ZX81's generator (Sinclair Research, 1981);
-a fixed step after Glenn Fiedler's Fix Your Timestep (2004); the fireflies and the points on each bulb spread by Martin Roberts's R2 sequence ("The unreasonable effectiveness of quasirandom sequences", 2018); soft shadows by distributed ray tracing (Robert L. Cook, Thomas Porter and Loren Carpenter, SIGGRAPH 1984); ambient occlusion after Sergei Zhukov, Andrei Iones and Grigorij Kronin ("An ambient light illumination model", 1998); the wall's light kept as Quake's lightmaps were (id Software, 1996); the drops lit by probes, an irradiance volume (Gene Greger, Peter Shirley, Philip M. Hubbard and Donald P. Greenberg, 1998) kept in circular harmonics as Peter-Pike Sloan, Jan Kautz and John Snyder (2002) and Ravi Ramamoorthi and Pat Hanrahan (2001) keep light in spherical ones.
+a fixed step after Glenn Fiedler's Fix Your Timestep (2004); the fireflies and the points on each bulb spread by Martin Roberts's R2 sequence ("The unreasonable effectiveness of quasirandom sequences", 2018); soft shadows by distributed ray tracing (Robert L. Cook, Thomas Porter and Loren Carpenter, SIGGRAPH 1984); ambient occlusion after Sergei Zhukov, Andrei Iones and Grigorij Kronin ("An ambient light illumination model", 1998); the wall's light kept as Quake's lightmaps were (id Software, 1996); the drops lit by probes, an irradiance volume (Gene Greger, Peter Shirley, Philip M. Hubbard and Donald P. Greenberg, 1998) kept in circular harmonics as Peter-Pike Sloan, Jan Kautz and John Snyder (2002) and Ravi Ramamoorthi and Pat Hanrahan (2001) keep light in spherical ones; the fireflies' soft shadows by sphere tracing (John C. Hart, "Sphere tracing", 1996) the leaves' distance as Íñigo Quílez marches a soft shadow ("Soft shadows in raymarched SDFs", 2010), the distance kept as samples (Sarah F. Frisken, Ronald N. Perry, Alyn P. Rockwood and Thouis R. Jones, "Adaptively sampled distance fields", 2000).
