@@ -171,7 +171,7 @@ function rainPage(close?: "offered" | "held"): string {
 }
 test("rain-page's map of drops gets a WebGPU kernel of words: its drops as records of Float32s, the hand captured (G12)", () => {
   const html = readFileSync(rainPage(), "utf8");
-  assert.match(html, /pageGpu\(\{0:\{how:"map",result:"words",caps:\[\],words:\{item:\[\{path:\[0,0\],kind:"f32"\}/);
+  assert.match(html, /pageGpu\(\{\d+:\{how:"map",result:"words",caps:\[\],words:\{item:\[\{path:\[0,0\],kind:"f32"\}/);
   // The drop from five words, the hand from three: its Bool, its place.
   assert.match(html, /bitcast<i32>\(lab_xs\[i \* 5u \+ 4u\]\)/);
   assert.match(html, /\(lab_caps\[0\] != 0u\)/);
@@ -197,7 +197,7 @@ test("rain-page as written sends its slide to the GPU's kernel (G12d)", () => {
 test("a map whose arithmetic is only close goes to the GPU only where its decisions hold it there (G12)", () => {
   assert.doesNotMatch(readFileSync(rainPage("offered"), "utf8"), /pageGpu\(\{/);
   const held = readFileSync(rainPage("held"), "utf8");
-  assert.match(held, /pageGpu\(\{0:\{how:"map",result:"words",/);
+  assert.match(held, /pageGpu\(\{\d+:\{how:"map",result:"words",/);
   assert.match(held, /close:"[^"]+"/);
 });
 

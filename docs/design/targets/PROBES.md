@@ -43,11 +43,17 @@ numbers, padded) through a copy pass, as the wall does.
 
 Steps:
 
-- **G18a**: the probes as a value, computed; the drops' fragment reads
-  them. Measured: a frame on SwiftShader against now, and the probes'
-  compute time.
-- **G18b**: the weighing on the probes. If they take under about 10% of
-  the page's load, they stay computed and the step closes measured.
+- **G18a** (done): `probe light`, the probes as an Image of three
+  blocks (how much, toward the right, upward), each a row of probes per
+  row, so the sampler's mix between texels is the mix between probes.
+  Each lamp is kept in its own channel, red, green and blue, as on the
+  wall, so the drops flicker each lamp. One bulb lights a probe from one
+  side, so the first harmonics carry it: the second (cos 2θ, sin 2θ) and
+  the wall's bounce wait for light that comes from many sides. The drop's
+  fragment weights the bands by the clamped cosine's, 2 and π/2.
+  Measured: 85 ms compiled; a frame on SwiftShader 352 ms against 344.
+- **G18b** (done): the weighing bakes the probes (85 ms against a few
+  to read back); lightmap.test says so.
 
 ## Distance field (G18c, G18d)
 
