@@ -1,5 +1,5 @@
 // A bake's bytes (G16b2, docs/design/targets/BAKING.md): compiled
-// JavaScript asks its world for baked/<key>.bin, and gives none where the
+// JavaScript asks its world for baked/<key>.bin, behind its header (G16b3c2), and gives none where the
 // world has no such file; evaluated, always none. Never folded at compile
 // time (bake.ts), where there are no bytes.
 
@@ -12,6 +12,7 @@ import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { NONE, SHOW_ANY, SOME } from "../../ters/src/lang/std.ts";
 import { compiledDefs } from "../src/core-js.ts";
+import { bakeFile } from "../src/bake-header.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
@@ -29,11 +30,16 @@ test("baked bytes: compiled, the world's baked/<key>.bin or none; evaluated, non
   assert.deepEqual(info.errors.map((e) => e.message), []);
   assert.equal(makeRunner(code, info, { print: () => {}, names }).value(d), "-1");
   const asked: string[] = [];
-  const files: Record<string, Uint8Array> = { "baked/rain.bin": new Uint8Array([1, 2, 3]) };
+  const files: Record<string, Uint8Array> = { "baked/rain.bin": bakeFile("rain", new Uint8Array([1, 2, 3])) };
   const world = { readBytes: (p: string) => { asked.push(p); const b = files[p]; if (!b) throw new Error("no file"); return b; } };
   const run = (w: object | undefined) => (compiledDefs(code, info, names, ["probe"], { print: () => {}, world: w } as never) as unknown as Record<string, () => unknown>).probe();
   assert.equal(run(world), "3");
   assert.deepEqual(asked, ["baked/rain.bin"]);
+  // Behind a header of another key, or cut short: none.
+  files["baked/rain.bin"] = bakeFile("snow", new Uint8Array([1, 2, 3]));
+  assert.equal(run(world), "-1");
+  files["baked/rain.bin"] = bakeFile("rain", new Uint8Array([1, 2, 3])).subarray(0, 20);
+  assert.equal(run(world), "-1");
   delete files["baked/rain.bin"];
   assert.equal(run(world), "-1");
   assert.equal(run(undefined), "-1");

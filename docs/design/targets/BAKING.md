@@ -162,10 +162,15 @@ Each target finds the bytes its own way:
   each leaf's bytes exactly as a DataView writes them. A bake runs them
   compiled, over the answer in whatever representation it has. An Int
   outside 32 bits stops the bake.
-- **G16b3c2**: the bake step for pages. Compile the definition alone to
-  JavaScript, run it in Node, write the bytes, keep them in the store,
-  and carry them with the page. rain-page's `start pane` comes from the
-  file.
+- **G16b3c2** (done): the bake, compiler/src/bake-file.ts. It finds the
+  layout from the definition's type, runs its encoder compiled, writes the
+  header and the answer, and rewrites the body into its decoder. A Float32
+  is read back through the numbers module's `as float32`, since its case
+  is private. Compiled JavaScript checks the header. Test:
+  compiler/test/bake-file.test.ts.
+- **G16b3c3**: the bake step on `ters build-web`: bake, keep the bytes in
+  the store, and carry them with the page. rain-page's `start pane` comes
+  from the file.
 - **G16c**: native and WebAssembly. Run the bake as C where there is a
   C compiler, with the file beside the executable or preopened.
 - **G16d**: the decisions entry, and the weighing that sets when the

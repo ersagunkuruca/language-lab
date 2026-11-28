@@ -22,6 +22,7 @@ import { NoAnswer } from "../../ters/src/lang/html.ts";
 import { worldRandom } from "../../ters/src/lang/random.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { ItemsList, bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
+import { bakedAnswer } from "./bake-header.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
@@ -1036,7 +1037,9 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
     // A bake's bytes (G16, BAKING.md): the file the build wrote beside the
     // program, which a page carries (G11a), by its key; none where there
     // is none, so the decoder gives its definition's body as written.
-    case "bakedBytes": return (key) => { let b: Uint8Array | null = null; try { b = rt.world?.readBytes?.(`baked/${key as string}.bin`) ?? null; } catch { /* none */ } return b ? { tag: SOME, fields: [bytesValue(b)] } : { tag: NONE, fields: [] }; };
+    // Behind its header (bake-header.ts): a file of another key or
+    // version is none.
+    case "bakedBytes": return (key) => { let b: Uint8Array | null = null; try { const f = rt.world?.readBytes?.(`baked/${key as string}.bin`); b = f ? bakedAnswer(f, key as string) : null; } catch { /* none */ } return b ? { tag: SOME, fields: [bytesValue(b)] } : { tag: NONE, fields: [] }; };
     // A bake's words (G16b3b), little-endian, read where the bytes are:
     // the world's bytes as they came, or the bytes copied out once.
     case "bakedInt32": return (b, p) => I.norm(BigInt(bakedWord(b, p, 4, (v, i) => v.getInt32(i, true))));
