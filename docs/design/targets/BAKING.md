@@ -146,7 +146,11 @@ Each target finds the bytes its own way:
   table of 2,046 powers), and `baked bytes(key)`, which as written gives
   none, so a decoder gives its definition's body as written. All of them
   are in prelude-ids.ts for the compiler to find.
-- **G16b2, G16b3**: the bake step for pages. Compile the definition alone to
+- **G16b2** (done): compiled JavaScript reads `baked/<key>.bin` from its
+  world for `baked bytes` (none without it); native and WebAssembly keep
+  the prelude's none until G16c. bake.ts never folds what reaches `baked
+  bytes`. Test: compiler/test/baked-bytes.test.ts.
+- **G16b3**: the bake step for pages. Compile the definition alone to
   JavaScript, run it in Node, write the bytes, keep them in the store,
   and carry them with the page. rain-page's `start pane` comes from the
   file.
