@@ -144,8 +144,12 @@ Ersagun measures on a real GPU later, as with G13d.
   The grid has √n cells a side, at most 64, or n in a line. rain-page on
   SwiftShader: 442 ms a frame at 1x and 56 ms at 4x, against 1,254 and
   881 forward, and 417 and 40 with no fireflies.
-  **G15b2b**: its `way` entry in the decisions, so a person may hold a
-  fold to every item.
+  **G15b2b** (done): its `way` entry in the decisions, by the within
+  reach call as written (the fused test and the fold's copy of the call
+  are noted as copies of it):
+  `… way: glass colour's items within reach: grid; among every item,
+  grid; target JavaScript page`. Held to `every item`, the draw has no
+  grid (gpu-draws.ts holdEveryItem), and `ters check` says so.
 - **G15c**: shadow maps, waiting for a page with depth.
 
 ## What stays out

@@ -55,6 +55,7 @@
 // The text follows the WGSL spec, https://www.w3.org/TR/WGSL/.
 
 import type { Id } from "../../ters/src/model.ts";
+import { writtenAt } from "../../ters/src/lang/prelude-ids.ts";
 import { shareCalls } from "./share-calls.ts";
 import { recordParts } from "./record-parts.ts";
 import { isArray, isRecord, kids as allKids, mapKids, noData, OPS, tidied, unchecked, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType, type AType, type TType } from "./scalar.ts";
@@ -80,7 +81,8 @@ export interface Framed { wgsl: string; count: number; values: (time: number) =>
 // record of two) and its reach, and how many Float64s a place is.
 // gpu-draws.ts writes lab_gridR_cell, _count and _item and the passes that
 // fill the grid.
-export interface Grid { place: string; reach: string; dims: 1 | 2; at: LType }
+// call: the within reach call it is for, as written (G15b2b).
+export interface Grid { place: string; reach: string; dims: 1 | 2; at: LType; call: Id }
 export interface Shader { wgsl: string; funcs: ShaderFunc[]; entries: Map<number, string>; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }>; matrices: Set<number>; framed?: Framed; grids?: Map<number, Grid> }
 const INFIX: Partial<Record<Op, string>> = {
   add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&&", or: "||", iless: "<", ieq: "==", iand: "&", ior: "|", ixor: "^",
@@ -714,7 +716,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
     refused,
     structs,
     matrices,
-    ...(gridAt.size ? { grids: new Map([...gridAt].map(([r, g]) => [r, { place: wname.get(`${g.place}`)!, reach: wname.get(`${g.reach}`)!, dims: g.dims, at: funcs[g.place].result }])) } : {}),
+    ...(gridAt.size ? { grids: new Map([...gridAt].map(([r, g]) => [r, { place: wname.get(`${g.place}`)!, reach: wname.get(`${g.reach}`)!, dims: g.dims, at: funcs[g.place].result, call: writtenAt(funcs[g.place].def) }])) } : {}),
   };
 
   function func(f: SFunc, inst: Inst): string {

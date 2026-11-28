@@ -676,7 +676,7 @@ const awayOn = (at: Id): SExpr[] => { const on = onWorkers.page.get(at), n = run
 const worthHeld = (at: Id, away: boolean): SExpr[] => ((away ? onWorkers.page.has(at) : onWorkers.js.has(at)) ? [{ k: "bool", v: true }] : []);
 const always = (at: Id): SExpr[] => { const n = runsOf(at); return onWorkers.js.has(at) || n.length ? [{ k: "bool", v: onWorkers.js.has(at) }, ...n] : []; };
 
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean; everyItem?: ReadonlySet<Id> } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
@@ -697,7 +697,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean; everyItem?: ReadonlySet<Id> }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes, carry); } finally { stopSite = outer; }
 }
@@ -796,7 +796,7 @@ function preparedIn(code: Code, info: Info, names: Names, roots: Id[], host: boo
 }
 
 const fronts = new WeakMap<Set<string>, { code: Code; info: Info; names: Names; rounded: Id[] }>();
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; passing?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean; everyItem?: ReadonlySet<Id> }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
   let here: { node: Id; def: Id } | null = null;
@@ -5280,6 +5280,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (!isCall(c) || c.args.length !== 4) return null;
     const fn = code.nodes[c.fn];
     if (fn?.kind !== "ref" || fn.target !== REACHES) return null;
+    // Held to every item (G15b2b), by the within reach call as written.
+    if (opts.everyItem?.has(writtenAt(c.id))) return null;
     const [, place, reach, here] = c.args;
     const ht = stype(zonk(here));
     const dims = ht === "f64" ? 1 : ht && isRecord(ht) && ht.fields.length === 2 && ht.fields.every((x) => x.t === "f64") ? 2 : 0;
@@ -5288,7 +5290,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const of = (g: Id, which: string, res: LType): number | null => {
       const t = stype(zonk(g));
       if (!t || !isFn(t)) return null;
-      const h: SFunc = { def: g, name: `reach grid ${which}`, params: [array.item], result: res, locals: [array.item], body: { k: "num", v: 0 }, spends: false, budgeted: false };
+      const h: SFunc = { def: which === "place" ? c.id : g, name: `reach grid ${which}`, params: [array.item], result: res, locals: [array.item], body: { k: "num", v: 0 }, spends: false, budgeted: false };
       try { h.body = { k: "apply", fn: expr(g, new Map(), h, false), t, args: [{ k: "local", i: 0 }], tail: false, tmp: h.locals.push(t) - 1 }; }
       catch (e) { if (e instanceof Refused) return null; throw e; }
       return funcs.push(h) - 1;
