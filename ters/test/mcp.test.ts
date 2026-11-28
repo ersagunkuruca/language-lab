@@ -154,6 +154,9 @@ test("pin at a type written: the body is checked at its inputs' types, a count a
   text("pin", { at: "down", type: "(Int) -> Int" });
   text("replace", { at: "down", find: "□", text: "if k ≤ 0 then 0 else down(k - 1)" });
   assert.match(text("defs"), /  down : \(Int\) -> Int$/m);
+  // Pinned after its body is written, the same: its input is the pin's
+  // before it is judged.
+  assert.equal(text("pin", { at: "loose", type: "(Int) -> Int" }), "ok: loose : (Int) -> Int");
   // A small letter is a type variable; a body that breaks the pin is refused.
   text("define", { name: "same", kind: "function", params: ["x"] });
   text("pin", { at: "same", type: "(a) -> a" });
