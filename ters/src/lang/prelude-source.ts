@@ -2083,7 +2083,8 @@ export function buildPrelude(): Module {
   // each is exact: every power a Float32 needs.
   const doublings = k.def("baked doublings");
   k.define(doublings, k.fn(["power", "left"], (pw, left) => k.if(iLess(left, k.int(1)), k.list(), k.call(CONS, pw, k.call(doublings, k.call(B.mul, pw, k.lit(2)), k.call(INT_OPS.sub, left, k.int(1)))))));
-  const f32Powers = def("baked float32 powers", [], () => k.call(ARRAY_OPS.of, k.call(doublings, k.lit(2 ** -150), k.int(300))));
+  const f32Powers = k.def("baked float32 powers");
+  k.define(f32Powers, k.call(ARRAY_OPS.of, k.call(doublings, k.lit(2 ** -150), k.int(300))));
   // A Float32's 32 bits (IEEE 754 binary32) as the number they are,
   // exactly: the fraction's 23 bits and its hidden 1, times a power of two.
   // Infinities and NaN, which a finite Float64 never is, read as 0.
@@ -2092,11 +2093,12 @@ export function buildPrelude(): Module {
       k.let("fraction", k.call(INT_OPS.bitAnd, w, k.int(0x7fffff)), (m) =>
         k.let("size", k.if(k.equal(e, k.int(255)), k.lit(0),
           k.call(B.mul, k.call(INT_OPS.toNumber, k.if(k.equal(e, k.int(0)), m, iAdd(m, k.int(2 ** 23)))),
-            k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.at, k.call(f32Powers), k.if(k.equal(e, k.int(0)), k.int(1), e))), k.thunk(() => k.lit(1))))), (v) =>
+            k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.at, k.x(f32Powers), k.if(k.equal(e, k.int(0)), k.int(1), e))), k.thunk(() => k.lit(1))))), (v) =>
           k.if(iLess(w, k.int(2 ** 31)), v, k.call(B.mul, k.lit(-1), v)))))));
   // 2^(j − 1074) for j from 0 to 2045, made by doubling from 2^−1074:
   // every power a Float64 needs.
-  const f64Powers = def("baked float64 powers", [], () => k.call(ARRAY_OPS.of, k.call(doublings, k.lit(2 ** -1074), k.int(2046))));
+  const f64Powers = k.def("baked float64 powers");
+  k.define(f64Powers, k.call(ARRAY_OPS.of, k.call(doublings, k.lit(2 ** -1074), k.int(2046))));
   // A Float64's 64 bits (IEEE 754 binary64), the low word first, as the
   // number they are, exactly; infinities and NaN read as 0.
   const float64At = def("baked float64 at", ["bytes", "position"], (b, p) => k.let("high", k.call(word32At, b, iAdd(p, k.int(4))), (hi) =>
@@ -2104,7 +2106,7 @@ export function buildPrelude(): Module {
       k.let("fraction", iAdd(k.call(INT_OPS.mul, k.call(INT_OPS.bitAnd, hi, k.int(0xfffff)), k.int(2 ** 32)), k.call(word32At, b, p)), (m) =>
         k.let("size", k.if(k.equal(e, k.int(2047)), k.lit(0),
           k.call(B.mul, k.call(INT_OPS.toNumber, k.if(k.equal(e, k.int(0)), m, iAdd(m, k.int(2 ** 52)))),
-            k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.at, k.call(f64Powers), k.if(k.equal(e, k.int(0)), k.int(0), k.call(INT_OPS.sub, e, k.int(1))))), k.thunk(() => k.lit(1))))), (v) =>
+            k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.at, k.x(f64Powers), k.if(k.equal(e, k.int(0)), k.int(0), k.call(INT_OPS.sub, e, k.int(1))))), k.thunk(() => k.lit(1))))), (v) =>
           k.if(iLess(hi, k.int(2 ** 31)), v, k.call(B.mul, k.lit(-1), v)))))));
   const bakeHelpers = [word32At, int32At, doublings, f32Powers, float32At, f64Powers, float64At];
   // Shifts and masks, which have one answer where quotient has none for 0.
