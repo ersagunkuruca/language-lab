@@ -141,6 +141,31 @@ What the first runs showed:
 Test: rain.test, 30 stones fall, rest on the sill and deep in no other
 stone, the fastest slower than a tick of gravity.
 
+## G19b, built (2026-11-28)
+
+A stone has `chip: Bool`; four in ten are chips, a box `radius` across
+each way from its middle and half that thick, struck turned and spinning.
+`chips touch` tries the two chips' four sides as separating axes
+(`overlap along`, `half across`), takes the least overlap's face as the
+reference, finds the incident face on the other (`facing most`), clips it
+to the reference face's sides (`clipped`) and keeps the points below the
+face: two for a chip lying on a chip, so it stays level. A chip on the
+sill (`frame touches`, `corner touch`) is its corners below it; a chip on
+a disc (`disc on chip`) the disc's nearest point on the box. Every touch
+then goes to G19a's solver as before, with the lever arm from each
+middle, so chips turn as they are pushed.
+
+Found on the way: a draw whose instances hold a Bool was refused for
+compiled pages ("data holding a Bool"), as every host builtin given one
+is. A draw hands its instances to no function of the evaluator's: the
+frame writes a Bool leaf as a word from a boolean or the evaluator's True
+(gpu-frame.ts `put`), and on the CPU only the program's own functions see
+them. So scalar.ts takes the draw before that refusal.
+
+Measured: five chips stacked on the sill stand for 240 ticks, each on the
+one below, level and at rest (rain.test). Hail of chips and discs piles
+up with no stone in the sill.
+
 ## What stays out
 
 - **3D bodies.** rain-page is flat.
