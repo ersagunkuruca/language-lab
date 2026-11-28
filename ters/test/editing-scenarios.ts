@@ -839,7 +839,8 @@ async function simplifyAppend() {
 }
 
 // Build targets, told from its type at once (L22b): with no worker to
-// lower it, a definition taking a List is still told it can't be a shader.
+// lower it, a definition taking a List of Text is still told it can't be
+// a shader. A List taken is held as an Array (G15a2), so its Text says.
 async function whereTold() {
   where = "where it runs, told from its type";
   const p = await browser.newPage();
@@ -849,7 +850,7 @@ async function whereTold() {
   await p.locator("[data-def]", { hasText: /^words$/ }).first().click();
   await p.locator('[data-panel="node"]').click();
   const side = (await p.locator(".side").first().innerText()).replace(/\s+/g, " ");
-  if (!side.includes("no: words takes or gives List") || !side.includes("Checking the rest")) errors.push(`${where}: the panel says ${side.slice(side.indexOf("Build targets"), side.indexOf("Build targets") + 160)}`);
+  if (!side.includes("no: words takes or gives Text") || !side.includes("Checking the rest")) errors.push(`${where}: the panel says ${side.slice(side.indexOf("Build targets"), side.indexOf("Build targets") + 160)}`);
   await p.close();
 }
 

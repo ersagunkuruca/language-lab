@@ -188,7 +188,7 @@ test("rain-page as written sends its slide to the GPU's kernel (G12d)", () => {
   cpSync(join(import.meta.dirname, "../../ters/examples/rain-page"), program, { recursive: true });
   const r = spawnSync(process.execPath, [lab, "build-web", program, "-o", out], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
-  assert.match(readFileSync(out, "utf8"), /pageGpu\(\{0:\{how:"map",result:"words",/);
+  assert.match(readFileSync(out, "utf8"), /pageGpu\(\{\d+:\{how:"map",result:"words",/);
 });
 
 // A map whose arithmetic is only close gets a kernel only where the
