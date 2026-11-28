@@ -2108,50 +2108,7 @@ export function buildPrelude(): Module {
           k.call(B.mul, k.call(INT_OPS.toNumber, k.if(k.equal(e, k.int(0)), m, iAdd(m, k.int(2 ** 52)))),
             k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.at, k.x(f64Powers), k.if(k.equal(e, k.int(0)), k.int(0), k.call(INT_OPS.sub, e, k.int(1))))), k.thunk(() => k.lit(1))))), (v) =>
           k.if(iLess(hi, k.int(2 ** 31)), v, k.call(B.mul, k.lit(-1), v)))))));
-  // The other way (G16b3c): a leaf's bytes, little-endian, as the bake
-  // writes them for the readers above to read back exactly. A bake runs
-  // these compiled, so its answer is written in whatever representation the
-  // compiler chose for it.
-  const wordBytes = def("baked word bytes", ["word", "count"], (w, n) => k.call(map, k.call(INT_OPS.range, n), k.fn(["j"], (j) =>
-    k.call(INT_OPS.bitAnd, k.call(INT_OPS.shiftDown, w, k.call(INT_OPS.mul, k.int(8), j)), k.int(255)))));
-  // The largest j up to high whose power, scaled, is at most a, where the
-  // first's is: a bit at a time from the highest, so it ends.
-  const powerAtMost = def("baked power at most", ["powers", "size", "scale", "high"], (ps, a, sc, hi) => {
-    let at = k.int(0);
-    for (let step = 1024; step >= 1; step /= 2) {
-      const before = at, st = step;
-      at = k.let("at", before, (j) => k.let("next", iAdd(j, k.int(st)), (nx) =>
-        k.if(k.and(k.call(S.not, iLess(hi, nx)), k.call(S.not, k.call(S.less, a, k.call(B.mul, sc, k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.at, ps, nx)), k.thunk(() => k.lit(0))))))), nx, j)));
-    }
-    return at;
-  });
-  const powerOf = (ps: Id, j: Id) => k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.at, ps, j)), k.thunk(() => k.lit(1)));
-  const over = (a: Id, ps: Id, j: Id) => k.call(wholeOf, k.call(dividedOr, a, powerOf(ps, j), k.lit(0)));
-  // A number's sign bit and size, then its word from its biased exponent
-  // and fraction: the inverse of float32 at and float64 at.
-  const signed = (x: Id, bit: number | bigint, f: (a: Id) => Id) => k.let("size", k.call(S.abs, x), (a) =>
-    k.if(k.equal(a, k.lit(0)), k.int(0), iAdd(k.if(k.call(S.less, x, k.lit(0)), k.int(bit), k.int(0)), f(a))));
-  // A Float32's 4 bytes: below 2^−126, exponent 0 and the size over
-  // 2^−149; else the biased exponent e whose 2^(e − 150) · 2^23 is at
-  // most the size, and the size over 2^(e − 150) less the hidden 1.
-  const float32Bytes = def("baked float32 bytes", ["number"], (x) => k.call(wordBytes, signed(x, 2 ** 31, (a) =>
-    k.if(k.call(S.less, a, k.lit(2 ** -126)), over(a, k.x(f32Powers), k.int(1)),
-      k.let("exponent", k.call(powerAtMost, k.x(f32Powers), a, k.lit(2 ** 23), k.int(254)), (e) =>
-        iAdd(k.call(INT_OPS.mul, e, k.int(2 ** 23)), k.call(INT_OPS.sub, over(a, k.x(f32Powers), e), k.int(2 ** 23)))))), k.int(4)));
-  // A Float64's 8 bytes, the low word first: below 2^−1022, exponent 0
-  // and the size over 2^−1074; else the j whose 2^(j − 1074) · 2^52 is at
-  // most the size, the biased exponent j + 1, and the size over
-  // 2^(j − 1074) less the hidden 1.
-  const float64Bytes = def("baked float64 bytes", ["number"], (x) => k.call(wordBytes, signed(x, 2n ** 63n, (a) =>
-    k.if(k.call(S.less, a, k.lit(2 ** -1022)), over(a, k.x(f64Powers), k.int(0)),
-      k.let("power", k.call(powerAtMost, k.x(f64Powers), a, k.lit(2 ** 52), k.int(2045)), (j) =>
-        iAdd(k.call(INT_OPS.mul, iAdd(j, k.int(1)), k.int(2 ** 52)), k.call(INT_OPS.sub, over(a, k.x(f64Powers), j), k.int(2 ** 52)))))), k.int(8)));
-  // A signed 32-bit Int's 4 bytes; one outside that stops the bake, which
-  // then leaves its definition computed at start.
-  const int32Bytes = def("baked int32 bytes", ["number"], (n) => k.if(k.and(k.call(S.not, iLess(n, k.int(-(2 ** 31)))), iLess(n, k.int(2 ** 31))),
-    k.call(wordBytes, k.if(iLess(n, k.int(0)), iAdd(n, k.int(2 ** 32)), n), k.int(4)),
-    k.call(ABORT_OP, k.lit("baked int32 bytes: an Int outside 32 bits"))));
-  const bakeHelpers = [word32At, int32At, doublings, f32Powers, float32At, f64Powers, float64At, wordBytes, powerAtMost, float32Bytes, float64Bytes, int32Bytes];
+  const bakeHelpers = [word32At, int32At, doublings, f32Powers, float32At, f64Powers, float64At];
   // Shifts and masks, which have one answer where quotient has none for 0.
   const q = (a: Id, n: number) => k.call(INT_OPS.shiftDown, a, k.int(Math.log2(n))), r64 = (a: Id) => k.call(INT_OPS.bitAnd, a, k.int(63));
   const cont = (a: Id) => iAdd(k.int(128), r64(a));
@@ -2847,11 +2804,6 @@ export function buildPrelude(): Module {
     [f64Powers]: "2^(j − 1074) for j from 0 to 2045, every power a Float64 needs. A helper of baked float64 at, not offered.",
     [float64At]: "The Float64 whose 64 bits are at a position of baked bytes, the low word first, exactly; infinities and NaN read as 0. A helper of a bake's decoder (G16), not offered.",
     [bakedBytes]: "A bake's bytes by its key: as written, none, so a bake's decoder gives its definition's body; a compiled program asks its target instead (G16). Not offered.",
-    [wordBytes]: "A word's bytes, so many of them, the lowest first. A helper of a bake's encoder (G16), not offered.",
-    [powerAtMost]: "The largest position up to high whose power, times a scale, is at most a size, a bit at a time. A helper of a bake's encoder (G16), not offered.",
-    [float32Bytes]: "A Float32's 4 bytes (IEEE 754 binary32), little-endian, which baked float32 at reads back exactly. A helper of a bake's encoder (G16), not offered.",
-    [float64Bytes]: "A Float64's 8 bytes (IEEE 754 binary64), little-endian, which baked float64 at reads back exactly. A helper of a bake's encoder (G16), not offered.",
-    [int32Bytes]: "A signed 32-bit Int's 4 bytes, little-endian; an Int outside 32 bits stops. A helper of a bake's encoder (G16), not offered.",
     [float32At]: "The Float32 whose 32 bits are at a position of baked bytes, exactly; infinities and NaN read as 0. A helper of a bake's decoder (G16), not offered.",
     [byteAt]: "The byte at a position counted from 0, or otherwise where there is none: byte at(utf8 of(\"hi\"), 1, 0) is 105.",
     [utf8Of]: "The text's UTF-8 bytes (RFC 3629): each character's code point in one to four bytes. utf8 of(\"é\") is [195, 169].",

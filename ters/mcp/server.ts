@@ -101,9 +101,9 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "pin",
-    description: "Pin a definition at its type now, or at a type written (off: unpin): edits inside keep it, so a body can rely on its inputs' types. Kept in signatures.json.",
-    inputSchema: obj({ at: str("definition"), off: { type: "boolean", description: "unpin" }, type: str("optional: the type to pin it at, as the view shows one, e.g. (Grammar, Int) -> List Symbol; its inputs are then that type's in its body") }, ["at"]),
-    call: (a) => program().pin(String(a.at), a.off === true, a.type === undefined ? undefined : String(a.type)),
+    description: "Pin a definition at its type now (off: unpin): edits inside keep it, so a body can rely on its inputs' types. Kept in signatures.json.",
+    inputSchema: obj({ at: str("definition"), off: { type: "boolean", description: "unpin" } }, ["at"]),
+    call: (a) => program().pin(String(a.at), a.off === true),
   },
   {
     name: "define",
