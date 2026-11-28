@@ -28,7 +28,6 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L271c (the fill's push); L266 parked 11-26 (Ersagun) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| L Language and library | "Explore grammars and machines across the Chomsky hierarchy" | L293e only if Ersagun wants it; findings L295 to L297 are rows for the Language lane (Ersagun 2026-11-27) |
 | L Language and library | "Speed up the interpreter on real programs" | no open row (round 2 stopped 2026-11-23, Ersagun: fix the failed compile instead, E320) |
 | G Game | "Build a game to test Ters against engines" | stage 1: done (C265, C267 done, C283 and C284 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
@@ -195,7 +194,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L296 | A parameter's type in text, or a count the checker reads at a generic number: a count down with nothing Int-only in its body stays generic, so the counting check (L46, Int only) leaves it `Diverge`; chomsky's driver writes `quotient(rounds, 1) < 0` and deletes it, four times. The same cause makes `m.start` pick another record type's `start` field. Which way is Ersagun's call | [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) "Findings" (L293f) | P2 | M |  |
 
 ### Ersagun's current asks
 
@@ -240,7 +238,6 @@ Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L293e | Conversions up the hierarchy in chomsky, held: L293f found they add no new idea about the language (Ersagun's call): a PDA to a grammar, a Turing machine to an unrestricted grammar, each checked by the words both give | Ersagun 2026-11-27 ("OK let's try that and see where it goes"), [CHOMSKY-2026-11-27](docs/design/relations-and-effects/CHOMSKY-2026-11-27.md) | P3 | L | ⏸ |
 
 ### Physics and planning ([PHYSICS-AND-PLANNING.md](docs/design/physics/PHYSICS-AND-PLANNING.md))
 
