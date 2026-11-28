@@ -69,16 +69,21 @@ file; target JavaScript page`. Nothing in the program says bake.
 
 ## Steps
 
-- **G17a**: the back wall in rain-page, computed at start: its shapes,
-  the soft shadows, the copy pass and the glass sampling it. Measured:
-  the time to compute it, compiled, and the page's load event, as
-  G16b3c3 measured.
-- **G17b**: built with `ters build-web`, the wall is baked (the weighing
-  should choose it). Measured against G17a: the load event and the
-  bake's build time. A test holds the baked page's picture to the
-  computed one's, pixel for pixel, as gpu-grid.test does for the grid.
-- **G17c**: the ambient occlusion in alpha, if G17a leaves it out to
-  keep the first piece small.
+- **G17a** (done): the back wall in rain-page, with its soft shadows and
+  its occlusion (so G17c came with it), the copy pass and the glass
+  sampling it. Compiled, `back wall` takes 2.4 s. A page tracing it at
+  start (the bake held `at start`) loads in 2.4 to 3.4 s in Chromium on
+  SwiftShader, against 53 to 67 ms before the wall. Writing it found a
+  compiler bug: the wall's work made the chooser store Lists as an array
+  of List, whose walk a shader can't take, so the fireflies' within reach
+  wasn't one loop and the glass left the GPU. A program drawing on the GPU
+  that finds items within reach now keeps its Lists as written
+  (library-reps.ts). The lamps' warmths are a record (`warmths at`), so
+  the glass reads each lamp's without an item at.
+- **G17b** (done): `ters build-web` bakes the wall, the weighing's choice:
+  the page loads in 135 to 174 ms, carrying 1 MB. lightmap.test holds
+  the baked page's picture to the traced one's, pixel for pixel.
+- **G17c** (done with G17a): the ambient occlusion in alpha.
 - **G17d**: the bake on the CPU threads (G16c, C where there is a C
   compiler), only if G17b's build time is long enough for threads to
   pay 10%.

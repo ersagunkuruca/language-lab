@@ -461,11 +461,14 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     chosen.push(...was.chosen.map((i) => LIBRARY.reps[i]));
     replayed = true;
   }
-  let backwards: boolean | undefined, drawing: boolean | undefined;
+  let backwards: boolean | undefined, drawing: boolean | undefined, drawsWithin: boolean | undefined;
   // A solve on lists, or a function on lists handed to a definition that
   // solves (conjugate's bands, run backwards by inverse).
   const listed = (t: Type | undefined): boolean => { if (!t) return false; t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || t.args.some(listed) : t.t === "fn" ? [...t.params, t.ret].some(listed) : false; };
-  const drawsOnGpu = () => drawing ??= [main, ...dependencies(code, main)].some((d) => code.nodes[d]?.kind === "def" && subtree(code, d).some((x) => { const n = code.nodes[x]; return n?.kind === "ref" && n.target === "builtin.frame.draw"; }));
+  const reached = () => [main, ...dependencies(code, main)].filter((d) => code.nodes[d]?.kind === "def");
+  const refers = (target: Id) => reached().some((d) => subtree(code, d).some((x) => { const n = code.nodes[x]; return n?.kind === "ref" && n.target === target; }));
+  const drawsOnGpu = () => drawing ??= refers("builtin.frame.draw");
+  const withinOnGpu = () => drawsWithin ??= drawsOnGpu() && refers(PRELUDE_DEFS["within reach"]);
   const runsBackwards = () => {
     if (backwards !== undefined) return backwards;
     const reach = [main, ...dependencies(code, main)].filter((d) => code.nodes[d]?.kind === "def");
@@ -538,7 +541,13 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // A program drawing on the GPU keeps them off the tree too: a draw's
     // shader reads a list it captured as an array, its length then its
     // items (G15a2), which a tree's walk can't give it.
-    const rows = LIBRARY.reps.filter((r) => r.of === ty && r.byType && !skip.has(r.name + " " + ty) && !(r.name === "tree of List" && (runsBackwards() || drawsOnGpu()))
+    // And one that finds items within reach keeps them as written: a
+    // shader's fold over the items within reach is made one loop over the
+    // list by its own cases (fuse-steps.ts within, G15b1b), and an array
+    // of List's walk matches on a view of it, which a shader can't make
+    // (rain-page's glass left the GPU when its back wall's work made the
+    // chooser pick an array of List, G17a).
+    const rows = LIBRARY.reps.filter((r) => r.of === ty && r.byType && !skip.has(r.name + " " + ty) && !(r.name === "tree of List" && (runsBackwards() || drawsOnGpu())) && !(ty === LIST && r.name === "array of List" && withinOnGpu())
       && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r, tabled(), options.dataKeys))
         || (options.tables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r, tabled(), options.dataKeys))));
     if (hold !== undefined) {

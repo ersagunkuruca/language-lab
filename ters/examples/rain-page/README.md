@@ -41,5 +41,16 @@ own cell (G15b2). On SwiftShader a frame takes 0.44 s at 1x, against
 1.25 s with every pixel testing every firefly and 0.42 s with no
 fireflies.
 
+Behind the glass is the greenhouse's back wall: pots along the bench
+and leaves above them, dark discs, lit by the three lamps (G17,
+LIGHTMAPS.md). Each lamp is a bulb, so each place on the wall sees a
+share of 64 points on it, and its shadows are soft; 32 short rays round
+each place darken the corners and the ground under the pots. That is
+160 × 120 places, about 2.4 s of work compiled, so the compiler bakes
+`back wall` to a file the page carries (BAKING.md): the page loads in
+about 150 ms, against 2.4 to 3.4 s tracing it as it loads (Chromium,
+SwiftShader). Its red, green and blue are each lamp's light, so the glass
+still flickers each lamp each tick.
+
 Credits: random numbers by the ZX81's generator (Sinclair Research, 1981);
-a fixed step after Glenn Fiedler's Fix Your Timestep (2004).
+a fixed step after Glenn Fiedler's Fix Your Timestep (2004); the fireflies and the points on each bulb spread by Martin Roberts's R2 sequence ("The unreasonable effectiveness of quasirandom sequences", 2018); soft shadows by distributed ray tracing (Robert L. Cook, Thomas Porter and Loren Carpenter, SIGGRAPH 1984); ambient occlusion after Sergei Zhukov, Andrei Iones and Grigorij Kronin ("An ambient light illumination model", 1998); the wall's light kept as Quake's lightmaps were (id Software, 1996).
