@@ -52,5 +52,12 @@ about 150 ms, against 2.4 to 3.4 s tracing it as it loads (Chromium,
 SwiftShader). Its red, green and blue are each lamp's light, so the glass
 still flickers each lamp each tick.
 
+The drops are lit by where they are (G18, PROBES.md): a grid of 32 × 24
+probes over the glass keeps each lamp's light at its place, seen past the
+leaves, as the first circular harmonics of where it comes from. A drop's
+bead reads the four probes round its middle and shines where it faces
+the lamps, dull in a leaf's shadow. The probes take 85 ms compiled, and
+the compiler bakes them too.
+
 Credits: random numbers by the ZX81's generator (Sinclair Research, 1981);
-a fixed step after Glenn Fiedler's Fix Your Timestep (2004); the fireflies and the points on each bulb spread by Martin Roberts's R2 sequence ("The unreasonable effectiveness of quasirandom sequences", 2018); soft shadows by distributed ray tracing (Robert L. Cook, Thomas Porter and Loren Carpenter, SIGGRAPH 1984); ambient occlusion after Sergei Zhukov, Andrei Iones and Grigorij Kronin ("An ambient light illumination model", 1998); the wall's light kept as Quake's lightmaps were (id Software, 1996).
+a fixed step after Glenn Fiedler's Fix Your Timestep (2004); the fireflies and the points on each bulb spread by Martin Roberts's R2 sequence ("The unreasonable effectiveness of quasirandom sequences", 2018); soft shadows by distributed ray tracing (Robert L. Cook, Thomas Porter and Loren Carpenter, SIGGRAPH 1984); ambient occlusion after Sergei Zhukov, Andrei Iones and Grigorij Kronin ("An ambient light illumination model", 1998); the wall's light kept as Quake's lightmaps were (id Software, 1996); the drops lit by probes, an irradiance volume (Gene Greger, Peter Shirley, Philip M. Hubbard and Donald P. Greenberg, 1998) kept in circular harmonics as Peter-Pike Sloan, Jan Kautz and John Snyder (2002) and Ravi Ramamoorthi and Pat Hanrahan (2001) keep light in spherical ones.

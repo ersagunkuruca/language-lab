@@ -48,7 +48,8 @@ the instance's fragments, and on the CPU path the words sent.
   sum over the kept flags, so the order stays), and the instance count into
   `drawIndexedIndirect`'s arguments. The draw's vertex stage reads its
   instance through that index. This works on a list kept on the GPU
-  (G13), where the CPU has no drops to test.
+  (G13), where the CPU has no drops to test. A draw whose fragment samples
+  a texture is culled too (G18a); one whose vertex samples one is not.
 - **On the CPU (G14c)**: the same test in the page's JavaScript before
   packing, so skipped instances are never sent. It pays only where packing
   costs more than four vertex runs, which is rare for small records. It is

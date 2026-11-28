@@ -198,6 +198,31 @@ export const griddable = (ir: CoreIR): Id[] => [...new Set(Object.values(gpuDraw
 // reads every item.
 export const GRID_CAP = 32;
 
+// Where a cull pass binds its flags and its job in a draw sampling
+// textures (4 + k for texture k stays below it); 3 and 4 otherwise.
+// ters/src/lang/gpu-frame.ts binds them there too.
+export const CULL_PAST_TEXTURES = 14;
+// Whether WGSL function `from` calls `name`, itself or through the
+// functions it calls, read from the module's text.
+function reaches(wgsl: string, from: string, name: string): boolean {
+  const bodies = new Map<string, string>();
+  for (const m of wgsl.matchAll(/^fn ([A-Za-z_][A-Za-z0-9_]*)\(/gm)) {
+    const end = wgsl.indexOf("\n}", m.index!);
+    bodies.set(m[1], wgsl.slice(m.index! + m[0].length, end < 0 ? undefined : end));
+  }
+  const seen = new Set<string>(), todo = [from];
+  while (todo.length) {
+    const f = todo.pop()!;
+    if (seen.has(f)) continue;
+    seen.add(f);
+    for (const c of (bodies.get(f) ?? "").matchAll(/([A-Za-z_][A-Za-z0-9_]*)\(/g)) {
+      if (c[1] === name) return true;
+      if (bodies.has(c[1])) todo.push(c[1]);
+    }
+  }
+  return false;
+}
+
 function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[], whole = false, unculled = false, everyItem: ReadonlySet<Id> = new Set()): DrawSite {
   const zonk = (x: Id) => { const y = ir.info.typeOf.get(x); return y && ir.info.subst.zonk(y); };
   const capTypes = caps.map(zonk);
@@ -416,12 +441,16 @@ ${textures.slice(1).map((_, j) => `  if (t == ${j + 1}.0) { return textureSample
   // its mesh is inside every plane of the clip volume taken one at a time,
   // that is, whether no one plane has every corner outside it. A corner
   // that gives no position (out of fuel) is outside every plane, as it
-  // draws nothing. Not for a draw of one instance or one sampling textures.
-  const cull = !unread && !textures.length && !unculled;
+  // draws nothing. Not for a draw of one instance. A draw sampling
+  // textures is culled when its vertex doesn't sample (G18a: the drops'
+  // fragment reads the probes); the pass's two bindings then sit past the
+  // textures, at CULL_PAST_TEXTURES.
+  const cull = !unread && !unculled && (!textures.length || (4 + textures.length <= CULL_PAST_TEXTURES && !reaches(sh.wgsl, vEntry, "lab_sampled")));
+  const cb = textures.length ? CULL_PAST_TEXTURES : 3;
   const culling = cull ? `
-@group(0) @binding(3) var<storage, read_write> lab_kept: array<u32>;
+@group(0) @binding(${cb}) var<storage, read_write> lab_kept: array<u32>;
 struct LabCull { n: u32, corners: u32 }
-@group(0) @binding(4) var<uniform> lab_cull: LabCull;
+@group(0) @binding(${cb + 1}) var<uniform> lab_cull: LabCull;
 @compute @workgroup_size(64) fn lab_cull_main(@builtin(global_invocation_id) lab_g: vec3u) {
   _ = lab_caps[0]; _ = lab_inst[0]; _ = lab_corner[0];${readLists}
   let lab_it = lab_g.x + lab_g.y * 65535u * 64u;

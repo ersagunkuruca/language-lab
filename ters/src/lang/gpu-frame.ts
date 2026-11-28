@@ -61,6 +61,9 @@ export interface Site {
 export interface Sited { site: Site; caps: Value[] }
 
 // The page's sites, by key (R.pageDraws).
+// Where a draw sampling textures has its cull pass's flags and job
+// (compiler/src/gpu-draws.ts CULL_PAST_TEXTURES), past its textures.
+const CULL_PAST_TEXTURES = 14;
 const SITES: Record<string, Site> = {};
 // A site's packing, printed by the compiler for its leaves (G8,
 // gpu-draws.ts packsOf): item i's leaves written at i × leaves.length,
@@ -251,7 +254,7 @@ export class GpuFrames {
     // The flagging pass's group, made again when what it binds changes.
     const bound = [...buffers, ...lists, ...grids];
     if (bound.length !== c.groupFor.length || bound.some((b, i) => b !== c!.groupFor[i]) || !c.groups.has("flag")) {
-      c.groups.set("flag", D.createBindGroup({ layout: flag.getBindGroupLayout(0), entries: [...[...buffers, c.flags, c.job].map((buffer, binding) => ({ binding, resource: { buffer } })), ...lists.map((buffer, r) => ({ binding: 16 + r, resource: { buffer } })), ...(site.grids ?? []).map((g, j) => ({ binding: 24 + g.list, resource: { buffer: grids[j] } }))] }));
+      c.groups.set("flag", D.createBindGroup({ layout: flag.getBindGroupLayout(0), entries: [...[...buffers, c.flags, c.job].map((buffer, i) => ({ binding: i < 3 ? i : (site.textures?.length ? CULL_PAST_TEXTURES : 3) + i - 3, resource: { buffer } })), ...lists.map((buffer, r) => ({ binding: 16 + r, resource: { buffer } })), ...(site.grids ?? []).map((g, j) => ({ binding: 24 + g.list, resource: { buffer: grids[j] } }))] }));
       c.groupFor = bound;
     }
     if (!c.groups.has("scan")) c.groups.set("scan", D.createBindGroup({ layout: scan.getBindGroupLayout(0), entries: [c.flags, c.ids, c.args, c.scan].map((buffer, binding) => ({ binding, resource: { buffer } })) }));

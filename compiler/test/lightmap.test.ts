@@ -25,8 +25,8 @@ const chromiumPath = (): string | undefined => {
 };
 const exe = chromiumPath();
 
-// rain-page's first picture, drawn once at the start, its wall baked or,
-// held at start, traced as the page loads.
+// rain-page's first picture, drawn once at the start, its wall and probes
+// baked or, every answer held at start, traced as the page loads.
 function still(held: boolean): { html: string; decisions: string[] } {
   const program = join(dir, held ? "rain-held" : "rain"), out = `${program}.html`;
   cpSync(join(import.meta.dirname, "../../ters/examples/rain-page"), program, { recursive: true });
@@ -38,7 +38,7 @@ function still(held: boolean): { html: string; decisions: string[] } {
   s.save();
   assert.equal(spawnSync(process.execPath, [lab, "decisions", program], { encoding: "utf8" }).status, 0);
   const decisions = readFileSync(`${program}.decisions`, "utf8").split("\n");
-  if (held) writeFileSync(`${program}.decisions`, decisions.map((l) => / way: back wall's answer: /.test(l) ? `held ${l.replace(": baked to a file;", ": at start;")}` : l).join("\n"));
+  if (held) writeFileSync(`${program}.decisions`, decisions.map((l) => / way: .*'s answer: /.test(l) ? `held ${l.replace(": baked to a file;", ": at start;")}` : l).join("\n"));
   const r = spawnSync(process.execPath, [lab, "build-web", program, "-o", out], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   return { html: out, decisions };
@@ -47,6 +47,9 @@ const baked = still(false), traced = still(true);
 
 test("rain-page's back wall is baked to a file its page carries, the compiler's choice (G17)", () => {
   assert.deepEqual(baked.decisions.filter((l) => / way: back wall's answer: /.test(l)).map((l) => l.replace(/^\S+ /, "")), ["way: back wall's answer: baked to a file; among at start, baked to a file; target JavaScript page"]);
+  // And the drops' probes (G18a, PROBES.md): 85 ms of work against a
+  // few to read back.
+  assert.deepEqual(baked.decisions.filter((l) => / way: probe light's answer: /.test(l)).map((l) => l.replace(/^\S+ /, "")), ["way: probe light's answer: baked to a file; among at start, baked to a file; target JavaScript page"]);
   assert.match(readFileSync(baked.html, "utf8"), /baked\/[0-9a-f]{24}\.bin/);
   assert.doesNotMatch(readFileSync(traced.html, "utf8"), /baked\/[0-9a-f]{24}\.bin/);
   // Both draws stay on the GPU: the fireflies' within reach is one loop
