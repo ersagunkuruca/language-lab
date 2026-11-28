@@ -157,7 +157,12 @@ Each target finds the bytes its own way:
   DataView kept by the bytes. Decoding the 20,000 drops' records takes
   9.6 ms on a first run, against 31.8 ms with the prelude's readers and
   about 20 ms for computing them.
-- **G16b3c**: the bake step for pages. Compile the definition alone to
+- **G16b3c1** (done): the encoders, in the prelude and not offered:
+  `baked float32 bytes`, `baked float64 bytes` and `baked int32 bytes`,
+  each leaf's bytes exactly as a DataView writes them. A bake runs them
+  compiled, over the answer in whatever representation it has. An Int
+  outside 32 bits stops the bake.
+- **G16b3c2**: the bake step for pages. Compile the definition alone to
   JavaScript, run it in Node, write the bytes, keep them in the store,
   and carry them with the page. rain-page's `start pane` comes from the
   file.
